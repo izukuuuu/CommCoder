@@ -670,8 +670,9 @@ def compute_group_ranking(df: pd.DataFrame, group_by:str, fields:Dict[str,bool],
         _progress_update(sid,status="grouping",groups_done=gi, message=f"分组 {lab} 完成（{gi}/{len(groups)}）", outliers=total_out)
 
     try:
-        comps = min(3, emb.shape[1] if emb.shape[1]>0 else 3, emb.shape[0] if emb.shape[0]>0 else 3)
-        coords = np.zeros((emb.shape[0], 3), dtype=float)
+        dims = 2
+        comps = min(dims, emb.shape[1] if emb.shape[1]>0 else dims, emb.shape[0] if emb.shape[0]>0 else dims)
+        coords = np.zeros((emb.shape[0], dims), dtype=float)
         if emb.shape[0] > 0 and comps > 0:
             pca = PCA(n_components=comps)
             trans = pca.fit_transform(emb)
