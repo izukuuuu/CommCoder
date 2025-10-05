@@ -19,7 +19,9 @@
     .action-btn:hover{ transform:translateY(-1px); box-shadow:0 10px 25px -15px rgba(15,23,42,0.65); }
     .action-btn:focus-visible{ outline:2px solid rgba(14,116,144,0.6); outline-offset:2px; }
     .action-btn:disabled{ opacity:0.6; cursor:not-allowed; transform:none; box-shadow:none; }
-    .action-btn iconify-icon{ width:1.25rem; height:1.25rem; color:currentColor; }
+    .action-btn iconify-icon{ width:20px; height:20px; color:currentColor; display:block; flex-shrink:0; }
+    .sess-table-actions{ min-width:110px; }
+    .sess-table-actions button{ display:inline-flex; align-items:center; justify-content:center; width:100%; white-space:nowrap; }
     .info-card{ background:linear-gradient(135deg,#f8fafc 0%,#f1f5f9 40%,#e2e8f0 100%); border:1px solid rgba(148,163,184,0.35); }
     .file-input{ display:block; width:100%; border:1px solid rgba(148,163,184,0.6); border-radius:0.75rem; padding:0.65rem 0.75rem; font-size:0.875rem; color:#0f172a; background:white; transition:border-color .15s ease, box-shadow .15s ease; }
     .file-input:hover{ border-color:#2563eb; }
@@ -135,6 +137,17 @@
       <button id="btn_bulk_filtered" class="px-3 py-1 rounded bg-amber-700 text-white">将当前筛选全部 → 目标类别</button>
       <button id="btn_select_all" class="px-3 py-1 rounded bg-slate-200">全选本页</button>
       <button id="btn_unselect_all" class="px-3 py-1 rounded bg-slate-200">取消全选</button>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3 text-sm">
+      <button id="btn_save_all" class="px-3 py-1 rounded bg-emerald-700 text-white">保存本页修改</button>
+      <label class="flex items-center gap-2">
+        <input type="checkbox" id="auto_save_enable">
+        <span>自动保存</span>
+      </label>
+      <span>间隔（分钟）</span>
+      <input id="auto_save_interval" type="number" min="1" value="5" class="border rounded px-2 py-1 w-20 text-center">
+      <span id="auto_save_msg" class="text-xs text-gray-500"></span>
     </div>
 
     <details class="bg-slate-50 border rounded p-3">
@@ -269,9 +282,14 @@ const PAGER = { page:1, size:50, total:0, pages:1 };
 let LAST_EXPORT_URL=""; // 可选下载地址
 let _ct1=null, _ct2=null;
 let RANK_VIS_EXPANDED=false;
+let AUTO_SAVE_TIMER=null;
+let AUTO_SAVE_ENABLED=false;
+let AUTO_SAVE_MINUTES=5;
+let IS_BATCH_SAVING=false;
 
 const qs = id=>document.getElementById(id);
 const escapeHtml = s=>String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+const escapeAttr = s=>escapeHtml(s).replaceAll('"','&quot;');
 const setBadge = ()=>{ qs('session_badge').textContent = "Session: " + (SESSION_ID||"—"); };
 
 /* ---- 默认兜底表 ---- */
@@ -515,8 +533,8 @@ function renderPagerInfo(){
 }
 
 /* ===================== 表格 ===================== */
-function renderSelect(options,value,css){
-  return `<select class="${css}">${options.map(o=>`<option value="${o}" ${o===value?'selected':''}>${o}</option>`).join("")}</select>`;
+function renderSelect(options,value,css,dataOriginal=""){
+  return `<select class="${css}" data-original="${escapeAttr(dataOriginal)}">${options.map(o=>`<option value="${o}" ${o===value?'selected':''}>${o}</option>`).join("")}</select>`;
 }
 async function loadPage(){
   if(!SESSION_ID){ qs('table_zone').innerHTML='<div class="p-3 text-sm text-gray-500">请先上传或载入会话</div>'; return; }
@@ -547,13 +565,13 @@ function renderTable(rows){
   </tr></thead><tbody>`;
   rows.forEach(r=>{
     const idx=r._index, diffTopic=(r[ADJ_TOPIC_COL]||"")&&(r[ADJ_TOPIC_COL]!== (r["研究主题（议题）分类"]||"")), diffField=(r[ADJ_FIELD_COL]||"")&&(r[ADJ_FIELD_COL]!== (r["研究领域分类"]||"")), isOutlier=!!r["智能排序_离群"];
-    const topicAdjCell = showTopicAdj?`<td class="px-3 py-2 ${diffTopic?'cell-diff-topic':''}">${renderSelect(TOPIC_LIST, r[ADJ_TOPIC_COL]||"", "border rounded px-2 py-1 w-44 topic_sel")}</td>`:'';
-    const fieldAdjCell = showFieldAdj?`<td class="px-3 py-2 ${diffField?'cell-diff-field':''}">${renderSelect(FIELD_LIST, r[ADJ_FIELD_COL]||"", "border rounded px-2 py-1 w-44 field_sel")}</td>`:'';
+    const topicAdjCell = showTopicAdj?`<td class="px-3 py-2 ${diffTopic?'cell-diff-topic':''}">${renderSelect(TOPIC_LIST, r[ADJ_TOPIC_COL]||"", "border rounded px-2 py-1 w-44 topic_sel", r[ADJ_TOPIC_COL]||"")}</td>`:'';
+    const fieldAdjCell = showFieldAdj?`<td class="px-3 py-2 ${diffField?'cell-diff-field':''}">${renderSelect(FIELD_LIST, r[ADJ_FIELD_COL]||"", "border rounded px-2 py-1 w-44 field_sel", r[ADJ_FIELD_COL]||"")}</td>`:'';
     html += `<tr class="border-b align-top ${isOutlier?'cell-outlier':''}">
       <td class="px-3 py-2"><input type="checkbox" class="row_ck" data-index="${idx}"></td>
       <td class="px-3 py-2 text-gray-500">${idx+1}</td>
       <td class="px-3 py-2"><div class="font-medium">${escapeHtml(r["Article Title"]||"")}</div></td>
-      <td class="px-3 py-2"><textarea class="border rounded px-2 py-1 w-80 h-20 sum_input">${escapeHtml(r["结构化总结"]||"")}</textarea></td>
+      <td class="px-3 py-2"><textarea class="border rounded px-2 py-1 w-80 h-20 sum_input" data-original="${escapeAttr(r["结构化总结"]||"")}">${escapeHtml(r["结构化总结"]||"")}</textarea></td>
       <td class="px-3 py-2 text-gray-600">${escapeHtml(r["研究主题（议题）分类"]||"")}</td>
       ${topicAdjCell}
       <td class="px-3 py-2 text-gray-600">${escapeHtml(r["研究领域分类"]||"")}</td>
@@ -574,9 +592,19 @@ async function saveRow(index, btn){
   const tr=btn.closest("tr"); const sum=tr.querySelector(".sum_input").value;
   const targetValue=(ACTIVE_COL==="topic")?(tr.querySelector(".topic_sel")?.value||""):(tr.querySelector(".field_sel")?.value||"");
   btn.disabled=true; btn.textContent="保存中...";
-  const r=await fetch("/update",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID,index,structured:sum,which_adjust:ACTIVE_COL,target_value:targetValue})});
-  if(!r.ok){ alert("保存失败："+await r.text()); }
-  btn.textContent="保存"; btn.disabled=false; refreshStats();
+  try{
+    const r=await fetch("/update",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID,index,structured:sum,which_adjust:ACTIVE_COL,target_value:targetValue})});
+    if(!r.ok){ alert("保存失败："+await r.text()); return; }
+    const sumEl=tr.querySelector(".sum_input"); if(sumEl) sumEl.dataset.original=sum;
+    const selEl=(ACTIVE_COL==="topic")?tr.querySelector(".topic_sel"):tr.querySelector(".field_sel");
+    if(selEl) selEl.dataset.original=targetValue;
+    await refreshStats();
+    setAutoSaveMsg(`手动保存完成：${new Date().toLocaleTimeString()}（单行）`);
+  }catch(e){
+    alert("保存失败："+e.message);
+  }finally{
+    btn.textContent="保存"; btn.disabled=false;
+  }
 }
 async function suggestRow(index, btn){
   const cfg=JSON.parse(localStorage.getItem("llm_cfg")||"{}"); // 有则用；后端已做兜底
@@ -594,6 +622,158 @@ async function suggestRow(index, btn){
     }
   });
   btn.textContent="完成"; setTimeout(()=>{btn.disabled=false; btn.textContent="智能建议";}, 600); refreshStats();
+}
+
+function setAutoSaveMsg(msg){
+  const el=qs('auto_save_msg');
+  if(el) el.textContent=msg||"";
+}
+
+function collectPendingChanges(){
+  const rows=[]; const selector=(ACTIVE_COL==="topic")?".topic_sel":".field_sel";
+  document.querySelectorAll('#table_zone tbody tr').forEach(tr=>{
+    const ck=tr.querySelector('.row_ck'); if(!ck) return;
+    const idx=parseInt(ck.dataset.index||"-1"); if(Number.isNaN(idx)||idx<0) return;
+    const sumEl=tr.querySelector('.sum_input');
+    const selEl=tr.querySelector(selector);
+    const sumVal=sumEl?sumEl.value:"";
+    const sumOrig=sumEl?.dataset.original??"";
+    const structuredChanged=!!(sumEl && sumVal!==sumOrig);
+    let adjustChanged=false; let targetValue=""; let which=null;
+    if(selEl){
+      const cur=selEl.value||""; const orig=selEl.dataset.original??"";
+      if(cur!==orig){ adjustChanged=true; targetValue=cur; which=ACTIVE_COL; }
+    }
+    if(structuredChanged || adjustChanged){
+      rows.push({ index:idx, displayIndex:idx+1, structuredChanged, structuredValue:sumVal, adjustChanged, which, targetValue, elements:{ sumEl, selEl } });
+    }
+  });
+  return rows;
+}
+
+async function applyChangesBatch(changes){
+  if(!SESSION_ID || !Array.isArray(changes) || !changes.length){
+    return {success:0, fail:0, errors:[]};
+  }
+  let success=0, fail=0; const errors=[];
+  for(const item of changes){
+    const payload={ session_id:SESSION_ID, index:item.index };
+    if(item.structuredChanged){ payload.structured=item.structuredValue; }
+    if(item.adjustChanged && item.which){ payload.which_adjust=item.which; payload.target_value=item.targetValue; }
+    try{
+      const resp=await fetch("/update",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+      if(!resp.ok){
+        const msg=await resp.text().catch(()=>resp.statusText||"请求失败");
+        errors.push(`行 ${item.displayIndex}: ${msg}`);
+        fail+=1;
+        continue;
+      }
+      if(item.structuredChanged && item.elements.sumEl){ item.elements.sumEl.dataset.original=item.structuredValue; }
+      if(item.adjustChanged && item.elements.selEl){ item.elements.selEl.dataset.original=item.targetValue; }
+      success+=1;
+    }catch(e){
+      errors.push(`行 ${item.displayIndex}: ${e.message||e}`);
+      fail+=1;
+    }
+  }
+  if(success>0){ await refreshStats(); }
+  return {success, fail, errors};
+}
+
+async function saveAllChanges(){
+  if(!SESSION_ID){ alert("请先上传/载入会话"); return; }
+  if(IS_BATCH_SAVING){ return; }
+  const changes=collectPendingChanges();
+  if(!changes.length){ alert("当前页面没有检测到修改"); return; }
+  const btn=qs('btn_save_all'); const prevText=btn?btn.textContent:"保存本页修改"; const prevDisabled=btn?btn.disabled:false;
+  if(btn){ btn.disabled=true; btn.textContent="保存中..."; }
+  IS_BATCH_SAVING=true;
+  try{
+    const result=await applyChangesBatch(changes);
+    if(result.fail===0){
+      alert(`已保存 ${result.success} 条修改`);
+      setAutoSaveMsg(`手动保存完成：${new Date().toLocaleTimeString()}（${result.success} 条）`);
+    }else{
+      alert(`部分保存失败：成功 ${result.success} 条，失败 ${result.fail} 条\n${result.errors.join('\n')}`);
+      setAutoSaveMsg(`保存出现失败，请检查。最后时间：${new Date().toLocaleTimeString()}`);
+    }
+  }finally{
+    if(btn){ btn.disabled=prevDisabled; btn.textContent=prevText; }
+    IS_BATCH_SAVING=false;
+  }
+}
+
+function clearAutoSaveTimer(){ if(AUTO_SAVE_TIMER){ clearInterval(AUTO_SAVE_TIMER); AUTO_SAVE_TIMER=null; } }
+
+function scheduleAutoSaveTimer(){
+  clearAutoSaveTimer();
+  if(!AUTO_SAVE_ENABLED) return;
+  const intervalMs=Math.max(1, AUTO_SAVE_MINUTES)*60*1000;
+  AUTO_SAVE_TIMER=setInterval(()=>{ triggerAutoSave(); }, intervalMs);
+}
+
+function applyAutoSaveSettings(){
+  const enableEl=qs('auto_save_enable'); const intervalEl=qs('auto_save_interval');
+  if(!enableEl || !intervalEl) return;
+  AUTO_SAVE_ENABLED=enableEl.checked;
+  let mins=parseFloat(intervalEl.value||"0");
+  if(!Number.isFinite(mins) || mins<=0){ mins=5; }
+  AUTO_SAVE_MINUTES=mins;
+  intervalEl.value=String(mins);
+  localStorage.setItem('auto_save_enabled', AUTO_SAVE_ENABLED?'1':'0');
+  localStorage.setItem('auto_save_minutes', String(mins));
+  if(AUTO_SAVE_ENABLED){
+    scheduleAutoSaveTimer();
+    setAutoSaveMsg(`自动保存间隔：${mins} 分钟`);
+    triggerAutoSave();
+  }else{
+    clearAutoSaveTimer();
+    setAutoSaveMsg('自动保存已关闭');
+  }
+}
+
+function restoreAutoSaveSettings(){
+  const enableEl=qs('auto_save_enable'); const intervalEl=qs('auto_save_interval');
+  const storedEnabled=localStorage.getItem('auto_save_enabled')==='1';
+  let storedMins=parseFloat(localStorage.getItem('auto_save_minutes')||"5");
+  if(!Number.isFinite(storedMins) || storedMins<=0){ storedMins=5; }
+  AUTO_SAVE_ENABLED=storedEnabled;
+  AUTO_SAVE_MINUTES=storedMins;
+  if(enableEl) enableEl.checked=storedEnabled;
+  if(intervalEl) intervalEl.value=String(storedMins);
+  if(storedEnabled){
+    scheduleAutoSaveTimer();
+    setAutoSaveMsg(`自动保存间隔：${storedMins} 分钟`);
+  }else{
+    clearAutoSaveTimer();
+    setAutoSaveMsg('自动保存已关闭');
+  }
+}
+
+async function triggerAutoSave(){
+  if(!AUTO_SAVE_ENABLED || IS_BATCH_SAVING) return;
+  if(!SESSION_ID){ setAutoSaveMsg('自动保存已开启，但当前无会话'); return; }
+  const changes=collectPendingChanges();
+  if(!changes.length){
+    setAutoSaveMsg(`自动保存：${new Date().toLocaleTimeString()}（无改动）`);
+    return;
+  }
+  const btn=qs('btn_save_all');
+  const prevText=btn?btn.textContent:"保存本页修改";
+  const prevDisabled=btn?btn.disabled:false;
+  if(btn){ btn.textContent="自动保存中..."; btn.disabled=true; }
+  IS_BATCH_SAVING=true;
+  try{
+    const result=await applyChangesBatch(changes);
+    if(result.fail===0){
+      setAutoSaveMsg(`自动保存完成：${new Date().toLocaleTimeString()}（${result.success} 条）`);
+    }else{
+      setAutoSaveMsg(`自动保存失败：成功 ${result.success} 条，失败 ${result.fail} 条`);
+    }
+  }finally{
+    if(btn){ btn.textContent=prevText; btn.disabled=prevDisabled; }
+    IS_BATCH_SAVING=false;
+  }
 }
 
 /* ===================== 批量 ===================== */
@@ -666,14 +846,14 @@ async function openLoadDialog(){
     const r=await fetch("/session/list",{cache:"no-store"}); if(!r.ok){ zone.innerHTML="拉取失败"; return; }
     const j=await r.json(); const arr=j.sessions||[];
     if(!arr.length){ zone.innerHTML='<div class="text-slate-600">暂无会话</div>'; return; }
-    let html='<table class="w-full text-sm"><thead><tr class="border-b bg-slate-50"><th class="text-left p-2">SessionID</th><th class="text-left p-2">来源文件</th><th class="text-left p-2">行数</th><th class="text-left p-2">最近保存</th><th class="text-left p-2">操作</th></tr></thead><tbody>';
+    let html='<table class="w-full text-sm"><thead><tr class="border-b bg-slate-50"><th class="text-left p-2">SessionID</th><th class="text-left p-2">来源文件</th><th class="text-left p-2">行数</th><th class="text-left p-2">最近保存</th><th class="text-left p-2 sess-table-actions">操作</th></tr></thead><tbody>';
     arr.forEach(s=>{
       html+=`<tr class="border-b">
         <td class="p-2 font-mono text-xs">${s.session_id}</td>
         <td class="p-2">${escapeHtml(s.origin_filename||"")}</td>
         <td class="p-2">${s.rows||0}</td>
         <td class="p-2">${escapeHtml(s.updated_text||"")}</td>
-        <td class="p-2"><button class="px-2 py-1 rounded bg-slate-800 text-white" onclick="loadSession('${s.session_id}')">加载</button></td>
+        <td class="p-2 sess-table-actions"><button class="px-2 py-1 rounded bg-slate-800 text-white whitespace-nowrap" onclick="loadSession('${s.session_id}')">加载</button></td>
       </tr>`;
     });
     html+='</tbody></table>'; zone.innerHTML=html;
@@ -725,6 +905,9 @@ function bindEvents(){
   qs('btn_load_session').onclick=openLoadDialog;
   qs('btn_save_excel').onclick=saveExcelServer;
   qs('btn_download_last').onclick=downloadLast;
+  const btnSaveAll=qs('btn_save_all'); if(btnSaveAll) btnSaveAll.onclick=saveAllChanges;
+  const autoToggle=qs('auto_save_enable'); if(autoToggle) autoToggle.addEventListener('change', applyAutoSaveSettings);
+  const autoInterval=qs('auto_save_interval'); if(autoInterval) autoInterval.addEventListener('change', applyAutoSaveSettings);
 
   // 筛选
   qs('btn_only_other_topic').onclick=()=>quickFilter('topic_orig','其他议题');
@@ -763,7 +946,7 @@ function bindEvents(){
 
 (async function init(){
   try{
-    await fetchFrontendConfig(); fetchEnvDefaults(); loadCfgFromLocal(); bindEvents();
+    await fetchFrontendConfig(); fetchEnvDefaults(); loadCfgFromLocal(); bindEvents(); restoreAutoSaveSettings();
     setActiveCol('topic'); // 默认编辑“主题（调整）”
     PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
     populateFilterOptions();
