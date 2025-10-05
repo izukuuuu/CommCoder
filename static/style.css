@@ -1,0 +1,17 @@
+.cell-diff-topic { background-color:#FFF3BF; } /* 黄：主题调整变更 */
+.cell-diff-field { background-color:#CDEAFE; } /* 蓝：领域调整变更 */
+.cell-outlier    { background-color:#FFDAD6; } /* 淡红：离群 */
+.chip{ padding:2px 8px; border-radius:9999px; background:#f1f5f9; }
+.chip:hover{ background:#e2e8f0; }
+dialog::backdrop { background: rgba(0,0,0,.25); }
+.action-btn{ display:inline-flex; align-items:center; gap:0.5rem; border-radius:0.75rem; padding:0.6rem 1rem; font-size:0.875rem; font-weight:600; transition:transform .15s ease, box-shadow .15s ease, background-color .15s ease; }
+.action-btn:hover{ transform:translateY(-1px); box-shadow:0 10px 25px -15px rgba(15,23,42,0.65); }
+.action-btn:focus-visible{ outline:2px solid rgba(14,116,144,0.6); outline-offset:2px; }
+.action-btn:disabled{ opacity:0.6; cursor:not-allowed; transform:none; box-shadow:none; }
+.action-btn iconify-icon{ width:20px; height:20px; color:currentColor; display:block; flex-shrink:0; }
+.sess-table-actions{ min-width:110px; }
+.sess-table-actions button{ display:inline-flex; align-items:center; justify-content:center; width:100%; white-space:nowrap; }
+.info-card{ background:linear-gradient(135deg,#f8fafc 0%,#f1f5f9 40%,#e2e8f0 100%); border:1px solid rgba(148,163,184,0.35); }
+.file-input{ display:block; width:100%; border:1px solid rgba(148,163,184,0.6); border-radius:0.75rem; padding:0.65rem 0.75rem; font-size:0.875rem; color:#0f172a; background:white; transition:border-color .15s ease, box-shadow .15s ease; }
+.file-input:hover{ border-color:#2563eb; }
+.file-input:focus{ outline:none; border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,0.12); }
