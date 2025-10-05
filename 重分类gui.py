@@ -884,11 +884,103 @@ def healthz():
     return PlainTextResponse("ok")
 
 # ================== 可选：智能建议占位（防止前端报错） ==================
+def _format_llm_prompt(row: pd.Series) -> List[Dict[str, str]]:
+    title = str(row.get("Article Title", "") or "").strip()
+    abstract = str(row.get("Abstract", "") or "").strip()
+    structured = str(row.get("结构化总结", "") or "").strip()
+    content_lines = [
+        "请你扮演一个学术文本分类助手，负责根据用户提供的文献信息完成分类任务。",
+        "请严格遵循以下规则：",
+        "1. 从给定的【研究主题（议题）】候选列表中只选择一个最贴切的类别，绝不能创造或选择列表之外的选项。",
+        "2. 从给定的【研究领域】候选列表中只选择一个最贴切的类别，绝不能创造或选择列表之外的选项。",
+        "3. 如果文本无法明确判断，请分别选择“其他议题”和“其他领域”。",
+        "4. 在需要时，请基于文本生成一个150字以内的中文结构化总结；若原文已提供合适总结，可在此基础上适当润色。",
+        "5. 输出必须是 JSON 格式，不包含额外的解释或自然语言。",
+        "输出 JSON 的格式如下（不要包含注释）：",
+        "{",
+        "  \"topic_suggestion\": \"从列表中选择的议题名称\",",
+        "  \"field_suggestion\": \"从列表中选择的领域名称\",",
+        "  \"structured_summary\": \"150字以内的中文结构化总结\"",
+        "}",
+        "【研究主题（议题）】候选列表：" + "、".join(TOPIC_LIST),
+        "【研究领域】候选列表：" + "、".join(FIELD_LIST),
+        "请根据以下文献内容给出判断：",
+        f"标题：{title or '（无）'}",
+        f"摘要：{abstract or '（无）'}",
+        f"结构化总结：{structured or '（无）'}",
+    ]
+    user_prompt = "\n".join(content_lines)
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant that returns strict JSON responses for academic text classification.",
+        },
+        {"role": "user", "content": user_prompt},
+    ]
+    return messages
+
+
+def _llm_autosuggest(row: pd.Series) -> Dict[str, Any]:
+    base_url = (os.getenv("OPENAI_BASE_URL") or "").strip()
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    model = (os.getenv("OPENAI_MODEL") or "").strip()
+    if not (base_url and api_key and model):
+        raise RuntimeError("未配置 LLM 访问参数，请在环境变量或 .env 文件中设置 OPENAI_BASE_URL / OPENAI_API_KEY / OPENAI_MODEL。")
+
+    messages = _format_llm_prompt(row)
+    url = base_url.rstrip("/") + "/chat/completions"
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        resp = requests.post(url, headers=headers, data=json.dumps(payload).encode("utf-8"), timeout=60)
+    except Exception as e:
+        raise RuntimeError(f"请求 LLM 失败：{e}") from e
+
+    if resp.status_code >= 400:
+        raise RuntimeError(f"LLM 接口返回错误：{resp.status_code} {resp.text}")
+
+    try:
+        data = resp.json()
+    except Exception as e:
+        raise RuntimeError(f"解析 LLM 返回值失败：{e}") from e
+
+    try:
+        content = data["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        raise RuntimeError(f"LLM 返回格式不符合预期：{data}") from e
+
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"LLM 返回的内容不是合法 JSON：{content}") from e
+
+    topic = parsed.get("topic_suggestion", "")
+    field = parsed.get("field_suggestion", "")
+    summary = parsed.get("structured_summary", "")
+    if topic not in TOPIC_LIST:
+        raise RuntimeError(f"LLM 议题分类不在候选列表中：{topic}")
+    if field not in FIELD_LIST:
+        raise RuntimeError(f"LLM 领域分类不在候选列表中：{field}")
+
+    return {
+        "topic_suggestion": topic,
+        "field_suggestion": field,
+        "structured_summary": summary or row.get("结构化总结", "") or "",
+    }
+
+
 @app.post("/autosuggest")
 def autosuggest(payload: Dict[str,Any]):
-    """
-    轻量占位：不调用外部 LLM，按关键词规则给一个朴素建议，避免前端调用失败。
-    """
+    """调用外部 LLM，根据题目/摘要生成分类建议。"""
     sid = payload.get("session_id"); idx = int(payload.get("index", -1))
     if sid not in DATASTORE:
         try:
@@ -900,29 +992,13 @@ def autosuggest(payload: Dict[str,Any]):
     df = DATASTORE[sid]
     if idx<0 or idx>=df.shape[0]: return PlainTextResponse("行号越界", 400)
     row = df.iloc[idx]
-    text = " ".join([str(row.get("Article Title","")), str(row.get("Abstract","")), str(row.get("结构化总结",""))]).lower()
 
-    # 极简规则
-    topic = ""
-    if any(k in text for k in ["market","trade","econom","经济","市场","贸易"]): topic="经济议题"
-    elif any(k in text for k in ["polit","政府","政策","选举","政治"]): topic="政治议题"
-    elif any(k in text for k in ["health","医疗","疫情","健康"]): topic="健康议题"
-    elif any(k in text for k in ["tech","ai","算法","技术"]): topic="科技议题"
-    else: topic="其他议题"
+    try:
+        result = _llm_autosuggest(row)
+    except Exception as e:
+        return PlainTextResponse(str(e), 500)
 
-    field = ""
-    if any(k in text for k in ["public relations","公关","声誉","危机"]): field="公共关系"
-    elif any(k in text for k in ["news","媒体","采访","新闻"]): field="新闻学"
-    elif any(k in text for k in ["policy","法规","法律","治理"]): field="法律与政策"
-    elif any(k in text for k in ["network","新媒体","社交","平台"]): field="网络与新媒体"
-    else: field="传播研究方法" if "method" in text or "方法" in text else "其他领域"
-
-    structured = row.get("结构化总结","") or ""
-    return JSONResponse({
-        "topic_suggestion": topic,
-        "field_suggestion": field,
-        "structured_summary": structured
-    })
+    return JSONResponse(result)
 
 if __name__ == "__main__":
     # Windows 某些环境下 127.0.0.1 权限更稳妥
