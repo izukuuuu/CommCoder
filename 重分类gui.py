@@ -26,6 +26,12 @@ import uvicorn
 # ============== 可选：sentence-transformers ==============
 _ST_MODEL = None
 _ST_MODEL_NAME = None
+_ST_MODEL_FALLBACKS = [
+    "text2vec-base-multilingual",
+    "paraphrase-multilingual-MiniLM-L12-v2",
+    "uer/sbert-base-chinese-nli",
+    "all-MiniLM-L6-v2",
+]
 try:
     from sentence_transformers import SentenceTransformer
 except Exception:
@@ -512,8 +518,29 @@ def _ensure_st_model(name: Optional[str]=None):
     if SentenceTransformer is None:
         raise RuntimeError("未安装 sentence-transformers；请改用 OpenAI Embeddings 或安装依赖。")
     if _ST_MODEL is None:
-        nm = name or os.getenv("SENTENCE_MODEL","paraphrase-multilingual-MiniLM-L12-v2")
-        _ST_MODEL = SentenceTransformer(nm); _ST_MODEL_NAME = nm
+        candidates: List[str] = []
+        if name:
+            candidates.append(name)
+        env_model = os.getenv("SENTENCE_MODEL", "").strip()
+        if env_model:
+            candidates.append(env_model)
+        candidates.extend(_ST_MODEL_FALLBACKS)
+        tried = set()
+        last_err: Optional[Exception] = None
+        for nm in candidates:
+            if not nm or nm in tried:
+                continue
+            tried.add(nm)
+            try:
+                _ST_MODEL = SentenceTransformer(nm)
+                _ST_MODEL_NAME = nm
+                break
+            except Exception as exc:
+                last_err = exc
+        if _ST_MODEL is None:
+            raise RuntimeError(
+                "无法加载可用的 SentenceTransformer 模型，请检查网络或手动设置 SENTENCE_MODEL 环境变量"
+            ) from last_err
     return _ST_MODEL, _ST_MODEL_NAME
 
 def embed_local(texts: List[str], model_name: Optional[str], cb=None) -> np.ndarray:
