@@ -25,9 +25,14 @@
         </div>
       </div>
       <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-        <div class="hidden md:flex items-center gap-2 px-3 py-2 rounded-full bg-slate-100 text-slate-500 text-sm">
-          <iconify-icon icon="heroicons-outline:sparkles" class="w-5 h-5"></iconify-icon>
-          <span>智能分类助手随时待命</span>
+        <div id="session_meta_summary" class="hidden md:flex items-start gap-3 px-4 py-3 rounded-2xl bg-slate-100/90 text-xs text-slate-600 shadow-inner">
+          <div class="shrink-0">
+            <iconify-icon icon="heroicons-outline:clipboard-document-list" class="w-6 h-6 text-slate-500"></iconify-icon>
+          </div>
+          <div class="leading-tight space-y-1">
+            <p id="session_meta_primary" class="text-sm font-medium text-slate-700">暂无会话</p>
+            <p id="session_meta_secondary" class="text-xs text-slate-500">请上传或载入数据集</p>
+          </div>
         </div>
         <code id="session_badge" class="text-xs bg-slate-900 text-white px-3 py-1.5 rounded-full">Session: —</code>
         <div class="md:hidden w-full">
@@ -331,7 +336,7 @@
 <script>
 /* ===================== 全局状态 ===================== */
 let TOPIC_LIST=[], FIELD_LIST=[], ADJ_TOPIC_COL="", ADJ_FIELD_COL="";
-let SESSION_ID=""; let CURRENT_FILTER={target:"",value:""}; let CURRENT_SORT={by:"",order:""};
+let SESSION_ID=""; let SESSION_META=null; let CURRENT_FILTER={target:"",value:""}; let CURRENT_SORT={by:"",order:""};
 let ACTIVE_COL="topic"; // "topic"|"field"
 const PAGER = { page:1, size:50, total:0, pages:1 };
 let LAST_EXPORT_URL=""; // 可选下载地址
@@ -345,7 +350,53 @@ let IS_BATCH_SAVING=false;
 const qs = id=>document.getElementById(id);
 const escapeHtml = s=>String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
 const escapeAttr = s=>escapeHtml(s).replaceAll('"','&quot;');
+const numberFormatter = new Intl.NumberFormat('zh-CN');
 const setBadge = ()=>{ qs('session_badge').textContent = "Session: " + (SESSION_ID||"—"); };
+
+function renderSessionMeta(meta){
+  const summary = qs('session_meta_summary');
+  const primary = qs('session_meta_primary');
+  const secondary = qs('session_meta_secondary');
+  SESSION_META = meta || null;
+  if(!summary || !primary || !secondary){ return; }
+  summary.dataset.state = meta ? 'active' : 'empty';
+  summary.classList.toggle('opacity-60', !meta);
+  if(!meta){
+    primary.textContent = '暂无会话';
+    secondary.textContent = '请上传或载入数据集';
+    LAST_EXPORT_URL = '';
+    return;
+  }
+  const fileName = meta.origin_filename ? meta.origin_filename : '未命名数据集';
+  const rowsNum = typeof meta.rows === 'number' && isFinite(meta.rows) ? numberFormatter.format(meta.rows) : '未知';
+  primary.textContent = `已载入：${fileName}（${rowsNum} 行）`;
+  const details = [];
+  if(meta.updated_text){ details.push(`最近保存：${meta.updated_text}`); }
+  if(meta.last_export_time){ details.push(`最近导出：${meta.last_export_time}`); }
+  if(!details.length){ details.push('尚无保存或导出记录'); }
+  secondary.textContent = details.join(' · ');
+  if(meta.last_export_path){
+    LAST_EXPORT_URL = `/file?path=${encodeURIComponent(meta.last_export_path)}`;
+  }else{
+    LAST_EXPORT_URL = '';
+  }
+}
+
+async function refreshSessionMeta(){
+  if(!SESSION_ID){
+    renderSessionMeta(null);
+    return null;
+  }
+  try{
+    const r = await fetch(`/session/info?session_id=${encodeURIComponent(SESSION_ID)}`, {cache:'no-store'});
+    if(!r.ok){ throw new Error('meta not available'); }
+    const j = await r.json();
+    renderSessionMeta(j.meta||null);
+    return j.meta||null;
+  }catch(e){
+    return SESSION_META;
+  }
+}
 
 const SIDEBAR = document.getElementById('sidebar');
 const SIDEBAR_TOGGLE = document.getElementById('sidebar_toggle');
@@ -457,6 +508,7 @@ function uploadFile(){
         PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
         LAST_EXPORT_URL=""; // 新会话清空
         clearScatterPlot('等待计算后展示。');
+        await refreshSessionMeta();
         await refreshStats(); populateFilterOptions(); CURRENT_FILTER={target:"",value:""}; CURRENT_SORT={by:"",order:""}; await loadPage();
     }else{ msg.textContent="上传失败："+xhr.responseText; alert("上传失败："+xhr.responseText); } } };
   xhr.send(form);
@@ -942,7 +994,15 @@ async function doRanking(){
 async function saveSession(){
   if(!SESSION_ID){ alert("没有可保存的会话"); return; }
   const r=await fetch("/session/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID})});
-  if(!r.ok){ alert("保存失败："+await r.text()); return; }
+  const raw=await r.text();
+  let data=null;
+  try{ data = raw ? JSON.parse(raw) : null; }catch(e){ data=null; }
+  if(!r.ok){
+    const msg=data?.detail || raw || '未知错误';
+    alert("保存失败："+msg);
+    return;
+  }
+  if(data?.meta){ renderSessionMeta(data.meta); }
   alert("会话已保存到服务器（sessions/）");
 }
 async function openLoadDialog(){
@@ -975,12 +1035,9 @@ async function loadSession(sid){
   SESSION_ID=j.session_id; setBadge(); qs('total_msg').textContent=`行数：${j.total}`;
   PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
   clearScatterPlot('等待计算后展示。');
+  renderSessionMeta(j.meta||null);
   await refreshStats(); populateFilterOptions(); CURRENT_FILTER={target:"",value:""}; CURRENT_SORT={by:"",order:""}; await loadPage();
   await fetchScatterAndRender();
-  // 拉 meta 看是否有最近导出
-  try{
-    const info=await fetch(`/session/info?session_id=${encodeURIComponent(SESSION_ID)}`); if(info.ok){ const x=await info.json(); LAST_EXPORT_URL = x?.meta?.last_export_path ? `/file?path=${encodeURIComponent(x.meta.last_export_path)}` : ""; }
-  }catch(e){}
   qs('dlg_sessions').close();
 }
 
@@ -991,13 +1048,19 @@ async function saveExcelServer(){
   const r=await fetch("/export_excel_save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID,file_name:name||undefined})});
   if(!r.ok){ alert("导出失败："+await r.text()); return; }
   const j=await r.json(); LAST_EXPORT_URL=j.download_url||"";
+  await refreshSessionMeta();
   alert("已保存到服务器：\n"+(j.saved_path||""));
 }
 async function downloadLast(){
   if(!LAST_EXPORT_URL){
     // 尝试取会话 info 的 last_export
     try{
-      const info=await fetch(`/session/info?session_id=${encodeURIComponent(SESSION_ID)}`); if(info.ok){ const x=await info.json(); LAST_EXPORT_URL = x?.meta?.last_export_path ? `/file?path=${encodeURIComponent(x.meta.last_export_path)}` : ""; }
+      const info=await fetch(`/session/info?session_id=${encodeURIComponent(SESSION_ID)}`);
+      if(info.ok){
+        const x=await info.json();
+        renderSessionMeta(x.meta||SESSION_META);
+        LAST_EXPORT_URL = x?.meta?.last_export_path ? `/file?path=${encodeURIComponent(x.meta.last_export_path)}` : "";
+      }
     }catch(e){}
   }
   if(!LAST_EXPORT_URL){ alert("当前会话尚无导出记录"); return; }
@@ -1054,6 +1117,7 @@ function bindEvents(){
 (async function init(){
   try{
     await fetchFrontendConfig(); fetchEnvDefaults(); loadCfgFromLocal(); bindEvents(); restoreAutoSaveSettings();
+    renderSessionMeta(null);
     setActiveCol('topic'); // 默认编辑“主题（调整）”
     PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
     populateFilterOptions();
