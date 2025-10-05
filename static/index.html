@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8"/>
+  <title>分类人工调整 GUI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .cell-diff-topic { background-color:#FFF3BF; } /* 黄：主题调整变更 */
+    .cell-diff-field { background-color:#CDEAFE; } /* 蓝：领域调整变更 */
+    .cell-outlier    { background-color:#FFDAD6; } /* 淡红：离群 */
+    .chip{ padding:2px 8px; border-radius:9999px; background:#f1f5f9; }
+    .chip:hover{ background:#e2e8f0; }
+    dialog::backdrop { background: rgba(0,0,0,.25); }
+  </style>
+</head>
+<body class="bg-slate-50">
+<div class="max-w-7xl mx-auto p-5 space-y-5">
+  <div class="flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <h1 class="text-xl font-bold">分类人工调整 GUI</h1>
+      <span id="app_ver" class="text-xs text-slate-500"></span>
+    </div>
+    <code id="session_badge" class="text-xs bg-slate-200 px-2 py-1 rounded">Session: —</code>
+  </div>
+
+  <!-- 顶部操作条：上传 / 会话保存 / 载入 / Excel 保存 -->
+  <div class="bg-white rounded-xl shadow p-4">
+    <div class="flex flex-col lg:flex-row lg:items-end gap-3">
+      <div class="flex items-end gap-3">
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">选择表格（.xlsx/.xls/.csv）</label>
+          <input id="file_input" type="file" accept=".xlsx,.xls,.csv">
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btn_upload" class="px-4 py-2 rounded bg-blue-600 text-white">上传并新建会话</button>
+          <div class="w-48 bg-slate-100 rounded h-2 overflow-hidden"><div id="up_bar" class="bg-blue-600 h-2 w-0"></div></div>
+          <span id="up_msg" class="text-sm text-gray-600 whitespace-nowrap"></span>
+        </div>
+      </div>
+
+      <div class="flex-1"></div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="btn_save_session" class="px-3 py-2 rounded bg-emerald-600 text-white" title="将当前会话写入服务器磁盘（sessions/）">保存会话（服务端）</button>
+        <button id="btn_load_session" class="px-3 py-2 rounded bg-slate-800 text-white" title="从服务器读取会话">载入会话</button>
+        <button id="btn_save_excel" class="px-3 py-2 rounded bg-indigo-600 text-white" title="写入 Output/<session>/export_*.xlsx">保存 Excel（服务端）</button>
+        <button id="btn_download_last" class="px-3 py-2 rounded bg-slate-600 text-white" title="从服务器下载最近一次导出副本（可选）">下载最新导出</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 概览 -->
+  <div class="bg-white rounded-xl shadow p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-semibold">分类概览（点击类别即可筛选）</h2>
+      <div class="text-sm text-gray-500" id="total_msg">—</div>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div>
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-semibold">研究主题（原）</h3>
+          <button class="text-xs text-sky-700" id="btn_only_other_topic">只看『其他议题』</button>
+        </div>
+        <div id="chips_topic_orig" class="flex flex-wrap gap-2 my-2"></div>
+        <canvas id="chart_topic_orig" height="140"></canvas>
+      </div>
+      <div>
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-semibold">研究领域（原）</h3>
+          <button class="text-xs text-sky-700" id="btn_only_other_field">只看『其他领域』</button>
+        </div>
+        <div id="chips_field_orig" class="flex flex-wrap gap-2 my-2"></div>
+        <canvas id="chart_field_orig" height="140"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- 工具条 -->
+  <div class="bg-white rounded-xl shadow p-4 space-y-3">
+    <div class="flex flex-wrap items-center gap-3">
+      <span class="text-sm">当前仅编辑：</span>
+      <select id="op_col_select" class="border rounded px-2 py-1">
+        <option value="topic">研究主题（调整）</option>
+        <option value="field">研究领域（调整）</option>
+      </select>
+      <span id="op_col_hint" class="text-xs text-gray-500">（仅显示并可编辑：研究主题（调整））</span>
+
+      <span class="ml-6 text-sm">筛选列：</span>
+      <select id="filter_target" class="border rounded px-2 py-1">
+        <option value="topic_orig">研究主题（原）</option>
+        <option value="field_orig">研究领域（原）</option>
+        <option value="topic_adj">研究主题（调整）</option>
+        <option value="field_adj">研究领域（调整）</option>
+      </select>
+      <select id="filter_value" class="border rounded px-2 py-1"></select>
+      <button id="btn_apply_filter" class="px-3 py-1 rounded bg-slate-700 text-white">应用筛选</button>
+      <button id="btn_clear_filter" class="px-3 py-1 rounded bg-slate-300">清除筛选</button>
+
+      <span class="ml-6 text-sm">目标类别：</span>
+      <select id="bulk_target" class="border rounded px-2 py-1"></select>
+      <button id="btn_bulk_selected" class="px-3 py-1 rounded bg-amber-600 text-white">将本页勾选 → 目标类别</button>
+      <button id="btn_bulk_filtered" class="px-3 py-1 rounded bg-amber-700 text-white">将当前筛选全部 → 目标类别</button>
+      <button id="btn_select_all" class="px-3 py-1 rounded bg-slate-200">全选本页</button>
+      <button id="btn_unselect_all" class="px-3 py-1 rounded bg-slate-200">取消全选</button>
+    </div>
+
+    <details class="bg-slate-50 border rounded p-3">
+      <summary class="cursor-pointer font-semibold">智能排序（议题内重排序 & 离群定位）</summary>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">分组依据</label>
+          <select id="rank_group_by" class="border rounded px-2 py-1 w-full">
+            <option value="topic_orig">研究主题（原）</option>
+            <option value="topic_adj">研究主题（调整）</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">算法</label>
+          <select id="rank_algo" class="border rounded px-2 py-1 w-full">
+            <option value="centroid">Centroid（质心）</option>
+            <option value="kmeans">K-Means</option>
+          </select>
+        </div>
+        <div id="wrap_k">
+          <label class="block text-sm text-gray-600 mb-1">K（K-Means 生效）</label>
+          <input id="rank_k" type="number" value="3" min="1" class="border rounded px-2 py-1 w-full">
+        </div>
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">离群阈值 σ</label>
+          <input id="rank_sigma" type="number" step="0.1" value="2.0" class="border rounded px-2 py-1 w-full">
+        </div>
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">嵌入来源</label>
+          <select id="rank_emb_src" class="border rounded px-2 py-1 w-full">
+            <option value="local">本地 sentence-transformers</option>
+            <option value="openai">OpenAI Embeddings</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">排序方向</label>
+          <select id="rank_order" class="border rounded px-2 py-1 w-full">
+            <option value="asc">近的在前（分数小→大）</option>
+            <option value="desc">远的在前（分数大→小）</option>
+          </select>
+        </div>
+        <div class="flex items-center gap-2">
+          <input id="rank_only_outliers" type="checkbox">
+          <label for="rank_only_outliers" class="text-sm">仅看离群</label>
+        </div>
+        <div class="md:col-span-2 flex items-center gap-4">
+          <label class="text-sm"><input id="rk_f_title" type="checkbox" checked> 标题</label>
+          <label class="text-sm"><input id="rk_f_abstract" type="checkbox" checked> 摘要</label>
+          <label class="text-sm"><input id="rk_f_summary" type="checkbox" checked> 结构化总结</label>
+        </div>
+        <div class="flex items-center gap-3">
+          <button id="btn_do_ranking" class="px-4 py-2 rounded bg-slate-800 text-white">计算</button>
+          <span id="rank_msg" class="text-sm text-gray-600"></span>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <!-- 分页条 -->
+  <div class="flex flex-wrap items-center gap-2 mb-3">
+    <span>分页：</span>
+    <button id="pg_first" class="px-2 py-1 rounded bg-slate-200">« 首</button>
+    <button id="pg_prev"  class="px-2 py-1 rounded bg-slate-200">‹ 前</button>
+    <input id="page_input" class="border rounded px-2 py-1 w-20 text-center" type="number" value="1" min="1">
+    <span>/</span>
+    <span id="page_total" class="w-12 text-center">1</span>
+    <button id="pg_next"  class="px-2 py-1 rounded bg-slate-200">后 ›</button>
+    <button id="pg_last"  class="px-2 py-1 rounded bg-slate-200">末 »</button>
+    <span class="ml-4">每页</span>
+    <input id="ps_input" class="border rounded px-2 py-1 w-20 text-center" type="number" value="50" min="1" max="5000">
+    <button id="btn_reload_page" class="px-3 py-1 rounded bg-slate-700 text-white">刷新</button>
+    <span class="text-sm text-gray-500 ml-2" id="page_info">—</span>
+  </div>
+
+  <!-- 数据表 -->
+  <div id="table_zone" class="bg-white rounded-xl shadow overflow-x-auto"></div>
+
+  <!-- OpenAI 设置 -->
+  <details class="bg-white rounded-xl shadow p-4">
+    <summary class="cursor-pointer font-semibold">OpenAI 兼容 API 设置（折叠）</summary>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+      <div><label class="block text-sm text-gray-600 mb-1">Base URL</label><input id="cfg_base_url" class="w-full border rounded px-3 py-2" placeholder="https://api.openai.com"></div>
+      <div><label class="block text-sm text-gray-600 mb-1">API Key</label><input id="cfg_api_key" class="w-full border rounded px-3 py-2" type="password" placeholder="sk-..."></div>
+      <div><label class="block text-sm text-gray-600 mb-1">Model</label><input id="cfg_model" class="w-full border rounded px-3 py-2" placeholder="gpt-4o-mini"></div>
+      <div><label class="block text-sm text-gray-600 mb-1">Temperature</label><input id="cfg_temp" class="w-full border rounded px-3 py-2" type="number" step="0.1" value="0.2"></div>
+    </div>
+    <div class="mt-3 flex flex-wrap gap-2">
+      <button id="btn_save_cfg" class="px-4 py-2 rounded bg-slate-800 text-white">保存到浏览器</button>
+      <button id="btn_save_env" class="px-4 py-2 rounded bg-emerald-700 text-white">写入 .env（默认）</button>
+      <span id="cfg_msg" class="text-sm text-gray-600"></span>
+    </div>
+  </details>
+</div>
+
+<!-- 会话列表弹窗 -->
+<dialog id="dlg_sessions" class="rounded-xl p-0 w-[680px] max-w-[95vw]">
+  <div class="p-4 border-b flex items-center justify-between">
+    <h3 class="font-semibold">载入会话</h3>
+    <button onclick="qs('dlg_sessions').close()" class="text-slate-600">✕</button>
+  </div>
+  <div id="sess_list_zone" class="p-4 max-h-[60vh] overflow-y-auto text-sm"></div>
+  <div class="p-4 border-t flex items-center justify-end">
+    <button class="px-3 py-2 rounded bg-slate-700 text-white" onclick="qs('dlg_sessions').close()">关闭</button>
+  </div>
+</dialog>
+
+<script>
+/* ===================== 全局状态 ===================== */
+let TOPIC_LIST=[], FIELD_LIST=[], ADJ_TOPIC_COL="", ADJ_FIELD_COL="";
+let SESSION_ID=""; let CURRENT_FILTER={target:"",value:""}; let CURRENT_SORT={by:"",order:""};
+let ACTIVE_COL="topic"; // "topic"|"field"
+const PAGER = { page:1, size:50, total:0, pages:1 };
+let LAST_EXPORT_URL=""; // 可选下载地址
+let _ct1=null, _ct2=null;
+
+const qs = id=>document.getElementById(id);
+const escapeHtml = s=>String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+const setBadge = ()=>{ qs('session_badge').textContent = "Session: " + (SESSION_ID||"—"); };
+
+/* ---- 默认兜底表 ---- */
+const DEF_TOPICS = ["健康议题","经济议题","政治议题","环境议题","传播模式与行为","媒介制度与平台治理","科技议题","文化议题","宗教议题","其他议题"];
+const DEF_FIELDS = ["政治传播","健康传播","大众传播","新闻学","跨文化传播","人际传播","科学传播","法律与政策","公共关系","组织传播","媒介效果","传播心理学","传播伦理","传播理论","广告学","传播研究方法","媒介史","媒介技术","言语传播","教育传播","计算传播","网络与新媒体","其他领域"];
+
+/* ===================== 配置加载 ===================== */
+async function fetchFrontendConfig(){
+  try{
+    const r=await fetch("/frontend_config",{cache:"no-store"}); const j=await r.json();
+    ADJ_TOPIC_COL=j.adj_topic_key||"研究主题（议题）分类_调整";
+    ADJ_FIELD_COL=j.adj_field_key||"研究领域分类_调整";
+    TOPIC_LIST=Array.isArray(j.topic_list)&&j.topic_list.length?j.topic_list:[...DEF_TOPICS];
+    FIELD_LIST=Array.isArray(j.field_list)&&j.field_list.length?j.field_list:[...DEF_FIELDS];
+    qs('app_ver').textContent="v"+(j.app_version||"");
+  }catch(e){
+    ADJ_TOPIC_COL="研究主题（议题）分类_调整";
+    ADJ_FIELD_COL="研究领域分类_调整";
+    TOPIC_LIST=[...DEF_TOPICS]; FIELD_LIST=[...DEF_FIELDS];
+  }
+}
+async function fetchEnvDefaults(){
+  const r=await fetch("/default_llm_config"); if(!r.ok) return;
+  const j=await r.json();
+  if(!localStorage.getItem("llm_cfg")){
+    qs('cfg_base_url').value=j.base_url||""; qs('cfg_api_key').value=j.api_key||"";
+    qs('cfg_model').value=j.model||""; qs('cfg_temp').value=j.temp??0.2;
+  }
+}
+function loadCfgFromLocal(){
+  const raw=localStorage.getItem("llm_cfg"); if(!raw) return;
+  try{ const c=JSON.parse(raw);
+    qs('cfg_base_url').value=c.base_url||""; qs('cfg_api_key').value=c.api_key||"";
+    qs('cfg_model').value=c.model||""; qs('cfg_temp').value=c.temp??0.2;
+  }catch(e){}
+}
+function saveCfgToLocal(){
+  const c={ base_url:qs('cfg_base_url').value.trim(), api_key:qs('cfg_api_key').value.trim(), model:qs('cfg_model').value.trim(), temp:parseFloat(qs('cfg_temp').value||"0.2") };
+  localStorage.setItem("llm_cfg", JSON.stringify(c)); qs('cfg_msg').innerText="已保存到浏览器";
+}
+async function saveEnvToServer(){
+  const c={ base_url:qs('cfg_base_url').value.trim(), api_key:qs('cfg_api_key').value.trim(), model:qs('cfg_model').value.trim(), temp:parseFloat(qs('cfg_temp').value||"0.2") };
+  const r=await fetch("/save_env",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c)}); if(!r.ok){ alert("写入 .env 失败："+await r.text()); return; }
+  qs('cfg_msg').innerText="已写入 .env（OPENAI_BASE_URL / OPENAI_API_KEY / OPENAI_MODEL）";
+}
+
+/* ===================== 上传 ===================== */
+function uploadFile(){
+  const fi=qs('file_input'), btn=qs('btn_upload'), bar=qs('up_bar'), msg=qs('up_msg');
+  if(!fi.files?.length){ alert("请选择文件"); return; }
+  btn.disabled=true; btn.textContent="上传中..."; bar.style.width="0%"; msg.textContent="0%";
+  const form=new FormData(); form.append("file", fi.files[0]);
+  const xhr=new XMLHttpRequest(); xhr.open("POST","/upload");
+  xhr.upload.onprogress=e=>{ if(e.lengthComputable){ const p=Math.round(e.loaded*100/e.total); bar.style.width=p+"%"; msg.textContent=p+"%"; } };
+  xhr.onreadystatechange=async ()=>{ if(xhr.readyState===4){ btn.disabled=false; btn.textContent="上传并新建会话";
+    if(xhr.status>=200&&xhr.status<300){ const d=JSON.parse(xhr.responseText);
+      SESSION_ID=d.session_id; setBadge(); qs('total_msg').textContent=`共 ${d.total} 行`; msg.textContent="加载成功";
+      PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
+      LAST_EXPORT_URL=""; // 新会话清空
+      await refreshStats(); populateFilterOptions(); CURRENT_FILTER={target:"",value:""}; CURRENT_SORT={by:"",order:""}; await loadPage();
+    }else{ msg.textContent="上传失败："+xhr.responseText; alert("上传失败："+xhr.responseText); } } };
+  xhr.send(form);
+}
+
+/* ===================== 统计/图表/筛选 ===================== */
+function renderChips(elId,arr,targetKey){
+  const el=qs(elId); el.innerHTML=""; (arr||[]).forEach(it=>{
+    const b=document.createElement("button"); b.className="chip text-sm";
+    b.textContent=`${it.label}（${it.count} | ${it.percent}%）`; b.onclick=()=>quickFilter(targetKey,it.label); el.appendChild(b);
+  });
+}
+function drawBar(canvasId,arr,key){
+  const labels=(arr||[]).map(x=>x.label), counts=(arr||[]).map(x=>x.count), ctx=qs(canvasId).getContext('2d');
+  const cfg={type:'bar', data:{labels, datasets:[{label:'Count', data:counts}]}, options:{responsive:true, plugins:{legend:{display:false}}, scales:{x:{ticks:{autoSkip:false}}, y:{beginAtZero:true}}}};
+  if(key==="chart_topic_orig"&&window._ct1){ window._ct1.destroy(); }
+  if(key==="chart_field_orig"&&window._ct2){ window._ct2.destroy(); }
+  if(key==="chart_topic_orig") window._ct1=new Chart(ctx,cfg);
+  if(key==="chart_field_orig") window._ct2=new Chart(ctx,cfg);
+}
+async function refreshStats(){
+  if(!SESSION_ID) return;
+  const r=await fetch(`/stats?session_id=${encodeURIComponent(SESSION_ID)}`,{cache:"no-store"}); if(!r.ok) return;
+  const d=await r.json();
+  renderChips("chips_topic_orig", d.topic_orig, "topic_orig");
+  renderChips("chips_field_orig", d.field_orig, "field_orig");
+  drawBar("chart_topic_orig", d.topic_orig, "chart_topic_orig");
+  drawBar("chart_field_orig", d.field_orig, "chart_field_orig");
+  qs('total_msg').textContent=`行数：${d.total}`;
+
+  if(!TOPIC_LIST.length){ TOPIC_LIST=(d.topic_orig||[]).map(x=>x.label); if(!TOPIC_LIST.length) TOPIC_LIST=[...DEF_TOPICS]; }
+  if(!FIELD_LIST.length){ FIELD_LIST=(d.field_orig||[]).map(x=>x.label); if(!FIELD_LIST.length) FIELD_LIST=[...DEF_FIELDS]; }
+  populateFilterOptions();
+}
+function quickFilter(target,value){ CURRENT_FILTER={target,value}; syncFilterControls(); PAGER.page=1; loadPage(); }
+function populateFilterOptions(){
+  const tSel=qs('filter_target'), vSel=qs('filter_value'); const target=CURRENT_FILTER.target||tSel.value;
+  vSel.innerHTML=""; let opts=[]; if(target.startsWith("topic")) opts=TOPIC_LIST; else if(target.startsWith("field")) opts=FIELD_LIST;
+  opts.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; vSel.appendChild(op); });
+  populateBulkTarget();
+}
+function populateBulkTarget(){
+  const list=(ACTIVE_COL==="topic")?TOPIC_LIST:FIELD_LIST;
+  const bulk=qs('bulk_target'); bulk.innerHTML=""; list.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; bulk.appendChild(op); });
+}
+function syncFilterControls(){
+  const tSel=qs('filter_target'); if(CURRENT_FILTER.target) tSel.value=CURRENT_FILTER.target;
+  populateFilterOptions(); setTimeout(()=>{ const vSel=qs('filter_value'); if(CURRENT_FILTER.value){ for(let i=0;i<vSel.options.length;i++){ if(vSel.options[i].value===CURRENT_FILTER.value){ vSel.selectedIndex=i; break; } } } },0);
+}
+
+/* ===================== 只编辑哪一列 ===================== */
+function setActiveCol(v){
+  ACTIVE_COL=(v==="field")?"field":"topic";
+  qs('op_col_hint').textContent = (ACTIVE_COL==="topic")?"（仅显示并可编辑：研究主题（调整））":"（仅显示并可编辑：研究领域（调整））";
+  populateBulkTarget(); PAGER.page=1; loadPage();
+}
+
+/* ===================== 分页 ===================== */
+function renderPagerInfo(){
+  qs('page_input').value=PAGER.page; qs('ps_input').value=PAGER.size;
+  qs('page_total').textContent=PAGER.pages;
+  qs('page_info').textContent=`第 ${PAGER.page} / ${PAGER.pages} 页 · 每页 ${PAGER.size} · 共 ${PAGER.total} 行`;
+}
+
+/* ===================== 表格 ===================== */
+function renderSelect(options,value,css){
+  return `<select class="${css}">${options.map(o=>`<option value="${o}" ${o===value?'selected':''}>${o}</option>`).join("")}</select>`;
+}
+async function loadPage(){
+  if(!SESSION_ID){ qs('table_zone').innerHTML='<div class="p-3 text-sm text-gray-500">请先上传或载入会话</div>'; return; }
+  const p=new URLSearchParams({session_id:SESSION_ID, page:PAGER.page, page_size:PAGER.size});
+  if(CURRENT_FILTER.target&&CURRENT_FILTER.value){ p.set("filter_target",CURRENT_FILTER.target); p.set("filter_value",CURRENT_FILTER.value); }
+  if(CURRENT_SORT.by==="rank"){ p.set("sort_by","rank"); p.set("sort_order", CURRENT_SORT.order||"asc"); p.set("only_outliers", qs('rank_only_outliers')?.checked?"1":"0"); }
+  qs('table_zone').innerHTML='<div class="p-3 text-sm text-gray-500">加载中…</div>';
+  const r=await fetch(`/data?${p.toString()}`,{cache:"no-store"}); if(!r.ok){ qs('table_zone').innerHTML=`<div class="p-3 text-sm text-red-600">加载失败：${await r.text()}</div>`; return; }
+  const d=await r.json(); PAGER.page=d.page; PAGER.size=d.page_size; PAGER.total=d.total; PAGER.pages=d.total_pages||1; renderPagerInfo();
+  renderTable(d.rows||[]);
+}
+function renderTable(rows){
+  if(!rows.length){ qs('table_zone').innerHTML='<div class="p-3 text-sm text-gray-500">无数据</div>'; return; }
+  const showTopicAdj=(ACTIVE_COL==="topic"); const showFieldAdj=(ACTIVE_COL==="field");
+  let html = `<table class="min-w-full text-sm"><thead class="bg-slate-100 sticky top-0 z-10"><tr>
+    <th class="px-3 py-2"><input type="checkbox" onclick="document.querySelectorAll('.row_ck').forEach(x=>x.checked=this.checked)"></th>
+    <th class="px-3 py-2 text-left w-16">行</th>
+    <th class="px-3 py-2 text-left">Article Title</th>
+    <th class="px-3 py-2 text-left">结构化总结</th>
+    <th class="px-3 py-2 text-left">研究主题（原）</th>
+    ${showTopicAdj?'<th class="px-3 py-2 text-left">研究主题（调整）</th>':''}
+    <th class="px-3 py-2 text-left">研究领域（原）</th>
+    ${showFieldAdj?'<th class="px-3 py-2 text-left">研究领域（调整）</th>':''}
+    <th class="px-3 py-2 text-left">Publication Year</th>
+    <th class="px-3 py-2 text-left">DOI</th>
+    <th class="px-3 py-2 text-left">排序分数</th>
+    <th class="px-3 py-2 text-left w-60">操作</th>
+  </tr></thead><tbody>`;
+  rows.forEach(r=>{
+    const idx=r._index, diffTopic=(r[ADJ_TOPIC_COL]||"")&&(r[ADJ_TOPIC_COL]!== (r["研究主题（议题）分类"]||"")), diffField=(r[ADJ_FIELD_COL]||"")&&(r[ADJ_FIELD_COL]!== (r["研究领域分类"]||"")), isOutlier=!!r["智能排序_离群"];
+    const topicAdjCell = showTopicAdj?`<td class="px-3 py-2 ${diffTopic?'cell-diff-topic':''}">${renderSelect(TOPIC_LIST, r[ADJ_TOPIC_COL]||"", "border rounded px-2 py-1 w-44 topic_sel")}</td>`:'';
+    const fieldAdjCell = showFieldAdj?`<td class="px-3 py-2 ${diffField?'cell-diff-field':''}">${renderSelect(FIELD_LIST, r[ADJ_FIELD_COL]||"", "border rounded px-2 py-1 w-44 field_sel")}</td>`:'';
+    html += `<tr class="border-b align-top ${isOutlier?'cell-outlier':''}">
+      <td class="px-3 py-2"><input type="checkbox" class="row_ck" data-index="${idx}"></td>
+      <td class="px-3 py-2 text-gray-500">${idx+1}</td>
+      <td class="px-3 py-2"><div class="font-medium">${escapeHtml(r["Article Title"]||"")}</div></td>
+      <td class="px-3 py-2"><textarea class="border rounded px-2 py-1 w-80 h-20 sum_input">${escapeHtml(r["结构化总结"]||"")}</textarea></td>
+      <td class="px-3 py-2 text-gray-600">${escapeHtml(r["研究主题（议题）分类"]||"")}</td>
+      ${topicAdjCell}
+      <td class="px-3 py-2 text-gray-600">${escapeHtml(r["研究领域分类"]||"")}</td>
+      ${fieldAdjCell}
+      <td class="px-3 py-2">${escapeHtml(String(r["Publication Year"]||""))}</td>
+      <td class="px-3 py-2">${escapeHtml(String(r["DOI"]||""))}</td>
+      <td class="px-3 py-2">${(r["智能排序分数"]!==undefined && r["智能排序分数"]!=="")? Number(r["智能排序分数"]).toFixed(4): ""}</td>
+      <td class="px-3 py-2"><div class="flex flex-col gap-2">
+        <button class="px-3 py-1 rounded bg-emerald-600 text-white" onclick="saveRow(${idx}, this)">保存</button>
+        <button class="px-3 py-1 rounded bg-sky-600 text-white" onclick="suggestRow(${idx}, this)">智能建议</button>
+      </div></td></tr>`;
+  });
+  html += `</tbody></table>`; qs('table_zone').innerHTML=html;
+}
+
+/* ===================== 保存/建议（只作用当前列） ===================== */
+async function saveRow(index, btn){
+  const tr=btn.closest("tr"); const sum=tr.querySelector(".sum_input").value;
+  const targetValue=(ACTIVE_COL==="topic")?(tr.querySelector(".topic_sel")?.value||""):(tr.querySelector(".field_sel")?.value||"");
+  btn.disabled=true; btn.textContent="保存中...";
+  const r=await fetch("/update",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID,index,structured:sum,which_adjust:ACTIVE_COL,target_value:targetValue})});
+  if(!r.ok){ alert("保存失败："+await r.text()); }
+  btn.textContent="保存"; btn.disabled=false; refreshStats();
+}
+async function suggestRow(index, btn){
+  const cfg=JSON.parse(localStorage.getItem("llm_cfg")||"{}"); // 有则用；后端已做兜底
+  btn.disabled=true; btn.textContent="建议中...";
+  const r=await fetch("/autosuggest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID,index,base_url:cfg.base_url,api_key:cfg.api_key,model:cfg.model,temperature:cfg.temp??0.2})});
+  if(!r.ok){ alert("建议失败："+await r.text()); btn.disabled=false; btn.textContent="智能建议"; return; }
+  const data=await r.json();
+  const rows=document.querySelectorAll("#table_zone tbody tr");
+  rows.forEach(row=>{
+    const n=parseInt(row.children[1].innerText.trim())-1;
+    if(n===index){
+      row.querySelector(".sum_input").value=data.structured_summary||"";
+      if(ACTIVE_COL==="topic"){ const el=row.querySelector(".topic_sel"); if(el) el.value=data.topic_suggestion||el.value; }
+      else{ const el=row.querySelector(".field_sel"); if(el) el.value=data.field_suggestion||el.value; }
+    }
+  });
+  btn.textContent="完成"; setTimeout(()=>{btn.disabled=false; btn.textContent="智能建议";}, 600); refreshStats();
+}
+
+/* ===================== 批量 ===================== */
+const collectSelectedIndices=()=>Array.from(document.querySelectorAll(".row_ck:checked")).map(x=>parseInt(x.dataset.index));
+async function bulkApplySelected(){
+  if(!SESSION_ID){ alert("请先上传/载入会话"); return; }
+  const idxs=collectSelectedIndices(); if(!idxs.length){ alert("请勾选本页要修改的行"); return; }
+  const targetVal=qs('bulk_target').value;
+  const r=await fetch("/bulk_update_indices",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID,indices:idxs,which_adjust:ACTIVE_COL,target_value:targetVal})});
+  if(!r.ok){ alert("批量失败："+await r.text()); return; }
+  await loadPage(); await refreshStats(); alert("已应用到本页所选");
+}
+async function bulkApplyFiltered(){
+  if(!SESSION_ID){ alert("请先上传/载入会话"); return; }
+  if(!CURRENT_FILTER.target||!CURRENT_FILTER.value){ alert("请先设置筛选"); return; }
+  const targetVal=qs('bulk_target').value;
+  if(!confirm(`把当前筛选（${CURRENT_FILTER.target}=${CURRENT_FILTER.value}）全部写入『${ACTIVE_COL==='topic'?'研究主题（议题）分类_调整':'研究领域分类_调整'}』为：${targetVal}？`)) return;
+  const r=await fetch("/bulk_update_filtered",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID,filter_target:CURRENT_FILTER.target,filter_value:CURRENT_FILTER.value,which_adjust:ACTIVE_COL,target_value:targetVal})});
+  if(!r.ok){ alert("批量失败："+await r.text()); return; }
+  await loadPage(); await refreshStats(); alert("已应用到当前筛选全部");
+}
+
+/* ===================== 排序 & 进度 ===================== */
+let _progressTimer=null;
+function startProgressPolling(){
+  stopProgressPolling();
+  _progressTimer=setInterval(async ()=>{
+    if(!SESSION_ID) return;
+    try{
+      const r=await fetch(`/progress?session_id=${encodeURIComponent(SESSION_ID)}`,{cache:"no-store"}); if(!r.ok) return;
+      const s=await r.json(); const txt=(typeof s.percent==="number")?`进度 ${s.percent}% · ${s.status||""} · ${s.message||""}`:"计算中…";
+      qs('rank_msg').textContent=txt; if(s.status==="done"||s.status==="error") stopProgressPolling();
+    }catch(e){}
+  },1000);
+}
+function stopProgressPolling(){ if(_progressTimer){ clearInterval(_progressTimer); _progressTimer=null; } }
+async function doRanking(){
+  if(!SESSION_ID){ alert("请先上传/载入会话"); return; }
+  const cfg=JSON.parse(localStorage.getItem("llm_cfg")||"{}");
+  const payload={ session_id:SESSION_ID, group_by:qs('rank_group_by').value,
+    fields:{ title:qs('rk_f_title').checked, abstract:qs('rk_f_abstract').checked, summary:qs('rk_f_summary').checked },
+    algorithm:qs('rank_algo').value, k:parseInt(qs('rank_k').value||"3"), sigma:parseFloat(qs('rank_sigma').value||"2.0"),
+    embedding_source:qs('rank_emb_src').value, openai_base_url:cfg.base_url||"", openai_api_key:cfg.api_key||"", openai_emb_model:"text-embedding-3-large" };
+  qs('rank_msg').textContent="计算已开始…"; startProgressPolling();
+  try{
+    const r=await fetch("/compute_ranking",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    const j=await r.json().catch(()=>null);
+    if(!r.ok){ qs('rank_msg').textContent="失败："+(j?.detail||"未知错误"); stopProgressPolling(); return; }
+    qs('rank_msg').textContent=`完成：样本 ${j.total}，离群 ${j.outliers}`;
+  }catch(e){ qs('rank_msg').textContent="失败："+e.message; }
+  finally{ stopProgressPolling(); }
+  CURRENT_SORT={by:"rank", order:qs('rank_order').value}; PAGER.page=1; await loadPage();
+}
+
+/* ===================== 会话：保存 / 载入 ===================== */
+async function saveSession(){
+  if(!SESSION_ID){ alert("没有可保存的会话"); return; }
+  const r=await fetch("/session/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID})});
+  if(!r.ok){ alert("保存失败："+await r.text()); return; }
+  alert("会话已保存到服务器（sessions/）");
+}
+async function openLoadDialog(){
+  const dlg=qs('dlg_sessions'); const zone=qs('sess_list_zone');
+  zone.innerHTML="加载中…";
+  dlg.showModal();
+  try{
+    const r=await fetch("/session/list",{cache:"no-store"}); if(!r.ok){ zone.innerHTML="拉取失败"; return; }
+    const j=await r.json(); const arr=j.sessions||[];
+    if(!arr.length){ zone.innerHTML='<div class="text-slate-600">暂无会话</div>'; return; }
+    let html='<table class="w-full text-sm"><thead><tr class="border-b bg-slate-50"><th class="text-left p-2">SessionID</th><th class="text-left p-2">来源文件</th><th class="text-left p-2">行数</th><th class="text-left p-2">最近保存</th><th class="text-left p-2">操作</th></tr></thead><tbody>';
+    arr.forEach(s=>{
+      html+=`<tr class="border-b">
+        <td class="p-2 font-mono text-xs">${s.session_id}</td>
+        <td class="p-2">${escapeHtml(s.origin_filename||"")}</td>
+        <td class="p-2">${s.rows||0}</td>
+        <td class="p-2">${escapeHtml(s.updated_text||"")}</td>
+        <td class="p-2"><button class="px-2 py-1 rounded bg-slate-800 text-white" onclick="loadSession('${s.session_id}')">加载</button></td>
+      </tr>`;
+    });
+    html+='</tbody></table>'; zone.innerHTML=html;
+  }catch(e){
+    zone.innerHTML="加载失败："+e.message;
+  }
+}
+async function loadSession(sid){
+  const r=await fetch(`/session/load?session_id=${encodeURIComponent(sid)}`,{cache:"no-store"});
+  if(!r.ok){ alert("加载失败："+await r.text()); return; }
+  const j=await r.json();
+  SESSION_ID=j.session_id; setBadge(); qs('total_msg').textContent=`行数：${j.total}`;
+  PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
+  await refreshStats(); populateFilterOptions(); CURRENT_FILTER={target:"",value:""}; CURRENT_SORT={by:"",order:""}; await loadPage();
+  // 拉 meta 看是否有最近导出
+  try{
+    const info=await fetch(`/session/info?session_id=${encodeURIComponent(SESSION_ID)}`); if(info.ok){ const x=await info.json(); LAST_EXPORT_URL = x?.meta?.last_export_path ? `/file?path=${encodeURIComponent(x.meta.last_export_path)}` : ""; }
+  }catch(e){}
+  qs('dlg_sessions').close();
+}
+
+/* ===================== 导出（服务端保存） ===================== */
+async function saveExcelServer(){
+  if(!SESSION_ID){ alert("请先上传/载入会话"); return; }
+  const name=prompt("文件名（可留空自动带时间戳）",""); // 只作为建议名
+  const r=await fetch("/export_excel_save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID,file_name:name||undefined})});
+  if(!r.ok){ alert("导出失败："+await r.text()); return; }
+  const j=await r.json(); LAST_EXPORT_URL=j.download_url||"";
+  alert("已保存到服务器：\n"+(j.saved_path||""));
+}
+async function downloadLast(){
+  if(!LAST_EXPORT_URL){
+    // 尝试取会话 info 的 last_export
+    try{
+      const info=await fetch(`/session/info?session_id=${encodeURIComponent(SESSION_ID)}`); if(info.ok){ const x=await info.json(); LAST_EXPORT_URL = x?.meta?.last_export_path ? `/file?path=${encodeURIComponent(x.meta.last_export_path)}` : ""; }
+    }catch(e){}
+  }
+  if(!LAST_EXPORT_URL){ alert("当前会话尚无导出记录"); return; }
+  const a=document.createElement("a"); a.href=LAST_EXPORT_URL; a.target="_blank"; document.body.appendChild(a); a.click(); a.remove();
+}
+
+/* ===================== 事件绑定 & 初始化 ===================== */
+function bindEvents(){
+  // 上传/保存/载入/导出
+  qs('btn_upload').onclick=uploadFile;
+  qs('btn_save_session').onclick=saveSession;
+  qs('btn_load_session').onclick=openLoadDialog;
+  qs('btn_save_excel').onclick=saveExcelServer;
+  qs('btn_download_last').onclick=downloadLast;
+
+  // 筛选
+  qs('btn_only_other_topic').onclick=()=>quickFilter('topic_orig','其他议题');
+  qs('btn_only_other_field').onclick=()=>quickFilter('field_orig','其他领域');
+  qs('btn_apply_filter').onclick=()=>{ CURRENT_FILTER={ target:qs('filter_target').value, value:qs('filter_value').value }; PAGER.page=1; loadPage(); };
+  qs('btn_clear_filter').onclick=()=>{ CURRENT_FILTER={target:"",value:""}; CURRENT_SORT={by:"",order:""}; PAGER.page=1; loadPage(); };
+
+  // 批量
+  qs('btn_bulk_selected').onclick=bulkApplySelected; qs('btn_bulk_filtered').onclick=bulkApplyFiltered;
+  qs('btn_select_all').onclick=()=>document.querySelectorAll(".row_ck").forEach(x=>x.checked=true);
+  qs('btn_unselect_all').onclick=()=>document.querySelectorAll(".row_ck").forEach(x=>x.checked=false);
+
+  // 排序
+  qs('btn_do_ranking').onclick=doRanking;
+  qs('rank_algo').addEventListener('change', ()=>{ qs('wrap_k').style.display=(qs('rank_algo').value==='kmeans')?'':'none'; });
+  qs('wrap_k').style.display=(qs('rank_algo').value==='kmeans')?'':'none';
+
+  // LLM 配置
+  qs('btn_save_cfg').onclick=saveCfgToLocal; qs('btn_save_env').onclick=saveEnvToServer;
+
+  // 只编辑哪一列
+  qs('op_col_select').addEventListener('change', e=> setActiveCol(e.target.value));
+
+  // 分页输入与按钮
+  qs('page_input').addEventListener('change', ()=>{ let v=parseInt(qs('page_input').value||"1"); if(isNaN(v)||v<1) v=1; PAGER.page=v; loadPage(); });
+  qs('ps_input').addEventListener('change', ()=>{ let v=parseInt(qs('ps_input').value||"50"); if(isNaN(v)||v<1) v=1; if(v>5000) v=5000; PAGER.size=v; PAGER.page=1; loadPage(); });
+  qs('btn_reload_page').onclick=loadPage;
+  qs('pg_first').onclick=()=>{ PAGER.page=1; loadPage(); };
+  qs('pg_prev').onclick =()=>{ PAGER.page=Math.max(1, PAGER.page-1); loadPage(); };
+  qs('pg_next').onclick =()=>{ PAGER.page=Math.min(PAGER.pages, PAGER.page+1); loadPage(); };
+  qs('pg_last').onclick =()=>{ PAGER.page=PAGER.pages; loadPage(); };
+}
+
+(async function init(){
+  try{
+    await fetchFrontendConfig(); fetchEnvDefaults(); loadCfgFromLocal(); bindEvents();
+    setActiveCol('topic'); // 默认编辑“主题（调整）”
+    PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
+    populateFilterOptions();
+  }catch(e){ alert("前端初始化失败："+e.message); console.error(e); }
+})();
+</script>
+</body>
+</html>
