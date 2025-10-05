@@ -7,6 +7,28 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+  <script type="module">
+    const HERO_SOURCES = [
+      ["heroicon-arrow-up-tray", "https://cdn.jsdelivr.net/npm/@heroicons/web@2.1.1/24/outline/arrow-up-tray.js"],
+      ["heroicon-cloud-arrow-up", "https://cdn.jsdelivr.net/npm/@heroicons/web@2.1.1/24/outline/cloud-arrow-up.js"],
+      ["heroicon-folder-arrow-down", "https://cdn.jsdelivr.net/npm/@heroicons/web@2.1.1/24/outline/folder-arrow-down.js"],
+      ["heroicon-document-arrow-down", "https://cdn.jsdelivr.net/npm/@heroicons/web@2.1.1/24/outline/document-arrow-down.js"],
+      ["heroicon-arrow-down-tray", "https://cdn.jsdelivr.net/npm/@heroicons/web@2.1.1/24/outline/arrow-down-tray.js"],
+    ];
+    (async () => {
+      for (const [tag, url] of HERO_SOURCES) {
+        try {
+          const mod = await import(url);
+          const Icon = mod?.default ?? Object.values(mod || {})[0];
+          if (Icon && !customElements.get(tag)) {
+            customElements.define(tag, Icon);
+          }
+        } catch (err) {
+          console.warn(`未能加载 Heroicon: ${tag}`, err);
+        }
+      }
+    })();
+  </script>
   <style>
     .cell-diff-topic { background-color:#FFF3BF; } /* 黄：主题调整变更 */
     .cell-diff-field { background-color:#CDEAFE; } /* 蓝：领域调整变更 */
@@ -14,6 +36,19 @@
     .chip{ padding:2px 8px; border-radius:9999px; background:#f1f5f9; }
     .chip:hover{ background:#e2e8f0; }
     dialog::backdrop { background: rgba(0,0,0,.25); }
+    .action-btn{ display:inline-flex; align-items:center; gap:0.5rem; border-radius:0.75rem; padding:0.6rem 1rem; font-size:0.875rem; font-weight:600; transition:transform .15s ease, box-shadow .15s ease, background-color .15s ease; }
+    .action-btn:hover{ transform:translateY(-1px); box-shadow:0 10px 25px -15px rgba(15,23,42,0.65); }
+    .action-btn:focus-visible{ outline:2px solid rgba(14,116,144,0.6); outline-offset:2px; }
+    .action-btn:disabled{ opacity:0.6; cursor:not-allowed; transform:none; box-shadow:none; }
+    .action-btn heroicon-arrow-up-tray,
+    .action-btn heroicon-cloud-arrow-up,
+    .action-btn heroicon-folder-arrow-down,
+    .action-btn heroicon-document-arrow-down,
+    .action-btn heroicon-arrow-down-tray{ width:1.25rem; height:1.25rem; color:currentColor; }
+    .info-card{ background:linear-gradient(135deg,#f8fafc 0%,#f1f5f9 40%,#e2e8f0 100%); border:1px solid rgba(148,163,184,0.35); }
+    .file-input{ display:block; width:100%; border:1px solid rgba(148,163,184,0.6); border-radius:0.75rem; padding:0.65rem 0.75rem; font-size:0.875rem; color:#0f172a; background:white; transition:border-color .15s ease, box-shadow .15s ease; }
+    .file-input:hover{ border-color:#2563eb; }
+    .file-input:focus{ outline:none; border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,0.12); }
   </style>
 </head>
 <body class="bg-slate-50">
@@ -27,27 +62,47 @@
   </div>
 
   <!-- 顶部操作条：上传 / 会话保存 / 载入 / Excel 保存 -->
-  <div class="bg-white rounded-xl shadow p-4">
-    <div class="flex flex-col lg:flex-row lg:items-end gap-3">
-      <div class="flex items-end gap-3">
-        <div>
-          <label class="block text-sm text-gray-600 mb-1">选择表格（.xlsx/.xls/.csv）</label>
-          <input id="file_input" type="file" accept=".xlsx,.xls,.csv">
+  <div class="bg-white rounded-2xl shadow p-5">
+    <div class="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] xl:items-end">
+      <div class="space-y-4">
+        <div class="space-y-2">
+          <label class="block text-sm font-medium text-slate-600">选择表格（.xlsx/.xls/.csv）</label>
+          <input id="file_input" class="file-input" type="file" accept=".xlsx,.xls,.csv">
+          <p class="text-xs text-slate-500">支持 Excel 与 CSV 文件，上传后将自动开启新的会话。</p>
         </div>
-        <div class="flex items-center gap-2">
-          <button id="btn_upload" class="px-4 py-2 rounded bg-blue-600 text-white">上传并新建会话</button>
-          <div class="w-48 bg-slate-100 rounded h-2 overflow-hidden"><div id="up_bar" class="bg-blue-600 h-2 w-0"></div></div>
+        <div class="flex flex-wrap items-center gap-3">
+          <button id="btn_upload" class="action-btn bg-blue-600 text-white hover:bg-blue-500 shadow-sm" title="上传并新建会话">
+            <heroicon-arrow-up-tray class="w-5 h-5"></heroicon-arrow-up-tray>
+            <span>上传并新建会话</span>
+          </button>
+          <div class="flex-1 min-w-[200px]">
+            <div class="bg-slate-100 rounded-full h-2 overflow-hidden">
+              <div id="up_bar" class="bg-blue-600 h-2 w-0 transition-[width] duration-300"></div>
+            </div>
+          </div>
           <span id="up_msg" class="text-sm text-gray-600 whitespace-nowrap"></span>
         </div>
       </div>
-
-      <div class="flex-1"></div>
-
-      <div class="flex flex-wrap items-center gap-2">
-        <button id="btn_save_session" class="px-3 py-2 rounded bg-emerald-600 text-white" title="将当前会话写入服务器磁盘（sessions/）">保存会话（服务端）</button>
-        <button id="btn_load_session" class="px-3 py-2 rounded bg-slate-800 text-white" title="从服务器读取会话">载入会话</button>
-        <button id="btn_save_excel" class="px-3 py-2 rounded bg-indigo-600 text-white" title="写入 Output/<session>/export_*.xlsx">保存 Excel（服务端）</button>
-        <button id="btn_download_last" class="px-3 py-2 rounded bg-slate-600 text-white" title="从服务器下载最近一次导出副本（可选）">下载最新导出</button>
+      <div class="info-card rounded-2xl p-4 space-y-3">
+        <div class="text-xs uppercase tracking-wide text-slate-500">会话与导出</div>
+        <div class="grid gap-2 sm:grid-cols-2">
+          <button id="btn_save_session" class="action-btn justify-center bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm" title="将当前会话写入服务器磁盘（sessions/）">
+            <heroicon-cloud-arrow-up class="w-5 h-5"></heroicon-cloud-arrow-up>
+            <span>保存会话</span>
+          </button>
+          <button id="btn_load_session" class="action-btn justify-center bg-slate-800 text-white hover:bg-slate-700 shadow-sm" title="从服务器读取会话">
+            <heroicon-folder-arrow-down class="w-5 h-5"></heroicon-folder-arrow-down>
+            <span>载入会话</span>
+          </button>
+          <button id="btn_save_excel" class="action-btn justify-center bg-indigo-600 text-white hover:bg-indigo-500 shadow-sm" title="写入 Output/&lt;session&gt;/export_*.xlsx">
+            <heroicon-document-arrow-down class="w-5 h-5"></heroicon-document-arrow-down>
+            <span>保存 Excel</span>
+          </button>
+          <button id="btn_download_last" class="action-btn justify-center bg-slate-600 text-white hover:bg-slate-500 shadow-sm" title="从服务器下载最近一次导出副本（可选）">
+            <heroicon-arrow-down-tray class="w-5 h-5"></heroicon-arrow-down-tray>
+            <span>下载最新导出</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -171,12 +226,15 @@
   <div class="bg-white rounded-xl shadow p-4">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
       <h2 class="font-semibold">排序可视化（3D 散点图）</h2>
-      <div class="flex items-center gap-2">
+      <button id="btn_toggle_vis" class="px-3 py-1 rounded bg-slate-200 text-slate-700" aria-expanded="false">展开可视化</button>
+    </div>
+    <div id="rank_vis_body" class="space-y-3 hidden">
+      <div class="flex items-center justify-end">
         <button id="btn_refresh_vis" class="px-3 py-1 rounded bg-slate-700 text-white">刷新可视化</button>
       </div>
+      <div id="rank_vis_msg" class="text-sm text-gray-500">等待计算后展示。</div>
+      <div id="rank_vis_plot" class="w-full h-[460px]"></div>
     </div>
-    <div id="rank_vis_msg" class="text-sm text-gray-500 mb-2">等待计算后展示。</div>
-    <div id="rank_vis_plot" class="w-full h-[460px]"></div>
   </div>
 
   <!-- 分页条 -->
@@ -235,6 +293,7 @@ let ACTIVE_COL="topic"; // "topic"|"field"
 const PAGER = { page:1, size:50, total:0, pages:1 };
 let LAST_EXPORT_URL=""; // 可选下载地址
 let _ct1=null, _ct2=null;
+let RANK_VIS_EXPANDED=false;
 
 const qs = id=>document.getElementById(id);
 const escapeHtml = s=>String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
@@ -338,6 +397,24 @@ function clearScatterPlot(message){
   if(plotEl && window.Plotly){ try{ Plotly.purge(plotEl); }catch(e){} }
   if(plotEl) plotEl.innerHTML="";
   const msg=qs('rank_vis_msg'); if(msg) msg.textContent=message||'等待计算后展示。';
+}
+
+function setRankVisExpanded(expanded){
+  RANK_VIS_EXPANDED=!!expanded;
+  const body=qs('rank_vis_body');
+  if(body){
+    if(RANK_VIS_EXPANDED) body.classList.remove('hidden');
+    else body.classList.add('hidden');
+  }
+  const btn=qs('btn_toggle_vis');
+  if(btn){
+    btn.textContent=RANK_VIS_EXPANDED?"收起可视化":"展开可视化";
+    btn.setAttribute('aria-expanded', RANK_VIS_EXPANDED?"true":"false");
+  }
+}
+
+function toggleRankVis(){
+  setRankVisExpanded(!RANK_VIS_EXPANDED);
 }
 
 function renderScatterPlot(data){
@@ -694,6 +771,8 @@ function bindEvents(){
   // 排序
   qs('btn_do_ranking').onclick=doRanking;
   const btnRefreshVis=qs('btn_refresh_vis'); if(btnRefreshVis) btnRefreshVis.onclick=()=>fetchScatterAndRender(true);
+  const btnToggleVis=qs('btn_toggle_vis'); if(btnToggleVis) btnToggleVis.onclick=toggleRankVis;
+  setRankVisExpanded(false);
   qs('rank_algo').addEventListener('change', handleAlgoChange);
   handleAlgoChange();
 
