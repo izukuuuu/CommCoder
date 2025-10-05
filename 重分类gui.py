@@ -20,6 +20,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.decomposition import PCA
+
+try:
+    import hdbscan  # type: ignore
+except Exception:  # pragma: no cover - 可选依赖
+    hdbscan = None
 from dotenv import load_dotenv, set_key
 import uvicorn
 
@@ -60,6 +66,8 @@ PROGRESS_LOCK = Lock()
 SESSION_LOCKS: Dict[str, Lock] = {}
 SESSION_TOUCH: Dict[str, float] = {}  # 最近访问时间戳（LRU）
 SESSION_LOCKS_LOCK = Lock()
+
+SCATTER_CACHE: Dict[str, Dict[str, Any]] = {}
 
 def _get_lock(sid: str) -> Lock:
     with SESSION_LOCKS_LOCK:
@@ -578,7 +586,7 @@ def build_texts(df: pd.DataFrame, fields: Dict[str,bool]) -> List[str]:
 
 def compute_group_ranking(df: pd.DataFrame, group_by:str, fields:Dict[str,bool], algorithm:str, k:int,
                           src:str, base_url:str, api_key:str, emb_model:str,
-                          local_model_name:str, sigma:float, sid:str) -> Tuple[int,int]:
+                          local_model_name:str, sigma:float, min_cluster_size:int, sid:str) -> Tuple[int,int]:
     gcol = ADJUST_TOPIC_COL if group_by=="topic_adj" else "研究主题（议题）分类"
     mask = df[gcol].astype(str).str.strip()!=""; dfv = df[mask].copy()
     if dfv.empty: return (0,0)
@@ -599,11 +607,17 @@ def compute_group_ranking(df: pd.DataFrame, group_by:str, fields:Dict[str,bool],
     _progress_update(sid,status="grouping",groups_done=0,groups_total=len(groups), message=f"共 {len(groups)} 组")
 
     total_out = 0
+    scores_all = np.zeros(len(idxs), dtype=float)
+    outliers_all = np.zeros(len(idxs), dtype=bool)
+    cluster_all = np.full(len(idxs), -1, dtype=int)
+
     for gi, lab in enumerate(groups, start=1):
         sel = [i for i,lb in enumerate(labels) if lb==lab]
         X = emb[sel,:]
         if X.shape[0]==1:
             d = np.array([0.0])
+            labs = np.zeros(1, dtype=int)
+            outs = np.array([False])
         else:
             if algorithm=="kmeans":
                 kk = max(1, min(k, X.shape[0]))
@@ -611,14 +625,30 @@ def compute_group_ranking(df: pd.DataFrame, group_by:str, fields:Dict[str,bool],
                 labs = km.fit_predict(X); centers = km.cluster_centers_
                 sims = [float(cosine_similarity(X[i:i+1], centers[labs[i]].reshape(1,-1))[0][0]) for i in range(X.shape[0])]
                 d = 1.0 - np.array(sims)
+                outs = d > (np.mean(d) + sigma*(np.std(d)+1e-12))
+            elif algorithm=="hdbscan":
+                if hdbscan is None:
+                    raise RuntimeError("未安装 hdbscan，请先 pip install hdbscan")
+                mcs = max(2, min_cluster_size)
+                clusterer = hdbscan.HDBSCAN(min_cluster_size=mcs, metric="euclidean")
+                labs = clusterer.fit_predict(X)
+                probs = getattr(clusterer, "probabilities_", np.ones(X.shape[0], dtype=float))
+                d = 1.0 - np.array(probs, dtype=float)
+                outs = labs == -1
+                out_scores = getattr(clusterer, "outlier_scores_", None)
+                if out_scores is not None:
+                    d = np.maximum(d, np.array(out_scores, dtype=float))
             else:
                 cen = X.mean(axis=0, keepdims=True)
                 sims= cosine_similarity(X, cen).reshape(-1)
                 d = 1.0 - sims
+                labs = np.zeros(X.shape[0], dtype=int)
+                outs = d > (np.mean(d) + sigma*(np.std(d)+1e-12))
 
         mu, sd = float(np.mean(d)), float(np.std(d)+1e-12)
         thr = mu + sigma*sd
-        outs = d > thr
+        if algorithm != "hdbscan":
+            outs = d > thr
         total_out += int(np.sum(outs))
 
         for j, li in enumerate(sel):
@@ -626,9 +656,39 @@ def compute_group_ranking(df: pd.DataFrame, group_by:str, fields:Dict[str,bool],
             df.at[ridx, RANK_SCORE_COL]   = float(d[j])
             df.at[ridx, RANK_GROUP_COL]   = lab
             df.at[ridx, RANK_OUTLIER_COL] = bool(outs[j])
-            df.at[ridx, RANK_ALGO_COL]    = f"{algorithm}(k={k})" if algorithm=="kmeans" else "centroid"
+            if algorithm=="kmeans":
+                algo_desc = f"kmeans(k={k})"
+            elif algorithm=="hdbscan":
+                algo_desc = f"hdbscan(min_cluster_size={mcs})"
+            else:
+                algo_desc = "centroid"
+            df.at[ridx, RANK_ALGO_COL]    = algo_desc
+            scores_all[li] = float(d[j])
+            outliers_all[li] = bool(outs[j])
+            cluster_all[li] = int(labs[j]) if algorithm != "centroid" else 0
 
         _progress_update(sid,status="grouping",groups_done=gi, message=f"分组 {lab} 完成（{gi}/{len(groups)}）", outliers=total_out)
+
+    try:
+        comps = min(3, emb.shape[1] if emb.shape[1]>0 else 3, emb.shape[0] if emb.shape[0]>0 else 3)
+        coords = np.zeros((emb.shape[0], 3), dtype=float)
+        if emb.shape[0] > 0 and comps > 0:
+            pca = PCA(n_components=comps)
+            trans = pca.fit_transform(emb)
+            coords[:, :comps] = trans
+        SCATTER_CACHE[sid] = {
+            "coords": coords.tolist(),
+            "indices": idxs,
+            "group_labels": labels,
+            "algorithm": algorithm,
+            "cluster_labels": cluster_all.tolist(),
+            "scores": scores_all.tolist(),
+            "outliers": outliers_all.tolist(),
+            "group_by": group_by,
+            "timestamp": _now_str(),
+        }
+    except Exception:
+        SCATTER_CACHE.pop(sid, None)
 
     return (int(dfv.shape[0]), int(total_out))
 
@@ -642,6 +702,7 @@ def compute_rank(payload: Dict[str,Any]):
                 _touch(sid); _evict_if_needed()
         df = DATASTORE[sid]
         _progress_init(sid); _progress_update(sid,status="embedding",message="开始计算…")
+        SCATTER_CACHE.pop(sid, None)
 
         total, outs = compute_group_ranking(
             df=df,
@@ -655,6 +716,7 @@ def compute_rank(payload: Dict[str,Any]):
             emb_model=payload.get("openai_emb_model","") or os.getenv("OPENAI_EMBEDDINGS_MODEL","text-embedding-3-large"),
             local_model_name=os.getenv("SENTENCE_MODEL", None),
             sigma=float(payload.get("sigma",2.0)),
+            min_cluster_size=int(payload.get("min_cluster_size",5)),
             sid=sid
         )
         DATASTORE[sid] = df
@@ -665,6 +727,13 @@ def compute_rank(payload: Dict[str,Any]):
     except Exception as e:
         _progress_finish(sid, False, f"失败：{e}")
         return JSONResponse({"detail": f"排序失败：{e}"}, status_code=500)
+
+@app.get("/ranking_scatter")
+def ranking_scatter(session_id: str = Query(...)):
+    data = SCATTER_CACHE.get(session_id)
+    if not data:
+        return JSONResponse({"detail": "当前会话暂无排序可视化数据"}, status_code=404)
+    return JSONResponse({"ok": True, **data})
 
 # ================== 会话持久化 API ==================
 @app.post("/session/save")

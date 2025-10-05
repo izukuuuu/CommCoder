@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
   <style>
     .cell-diff-topic { background-color:#FFF3BF; } /* 黄：主题调整变更 */
     .cell-diff-field { background-color:#CDEAFE; } /* 蓝：领域调整变更 */
@@ -121,15 +122,20 @@
           <select id="rank_algo" class="border rounded px-2 py-1 w-full">
             <option value="centroid">Centroid（质心）</option>
             <option value="kmeans">K-Means</option>
+            <option value="hdbscan">HDBSCAN（自动离群）</option>
           </select>
         </div>
         <div id="wrap_k">
           <label class="block text-sm text-gray-600 mb-1">K（K-Means 生效）</label>
           <input id="rank_k" type="number" value="3" min="1" class="border rounded px-2 py-1 w-full">
         </div>
-        <div>
+        <div id="wrap_sigma">
           <label class="block text-sm text-gray-600 mb-1">离群阈值 σ</label>
           <input id="rank_sigma" type="number" step="0.1" value="2.0" class="border rounded px-2 py-1 w-full">
+        </div>
+        <div id="wrap_min_cluster">
+          <label class="block text-sm text-gray-600 mb-1">最小簇大小（HDBSCAN）</label>
+          <input id="rank_min_cluster" type="number" step="1" min="2" value="5" class="border rounded px-2 py-1 w-full">
         </div>
         <div>
           <label class="block text-sm text-gray-600 mb-1">嵌入来源</label>
@@ -160,6 +166,17 @@
         </div>
       </div>
     </details>
+  </div>
+
+  <div class="bg-white rounded-xl shadow p-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+      <h2 class="font-semibold">排序可视化（3D 散点图）</h2>
+      <div class="flex items-center gap-2">
+        <button id="btn_refresh_vis" class="px-3 py-1 rounded bg-slate-700 text-white">刷新可视化</button>
+      </div>
+    </div>
+    <div id="rank_vis_msg" class="text-sm text-gray-500 mb-2">等待计算后展示。</div>
+    <div id="rank_vis_plot" class="w-full h-[460px]"></div>
   </div>
 
   <!-- 分页条 -->
@@ -276,11 +293,12 @@ function uploadFile(){
   const xhr=new XMLHttpRequest(); xhr.open("POST","/upload");
   xhr.upload.onprogress=e=>{ if(e.lengthComputable){ const p=Math.round(e.loaded*100/e.total); bar.style.width=p+"%"; msg.textContent=p+"%"; } };
   xhr.onreadystatechange=async ()=>{ if(xhr.readyState===4){ btn.disabled=false; btn.textContent="上传并新建会话";
-    if(xhr.status>=200&&xhr.status<300){ const d=JSON.parse(xhr.responseText);
-      SESSION_ID=d.session_id; setBadge(); qs('total_msg').textContent=`共 ${d.total} 行`; msg.textContent="加载成功";
-      PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
-      LAST_EXPORT_URL=""; // 新会话清空
-      await refreshStats(); populateFilterOptions(); CURRENT_FILTER={target:"",value:""}; CURRENT_SORT={by:"",order:""}; await loadPage();
+      if(xhr.status>=200&&xhr.status<300){ const d=JSON.parse(xhr.responseText);
+        SESSION_ID=d.session_id; setBadge(); qs('total_msg').textContent=`共 ${d.total} 行`; msg.textContent="加载成功";
+        PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
+        LAST_EXPORT_URL=""; // 新会话清空
+        clearScatterPlot('等待计算后展示。');
+        await refreshStats(); populateFilterOptions(); CURRENT_FILTER={target:"",value:""}; CURRENT_SORT={by:"",order:""}; await loadPage();
     }else{ msg.textContent="上传失败："+xhr.responseText; alert("上传失败："+xhr.responseText); } } };
   xhr.send(form);
 }
@@ -313,6 +331,112 @@ async function refreshStats(){
   if(!TOPIC_LIST.length){ TOPIC_LIST=(d.topic_orig||[]).map(x=>x.label); if(!TOPIC_LIST.length) TOPIC_LIST=[...DEF_TOPICS]; }
   if(!FIELD_LIST.length){ FIELD_LIST=(d.field_orig||[]).map(x=>x.label); if(!FIELD_LIST.length) FIELD_LIST=[...DEF_FIELDS]; }
   populateFilterOptions();
+}
+
+function clearScatterPlot(message){
+  const plotEl=qs('rank_vis_plot');
+  if(plotEl && window.Plotly){ try{ Plotly.purge(plotEl); }catch(e){} }
+  if(plotEl) plotEl.innerHTML="";
+  const msg=qs('rank_vis_msg'); if(msg) msg.textContent=message||'等待计算后展示。';
+}
+
+function renderScatterPlot(data){
+  const plotEl=qs('rank_vis_plot'); if(!plotEl) return;
+  if(!window.Plotly){ plotEl.innerHTML='<div class="p-3 text-sm text-red-600">Plotly 未加载</div>'; return; }
+  const coords=Array.isArray(data?.coords)?data.coords:[];
+  if(!coords.length){ clearScatterPlot('暂无可视化数据'); return; }
+  const groups=Array.isArray(data.group_labels)?data.group_labels:[];
+  const outliers=(Array.isArray(data.outliers)?data.outliers:[]).map(Boolean);
+  const scores=Array.isArray(data.scores)?data.scores:[];
+  const clusterLabels=Array.isArray(data.cluster_labels)?data.cluster_labels:[];
+  const toNum=(v)=>{ const n=Number(v); return Number.isFinite(n)?n:0; };
+  const getCoord=(idx,dim)=>{ const row=coords[idx]; if(!Array.isArray(row)) return 0; return toNum(row[dim]??0); };
+  const hoverTexts=coords.map((_,i)=>{
+    const g=groups[i]||'未分类';
+    const score=scores[i]!==undefined && scores[i]!==null?Number(scores[i]).toFixed(4):'';
+    const cluster=clusterLabels[i];
+    const status=outliers[i]?'是':'否';
+    const clusterTxt=(cluster!==undefined && cluster!==null)?`<br>簇：${escapeHtml(String(cluster))}`:'';
+    return `类别：${escapeHtml(String(g))}<br>离群：${status}<br>Score：${score}${clusterTxt}`;
+  });
+  const groupSet=Array.from(new Set(groups.filter((_,i)=>!outliers[i])));
+  const traces=[];
+  groupSet.forEach((g,idx)=>{
+    const indices=[]; groups.forEach((gg,i)=>{ if(!outliers[i] && gg===g) indices.push(i); });
+    if(!indices.length) return;
+    traces.push({
+      name: g||`簇 ${idx+1}`,
+      type:'scatter3d',
+      mode:'markers',
+      x: indices.map(i=>getCoord(i,0)),
+      y: indices.map(i=>getCoord(i,1)),
+      z: indices.map(i=>getCoord(i,2)),
+      text: indices.map(i=>hoverTexts[i]),
+      hovertemplate:'%{text}<extra></extra>',
+      marker:{size:4, opacity:0.85}
+    });
+  });
+  const outIdx=[]; outliers.forEach((flag,i)=>{ if(flag) outIdx.push(i); });
+  if(outIdx.length){
+    traces.push({
+      name:'离群',
+      type:'scatter3d',
+      mode:'markers',
+      x: outIdx.map(i=>getCoord(i,0)),
+      y: outIdx.map(i=>getCoord(i,1)),
+      z: outIdx.map(i=>getCoord(i,2)),
+      text: outIdx.map(i=>hoverTexts[i]),
+      hovertemplate:'%{text}<extra></extra>',
+      marker:{size:6, color:'#ef4444', symbol:'x', opacity:0.9}
+    });
+  }
+  if(!traces.length){
+    traces.push({
+      name:'数据', type:'scatter3d', mode:'markers',
+      x: coords.map((_,i)=>getCoord(i,0)),
+      y: coords.map((_,i)=>getCoord(i,1)),
+      z: coords.map((_,i)=>getCoord(i,2)),
+      text: hoverTexts,
+      hovertemplate:'%{text}<extra></extra>',
+      marker:{size:4, opacity:0.85}
+    });
+  }
+  const layout={
+    margin:{l:0,r:0,t:30,b:0},
+    scene:{
+      xaxis:{title:'PC1'},
+      yaxis:{title:'PC2'},
+      zaxis:{title:'PC3'}
+    },
+    legend:{orientation:'h'}
+  };
+  Plotly.newPlot(plotEl, traces, layout, {responsive:true, displaylogo:false});
+  const msg=qs('rank_vis_msg');
+  if(msg){
+    const outCount=outliers.filter(Boolean).length;
+    msg.textContent=`算法：${data.algorithm||'-'} · 分组列：${data.group_by||'-'} · 数据点：${coords.length} · 离群：${outCount} · 更新时间：${data.timestamp||''}`;
+  }
+}
+
+async function fetchScatterAndRender(showStatus=false){
+  if(!SESSION_ID){ clearScatterPlot('请先上传或载入会话'); return; }
+  const msg=qs('rank_vis_msg');
+  if(showStatus && msg) msg.textContent='加载可视化数据中…';
+  try{
+    const r=await fetch(`/ranking_scatter?session_id=${encodeURIComponent(SESSION_ID)}&t=${Date.now()}`,{cache:"no-store"});
+    if(!r.ok){ clearScatterPlot('暂无可视化数据'); return; }
+    const data=await r.json();
+    renderScatterPlot(data);
+  }catch(e){
+    if(msg) msg.textContent='可视化加载失败：'+(e?.message||e);
+  }
+}
+
+function handleAlgoChange(){
+  const algo=qs('rank_algo').value;
+  const wrapK=qs('wrap_k'); if(wrapK) wrapK.style.display=(algo==='kmeans')?'':'none';
+  const wrapSigma=qs('wrap_sigma'); if(wrapSigma) wrapSigma.style.display=(algo==='hdbscan')?'none':'';
+  const wrapMin=qs('wrap_min_cluster'); if(wrapMin) wrapMin.style.display=(algo==='hdbscan')?'':'none';
 }
 function quickFilter(target,value){ CURRENT_FILTER={target,value}; syncFilterControls(); PAGER.page=1; loadPage(); }
 function populateFilterOptions(){
@@ -463,9 +587,11 @@ function stopProgressPolling(){ if(_progressTimer){ clearInterval(_progressTimer
 async function doRanking(){
   if(!SESSION_ID){ alert("请先上传/载入会话"); return; }
   const cfg=JSON.parse(localStorage.getItem("llm_cfg")||"{}");
+  clearScatterPlot('可视化等待计算完成…');
   const payload={ session_id:SESSION_ID, group_by:qs('rank_group_by').value,
     fields:{ title:qs('rk_f_title').checked, abstract:qs('rk_f_abstract').checked, summary:qs('rk_f_summary').checked },
     algorithm:qs('rank_algo').value, k:parseInt(qs('rank_k').value||"3"), sigma:parseFloat(qs('rank_sigma').value||"2.0"),
+    min_cluster_size:parseInt(qs('rank_min_cluster').value||"5"),
     embedding_source:qs('rank_emb_src').value, openai_base_url:cfg.base_url||"", openai_api_key:cfg.api_key||"", openai_emb_model:"text-embedding-3-large" };
   qs('rank_msg').textContent="计算已开始…"; startProgressPolling();
   try{
@@ -476,6 +602,7 @@ async function doRanking(){
   }catch(e){ qs('rank_msg').textContent="失败："+e.message; }
   finally{ stopProgressPolling(); }
   CURRENT_SORT={by:"rank", order:qs('rank_order').value}; PAGER.page=1; await loadPage();
+  await fetchScatterAndRender(true);
 }
 
 /* ===================== 会话：保存 / 载入 ===================== */
@@ -514,7 +641,9 @@ async function loadSession(sid){
   const j=await r.json();
   SESSION_ID=j.session_id; setBadge(); qs('total_msg').textContent=`行数：${j.total}`;
   PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
+  clearScatterPlot('等待计算后展示。');
   await refreshStats(); populateFilterOptions(); CURRENT_FILTER={target:"",value:""}; CURRENT_SORT={by:"",order:""}; await loadPage();
+  await fetchScatterAndRender();
   // 拉 meta 看是否有最近导出
   try{
     const info=await fetch(`/session/info?session_id=${encodeURIComponent(SESSION_ID)}`); if(info.ok){ const x=await info.json(); LAST_EXPORT_URL = x?.meta?.last_export_path ? `/file?path=${encodeURIComponent(x.meta.last_export_path)}` : ""; }
@@ -564,8 +693,9 @@ function bindEvents(){
 
   // 排序
   qs('btn_do_ranking').onclick=doRanking;
-  qs('rank_algo').addEventListener('change', ()=>{ qs('wrap_k').style.display=(qs('rank_algo').value==='kmeans')?'':'none'; });
-  qs('wrap_k').style.display=(qs('rank_algo').value==='kmeans')?'':'none';
+  const btnRefreshVis=qs('btn_refresh_vis'); if(btnRefreshVis) btnRefreshVis.onclick=()=>fetchScatterAndRender(true);
+  qs('rank_algo').addEventListener('change', handleAlgoChange);
+  handleAlgoChange();
 
   // LLM 配置
   qs('btn_save_cfg').onclick=saveCfgToLocal; qs('btn_save_env').onclick=saveEnvToServer;
@@ -589,6 +719,7 @@ function bindEvents(){
     setActiveCol('topic'); // 默认编辑“主题（调整）”
     PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
     populateFilterOptions();
+    clearScatterPlot('等待计算后展示。');
   }catch(e){ alert("前端初始化失败："+e.message); console.error(e); }
 })();
 </script>
