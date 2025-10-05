@@ -200,7 +200,7 @@
 
   <div class="bg-white rounded-xl shadow p-4">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
-      <h2 class="font-semibold">排序可视化（3D 散点图）</h2>
+      <h2 class="font-semibold">排序可视化（2D 散点图）</h2>
       <button id="btn_toggle_vis" class="px-3 py-1 rounded bg-slate-200 text-slate-700" aria-expanded="false">展开可视化</button>
     </div>
     <div id="rank_vis_body" class="space-y-3 hidden">
@@ -418,11 +418,10 @@ function renderScatterPlot(data){
     if(!indices.length) return;
     traces.push({
       name: g||`簇 ${idx+1}`,
-      type:'scatter3d',
+      type:'scattergl',
       mode:'markers',
       x: indices.map(i=>getCoord(i,0)),
       y: indices.map(i=>getCoord(i,1)),
-      z: indices.map(i=>getCoord(i,2)),
       text: indices.map(i=>hoverTexts[i]),
       hovertemplate:'%{text}<extra></extra>',
       marker:{size:4, opacity:0.85}
@@ -432,11 +431,10 @@ function renderScatterPlot(data){
   if(outIdx.length){
     traces.push({
       name:'离群',
-      type:'scatter3d',
+      type:'scattergl',
       mode:'markers',
       x: outIdx.map(i=>getCoord(i,0)),
       y: outIdx.map(i=>getCoord(i,1)),
-      z: outIdx.map(i=>getCoord(i,2)),
       text: outIdx.map(i=>hoverTexts[i]),
       hovertemplate:'%{text}<extra></extra>',
       marker:{size:6, color:'#ef4444', symbol:'x', opacity:0.9}
@@ -444,22 +442,18 @@ function renderScatterPlot(data){
   }
   if(!traces.length){
     traces.push({
-      name:'数据', type:'scatter3d', mode:'markers',
+      name:'数据', type:'scattergl', mode:'markers',
       x: coords.map((_,i)=>getCoord(i,0)),
       y: coords.map((_,i)=>getCoord(i,1)),
-      z: coords.map((_,i)=>getCoord(i,2)),
       text: hoverTexts,
       hovertemplate:'%{text}<extra></extra>',
       marker:{size:4, opacity:0.85}
     });
   }
   const layout={
-    margin:{l:0,r:0,t:30,b:0},
-    scene:{
-      xaxis:{title:'PC1'},
-      yaxis:{title:'PC2'},
-      zaxis:{title:'PC3'}
-    },
+    margin:{l:40,r:10,t:30,b:40},
+    xaxis:{title:'PC1', zeroline:false},
+    yaxis:{title:'PC2', zeroline:false},
     legend:{orientation:'h'}
   };
   Plotly.newPlot(plotEl, traces, layout, {responsive:true, displaylogo:false});
