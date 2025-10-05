@@ -57,17 +57,17 @@
         </div>
         <nav class="flex-1 flex flex-col gap-2 px-2">
           <button class="nav-link nav-link-active" data-target="page-coding" title="编码工作台" aria-label="编码工作台">
-            <iconify-icon icon="heroicons-outline:adjustments-horizontal" class="text-lg"></iconify-icon>
+            <iconify-icon icon="heroicons-outline:adjustments-horizontal" class="nav-icon w-5 h-5"></iconify-icon>
             <span class="nav-label">编码工作台</span>
           </button>
           <button class="nav-link" data-target="page-visual" title="数据可视化" aria-label="数据可视化">
-            <iconify-icon icon="heroicons-outline:chart-pie" class="text-lg"></iconify-icon>
+            <iconify-icon icon="heroicons-outline:chart-pie" class="nav-icon w-5 h-5"></iconify-icon>
             <span class="nav-label">数据可视化</span>
           </button>
         </nav>
         <div class="sidebar-footer px-2 pt-4 pb-6 border-t border-slate-200">
           <button class="nav-link" data-target="page-settings" title="OpenAI API 设置" aria-label="OpenAI API 设置">
-            <iconify-icon icon="heroicons-outline:cog-6-tooth" class="text-lg"></iconify-icon>
+            <iconify-icon icon="heroicons-outline:cog-6-tooth" class="nav-icon w-5 h-5"></iconify-icon>
             <span class="nav-label">OpenAI API 设置</span>
           </button>
         </div>
@@ -398,9 +398,26 @@ async function refreshSessionMeta(){
   }
 }
 
+const PAGE_HEADER = document.querySelector('header');
 const SIDEBAR = document.getElementById('sidebar');
 const SIDEBAR_TOGGLE = document.getElementById('sidebar_toggle');
 let SIDEBAR_COLLAPSED = false;
+
+function updateSidebarOffset(){
+  if(!PAGE_HEADER){ return; }
+  const rect = PAGE_HEADER.getBoundingClientRect();
+  let offset = (window.scrollY <= 0) ? PAGE_HEADER.offsetHeight : rect.bottom;
+  if(!Number.isFinite(offset)){ offset = PAGE_HEADER.offsetHeight || 0; }
+  offset = Math.max(0, Math.min(offset, window.innerHeight || offset));
+  document.documentElement.style.setProperty('--header-offset', `${offset}px`);
+}
+
+if(PAGE_HEADER){
+  window.addEventListener('scroll', updateSidebarOffset, {passive:true});
+  window.addEventListener('resize', updateSidebarOffset);
+  window.addEventListener('load', updateSidebarOffset);
+  requestAnimationFrame(updateSidebarOffset);
+}
 
 function applySidebarState(collapsed){
   if(!SIDEBAR) return;
