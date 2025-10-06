@@ -341,6 +341,15 @@
             <input id="ps_input" class="border rounded px-2 py-1 w-20 text-center" type="number" value="50" min="1" max="5000">
             <button id="btn_reload_page" class="btn btn-sm bg-slate-700 text-white hover:bg-slate-600">刷新</button>
             <span class="text-sm text-gray-500 ml-2" id="page_info">—</span>
+            <div class="flex items-center gap-2 ml-4">
+              <span>排序</span>
+              <select id="sort_select" class="border rounded px-2 py-1 text-sm">
+                <option value="default">默认顺序</option>
+                <option value="rank_asc" data-requires-rank="1">智能排序：近→远</option>
+                <option value="rank_desc" data-requires-rank="1">智能排序：远→近</option>
+              </select>
+              <span id="sort_hint" class="text-xs text-gray-500"></span>
+            </div>
           </div>
 
           <div id="table_zone" class="bg-white rounded-2xl shadow overflow-x-auto"></div>
@@ -473,6 +482,11 @@ let AUTO_SAVE_TIMER=null;
 let AUTO_SAVE_ENABLED=false;
 let AUTO_SAVE_MINUTES=5;
 let IS_BATCH_SAVING=false;
+let HAS_RANKING_DATA=false;
+
+const SORT_VALUE_DEFAULT='default';
+const SORT_VALUE_RANK_ASC='rank_asc';
+const SORT_VALUE_RANK_DESC='rank_desc';
 
 const qs = id=>document.getElementById(id);
 const escapeHtml = s=>String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
@@ -880,7 +894,13 @@ function uploadFile(){
         refreshHomeActions();
         clearScatterPlot('等待计算后展示。');
         await refreshSessionMeta();
-        await refreshStats(); populateFilterOptions(); CURRENT_FILTER={target:"",value:""}; CURRENT_SORT={by:"",order:""}; await loadPage();
+        await refreshStats();
+        populateFilterOptions();
+        CURRENT_FILTER={target:"",value:""};
+        CURRENT_SORT={by:"",order:""};
+        setSortAvailability(false);
+        syncSortSelect();
+        await loadPage();
     }else{ msg.textContent="上传失败："+xhr.responseText; alert("上传失败："+xhr.responseText); } } };
   xhr.send(form);
 }
@@ -1062,18 +1082,82 @@ function renderPagerInfo(){
   qs('page_info').textContent=`第 ${PAGER.page} / ${PAGER.pages} 页 · 每页 ${PAGER.size} · 共 ${PAGER.total} 行`;
 }
 
+function setSortAvailability(hasRank){
+  HAS_RANKING_DATA=!!hasRank;
+  const select=qs('sort_select');
+  if(select){
+    Array.from(select.options).forEach(op=>{
+      if(op.dataset.requiresRank==='1'){
+        op.disabled=!HAS_RANKING_DATA;
+      }
+    });
+    if(!HAS_RANKING_DATA && CURRENT_SORT.by==='rank'){
+      CURRENT_SORT={by:"",order:""};
+      select.value=SORT_VALUE_DEFAULT;
+    }
+  }
+  const hint=qs('sort_hint');
+  if(hint){
+    if(!SESSION_ID){
+      hint.textContent='';
+    }else{
+      hint.textContent = HAS_RANKING_DATA ? '' : '需先计算或载入智能排序结果';
+    }
+  }
+}
+
+function syncSortSelect(){
+  const select=qs('sort_select');
+  if(!select) return;
+  let targetValue=SORT_VALUE_DEFAULT;
+  if(CURRENT_SORT.by==='rank'){
+    targetValue = (CURRENT_SORT.order==='desc') ? SORT_VALUE_RANK_DESC : SORT_VALUE_RANK_ASC;
+  }
+  if(select.value!==targetValue){
+    select.value=targetValue;
+  }
+}
+
+function handleSortChange(){
+  const select=qs('sort_select');
+  if(!select) return;
+  const value=select.value;
+  if((value===SORT_VALUE_RANK_ASC || value===SORT_VALUE_RANK_DESC) && !HAS_RANKING_DATA){
+    select.value=SORT_VALUE_DEFAULT;
+    CURRENT_SORT={by:"",order:""};
+    showToast('当前数据缺少智能排序分数，请先运行智能排序', 'warning');
+    return;
+  }
+  if(value===SORT_VALUE_RANK_ASC){
+    CURRENT_SORT={by:"rank", order:"asc"};
+  }else if(value===SORT_VALUE_RANK_DESC){
+    CURRENT_SORT={by:"rank", order:"desc"};
+  }else{
+    CURRENT_SORT={by:"", order:""};
+  }
+  PAGER.page=1;
+  loadPage();
+}
+
 /* ===================== 表格 ===================== */
 function renderSelect(options,value,css,dataOriginal=""){
   return `<select class="${css}" data-original="${escapeAttr(dataOriginal)}">${options.map(o=>`<option value="${o}" ${o===value?'selected':''}>${o}</option>`).join("")}</select>`;
 }
 async function loadPage(){
   if(!SESSION_ID){ qs('table_zone').innerHTML='<div class="p-3 text-sm text-gray-500">请先上传或载入会话</div>'; return; }
+  if(CURRENT_SORT.by==='rank' && !HAS_RANKING_DATA){
+    CURRENT_SORT={by:"",order:""};
+    syncSortSelect();
+  }
   const p=new URLSearchParams({session_id:SESSION_ID, page:PAGER.page, page_size:PAGER.size});
   if(CURRENT_FILTER.target&&CURRENT_FILTER.value){ p.set("filter_target",CURRENT_FILTER.target); p.set("filter_value",CURRENT_FILTER.value); }
   if(CURRENT_SORT.by==="rank"){ p.set("sort_by","rank"); p.set("sort_order", CURRENT_SORT.order||"asc"); p.set("only_outliers", qs('rank_only_outliers')?.checked?"1":"0"); }
   qs('table_zone').innerHTML='<div class="p-3 text-sm text-gray-500">加载中…</div>';
   const r=await fetch(`/data?${p.toString()}`,{cache:"no-store"}); if(!r.ok){ qs('table_zone').innerHTML=`<div class="p-3 text-sm text-red-600">加载失败：${await r.text()}</div>`; return; }
   const d=await r.json(); PAGER.page=d.page; PAGER.size=d.page_size; PAGER.total=d.total; PAGER.pages=d.total_pages||1; renderPagerInfo();
+  const hasRank = Array.isArray(d.rows) && d.rows.some(row=>row && row['智能排序分数']!==undefined && row['智能排序分数']!==null && String(row['智能排序分数']).trim()!=='');
+  setSortAvailability(hasRank);
+  syncSortSelect();
   renderTable(d.rows||[]);
 }
 function renderTable(rows){
@@ -1390,7 +1474,10 @@ async function doRanking(){
     qs('rank_msg').textContent=`完成：样本 ${j.total}，离群 ${j.outliers}`;
   }catch(e){ qs('rank_msg').textContent="失败："+e.message; }
   finally{ stopProgressPolling(); }
-  CURRENT_SORT={by:"rank", order:qs('rank_order').value}; PAGER.page=1; await loadPage();
+  CURRENT_SORT={by:"rank", order:qs('rank_order').value};
+  setSortAvailability(true);
+  syncSortSelect();
+  PAGER.page=1; await loadPage();
   await fetchScatterAndRender(true);
 }
 
@@ -1440,7 +1527,13 @@ async function loadSession(sid){
   PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
   clearScatterPlot('等待计算后展示。');
   renderSessionMeta(j.meta||null);
-  await refreshStats(); populateFilterOptions(); CURRENT_FILTER={target:"",value:""}; CURRENT_SORT={by:"",order:""}; await loadPage();
+  await refreshStats();
+  populateFilterOptions();
+  CURRENT_FILTER={target:"",value:""};
+  CURRENT_SORT={by:"",order:""};
+  setSortAvailability(false);
+  syncSortSelect();
+  await loadPage();
   await fetchScatterAndRender();
   qs('dlg_sessions').close();
 }
@@ -1488,8 +1581,18 @@ function bindEvents(){
   // 筛选
   qs('btn_only_other_topic').onclick=()=>quickFilter('topic_orig','其他议题');
   qs('btn_only_other_field').onclick=()=>quickFilter('field_orig','其他领域');
-  qs('btn_apply_filter').onclick=()=>{ CURRENT_FILTER={ target:qs('filter_target').value, value:qs('filter_value').value }; PAGER.page=1; loadPage(); };
-  qs('btn_clear_filter').onclick=()=>{ CURRENT_FILTER={target:"",value:""}; CURRENT_SORT={by:"",order:""}; PAGER.page=1; loadPage(); };
+  qs('btn_apply_filter').onclick=()=>{
+    CURRENT_FILTER={ target:qs('filter_target').value, value:qs('filter_value').value };
+    PAGER.page=1;
+    loadPage();
+  };
+  qs('btn_clear_filter').onclick=()=>{
+    CURRENT_FILTER={target:"",value:""};
+    CURRENT_SORT={by:"",order:""};
+    syncSortSelect();
+    PAGER.page=1;
+    loadPage();
+  };
 
   // 批量
   qs('btn_bulk_selected').onclick=bulkApplySelected; qs('btn_bulk_filtered').onclick=bulkApplyFiltered;
@@ -1522,6 +1625,10 @@ function bindEvents(){
   qs('pg_prev').onclick =()=>{ PAGER.page=Math.max(1, PAGER.page-1); loadPage(); };
   qs('pg_next').onclick =()=>{ PAGER.page=Math.min(PAGER.pages, PAGER.page+1); loadPage(); };
   qs('pg_last').onclick =()=>{ PAGER.page=PAGER.pages; loadPage(); };
+  const sortSelect=qs('sort_select');
+  if(sortSelect){ sortSelect.addEventListener('change', handleSortChange); }
+  setSortAvailability(HAS_RANKING_DATA);
+  syncSortSelect();
 }
 
 (async function init(){
