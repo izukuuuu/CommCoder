@@ -5,7 +5,6 @@
   <title>分类人工调整 GUI</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
   <link rel="stylesheet" href="/static/style.css"/>
 </head>
@@ -379,7 +378,7 @@
                     <button class="text-xs text-sky-700" id="btn_only_other_topic_orig">只看『其他议题』</button>
                   </div>
                   <div id="chips_topic_orig" class="flex flex-wrap gap-2 my-2"></div>
-                  <canvas id="chart_topic_orig" data-chart-key="chart_topic_orig" height="140"></canvas>
+                  <div id="treemap_topic_orig" class="treemap-box" data-treemap-key="chart_topic_orig"></div>
                 </div>
                 <div>
                   <div class="flex items-center justify-between">
@@ -387,7 +386,7 @@
                     <button class="text-xs text-sky-700" id="btn_only_other_field_orig">只看『其他领域』</button>
                   </div>
                   <div id="chips_field_orig" class="flex flex-wrap gap-2 my-2"></div>
-                  <canvas id="chart_field_orig" data-chart-key="chart_field_orig" height="140"></canvas>
+                  <div id="treemap_field_orig" class="treemap-box" data-treemap-key="chart_field_orig"></div>
                 </div>
               </div>
             </div>
@@ -399,7 +398,7 @@
                     <button class="text-xs text-sky-700" id="btn_only_other_topic_adj">只看『其他议题』</button>
                   </div>
                   <div id="chips_topic_adj" class="flex flex-wrap gap-2 my-2"></div>
-                  <canvas id="chart_topic_adj" data-chart-key="chart_topic_adj" height="140"></canvas>
+                  <div id="treemap_topic_adj" class="treemap-box" data-treemap-key="chart_topic_adj"></div>
                 </div>
                 <div>
                   <div class="flex items-center justify-between">
@@ -407,7 +406,7 @@
                     <button class="text-xs text-sky-700" id="btn_only_other_field_adj">只看『其他领域』</button>
                   </div>
                   <div id="chips_field_adj" class="flex flex-wrap gap-2 my-2"></div>
-                  <canvas id="chart_field_adj" data-chart-key="chart_field_adj" height="140"></canvas>
+                  <div id="treemap_field_adj" class="treemap-box" data-treemap-key="chart_field_adj"></div>
                 </div>
               </div>
             </div>
@@ -502,7 +501,14 @@ let SESSION_ID=""; let SESSION_META=null; let CURRENT_FILTER={target:"",value:""
 let ACTIVE_COL="topic"; // "topic"|"field"
 const PAGER = { page:1, size:50, total:0, pages:1 };
 let LAST_EXPORT_URL=""; // 可选下载地址
-const BAR_CHARTS={};
+const TREEMAP_PLOTS={};
+const TREEMAP_STATE={};
+const TREEMAP_CATEGORY_LIMIT=24;
+const TREEMAP_COLORS=[
+  '#2563eb','#1d4ed8','#3b82f6','#60a5fa','#93c5fd','#38bdf8','#0ea5e9','#06b6d4',
+  '#14b8a6','#0d9488','#10b981','#22c55e','#84cc16','#facc15','#f59e0b','#f97316',
+  '#fb7185','#f472b6','#ec4899','#a855f7','#8b5cf6','#6366f1','#4f46e5','#4338ca'
+];
 let RANK_VIS_EXPANDED=false;
 const SCATTER_DEFAULT_HEIGHT=420;
 const SCATTER_STATE={
@@ -564,8 +570,6 @@ function normalizeStatItems(rawList){
   });
   return Array.from(entryMap.values()).sort((a,b)=>a.order-b.order);
 }
-const MAX_BAR_CATEGORIES=40;
-
 function buildBarChartEntries(primaryRaw, overlayRaw){
   const primary=normalizeStatItems(primaryRaw);
   const overlay=normalizeStatItems(overlayRaw);
@@ -590,9 +594,9 @@ function buildBarChartEntries(primaryRaw, overlayRaw){
   const entries=Array.from(entryMap.values()).sort((a,b)=>a.order-b.order);
   return { entries, primaryMap, overlayMap };
 }
-function limitBarEntries(entries, limit=MAX_BAR_CATEGORIES){
+function limitBarEntries(entries, limit=TREEMAP_CATEGORY_LIMIT){
   if(!Array.isArray(entries)) return [];
-  const maxCount=Number.isFinite(limit)&&limit>0?Math.floor(limit):MAX_BAR_CATEGORIES;
+  const maxCount=Number.isFinite(limit)&&limit>0?Math.floor(limit):TREEMAP_CATEGORY_LIMIT;
   if(entries.length<=maxCount) return entries;
   const scored=entries.map((entry,idx)=>({
     entry,
@@ -606,33 +610,6 @@ function limitBarEntries(entries, limit=MAX_BAR_CATEGORIES){
       .map(item=>item.idx)
   );
   return entries.filter((_,idx)=>picked.has(idx));
-}
-function destroyBarChart(key, canvas){
-  const chart=BAR_CHARTS[key];
-  if(chart){
-    try{ chart.destroy(); }catch(e){}
-    delete BAR_CHARTS[key];
-  }
-  if(canvas && typeof Chart!=='undefined' && typeof Chart.getChart==='function'){
-    const live=Chart.getChart(canvas);
-    if(live && live!==chart){
-      try{ live.destroy(); }catch(e){}
-    }
-  }
-  if(canvas){
-    const attrHeight=canvas.getAttribute('height');
-    const attrWidth=canvas.getAttribute('width');
-    if(attrHeight && !Number.isNaN(Number(attrHeight))){
-      canvas.height=Number(attrHeight);
-    }
-    if(attrWidth && !Number.isNaN(Number(attrWidth))){
-      canvas.width=Number(attrWidth);
-    }else if(canvas.parentElement){
-      canvas.width=canvas.parentElement.clientWidth||canvas.width;
-    }
-    canvas.style.removeProperty('width');
-    canvas.style.removeProperty('height');
-  }
 }
 let AUTO_SAVE_MINUTES=5;
 let IS_BATCH_SAVING=false;
@@ -1094,83 +1071,204 @@ function renderChips(elId,primaryRaw,targetKey,options={}){
     el.appendChild(btn);
   });
 }
-function drawBar(canvasId,primaryRaw,key,options={}){
-  const canvas=qs(canvasId);
-  if(!canvas || typeof Chart==='undefined') return;
-  const { entries } = buildBarChartEntries(primaryRaw, options.overlay);
-  const limitedEntries=limitBarEntries(entries, options.limit);
-  if(!limitedEntries.length){
-    destroyBarChart(key, canvas);
-    const ctx=canvas.getContext('2d');
-    if(ctx){ ctx.clearRect(0,0,canvas.width,canvas.height); }
+function destroyTreemap(key){
+  const el=TREEMAP_PLOTS[key];
+  if(el && window.Plotly){
+    try{ Plotly.purge(el); }catch(e){}
+  }
+  delete TREEMAP_PLOTS[key];
+}
+function cloneTreemapOptions(options){
+  if(!options) return {};
+  const cloned={...options};
+  if(Array.isArray(options.overlay)){
+    cloned.overlay=options.overlay.map(item=>({ ...(item||{}) }));
+  }
+  return cloned;
+}
+function isTreemapHidden(el){
+  if(!el) return true;
+  if(typeof el.checkVisibility==='function'){
+    try{
+      return !el.checkVisibility({visibilityProperty:true, displayProperty:true, opacityProperty:true, contentVisibilityAuto:true});
+    }catch(e){}
+  }
+  if(el.getClientRects().length===0) return true;
+  let node=el;
+  while(node && node!==document.body){
+    const style=window.getComputedStyle(node);
+    if(style.display==='none' || style.visibility==='hidden') return true;
+    node=node.parentElement;
+  }
+  return false;
+}
+function renderTreemap(containerId,primaryRaw,key,options={},internal=false){
+  const container=qs(containerId);
+  if(!container){
+    destroyTreemap(key);
+    delete TREEMAP_STATE[key];
     return;
   }
-  const labels=limitedEntries.map(entry=>entry.label);
-  const primaryData=limitedEntries.map(entry=>safeNumber(entry.primary));
-  const overlayData=limitedEntries.map(entry=>safeNumber(entry.overlay));
-  const overlayProvided=Array.isArray(options.overlay) && options.overlay.length>0;
-  const overlayColor=options.overlayColor||'rgb(37,99,235)';
-  const overlayBackground=options.overlayBackgroundColor||'rgba(37,99,235,0.35)';
-  const primaryColor=options.primaryColor||'rgb(37,99,235)';
-  const primaryBackground=options.primaryBackgroundColor||primaryColor;
-  const datasets=[];
-  if(overlayProvided){
-    datasets.push({
-      label: options.overlayLabel||'原始分类',
-      data: overlayData,
-      backgroundColor: overlayBackground,
-      borderColor: overlayColor,
-      borderWidth: 1,
-      maxBarThickness: 46,
-      borderRadius: 6
-    });
-  }
-  datasets.push({
-    label: options.primaryLabel||'数量',
-    data: primaryData,
-    backgroundColor: primaryBackground,
-    borderColor: primaryColor,
-    borderWidth: 1,
-    maxBarThickness: 46,
-    borderRadius: 6
-  });
-  const cfg={
-    type:'bar',
-    data:{labels,datasets},
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      animation:false,
-      interaction:{mode:'index',intersect:false},
-      plugins:{
-        legend:{display:overlayProvided,labels:{usePointStyle:true}},
-        tooltip:{
-          mode:'index',
-          intersect:false,
-          callbacks:{
-            label:(ctx)=>{
-              const label=ctx.dataset?.label||'';
-              const value=ctx.parsed?.y??ctx.parsed??0;
-              return `${label}: ${value}`;
-            }
-          }
-        }
-      },
-      scales:{
-        x:{ticks:{autoSkip:false,maxRotation:30,minRotation:0},grid:{display:false}},
-        y:{beginAtZero:true,ticks:{precision:0}}
-      }
+  if(!internal){
+    TREEMAP_STATE[key]={containerId, primaryRaw, options:cloneTreemapOptions(options)};
+    if(isTreemapHidden(container)){
+      container.dataset.treemapDeferred='1';
+      container.innerHTML='<div class="treemap-empty">切换标签以查看图表</div>';
+      destroyTreemap(key);
+      return;
     }
-  };
-  const maxValue=Math.max(...primaryData,...(overlayProvided?overlayData:[0]));
-  if(Number.isFinite(maxValue) && maxValue>0){
-    const padding=Math.max(1,Math.ceil(maxValue*0.08));
-    cfg.options.scales.y.suggestedMax=maxValue+padding;
+  }else if(isTreemapHidden(container)){
+    return;
   }
-  destroyBarChart(key, canvas);
-  const ctx=canvas.getContext('2d');
-  BAR_CHARTS[key]=new Chart(ctx,cfg);
+  if(container.dataset.treemapDeferred){
+    delete container.dataset.treemapDeferred;
+  }
+  if(!window.Plotly){
+    destroyTreemap(key);
+    container.innerHTML='<div class="treemap-empty">Plotly 未加载</div>';
+    return;
+  }
+  container.innerHTML='';
+  const { entries } = buildBarChartEntries(primaryRaw, options.overlay);
+  const limit = Number.isFinite(options.limit)&&options.limit>0?Math.floor(options.limit):TREEMAP_CATEGORY_LIMIT;
+  let limitedEntries = limitBarEntries(entries, limit);
+  const picked=new Set(limitedEntries.map(entry=>entry.label));
+  let otherPrimary=0;
+  let otherOverlay=0;
+  entries.forEach(entry=>{
+    if(!picked.has(entry.label)){
+      otherPrimary+=safeNumber(entry.primary);
+      otherOverlay+=safeNumber(entry.overlay);
+    }
+  });
+  if(otherPrimary>0){
+    limitedEntries=[...limitedEntries,{label:'其他',primary:otherPrimary,overlay:otherOverlay,isOther:true,order:entries.length+1}];
+  }
+  if(!limitedEntries.length){
+    destroyTreemap(key);
+    container.innerHTML='<div class="treemap-empty">暂无数据</div>';
+    return;
+  }
+  const hasOverlay=Array.isArray(options.overlay)&&options.overlay.length>0;
+  const primaryList=normalizeStatItems(primaryRaw);
+  const overlayList=normalizeStatItems(options.overlay);
+  const primaryMap=new Map(primaryList.map(item=>[item.label,item]));
+  const overlayMap=new Map(overlayList.map(item=>[item.label,item]));
+  const primaryTotal=primaryList.reduce((sum,item)=>sum+safeNumber(item.count),0);
+  const overlayTotal=overlayList.reduce((sum,item)=>sum+safeNumber(item.count),0);
+  const displayedTotal=limitedEntries.reduce((sum,entry)=>sum+safeNumber(entry.primary),0);
+  if(displayedTotal<=0){
+    destroyTreemap(key);
+    container.innerHTML='<div class="treemap-empty">暂无数据</div>';
+    return;
+  }
+  const rootLabel=options.rootLabel||options.primaryLabel||'分类';
+  const labels=[rootLabel];
+  const parents=[''];
+  const values=[displayedTotal];
+  const text=[''];
+  const hovers=[''];
+  limitedEntries.forEach((entry,idx)=>{
+    const label=entry.label;
+    const primaryValue=safeNumber(entry.primary);
+    const overlayValue=safeNumber(entry.overlay);
+    const primaryPercentRaw=primaryMap.get(label)?.percent;
+    let primaryPercent=formatPercentText(primaryPercentRaw);
+    if(!primaryPercent && primaryTotal>0 && primaryValue>0){
+      primaryPercent=`${((primaryValue/primaryTotal)*100).toFixed(2)}%`;
+    }
+    const overlayPercentRaw=overlayMap.get(label)?.percent;
+    let overlayPercent=formatPercentText(overlayPercentRaw);
+    if(!overlayPercent && overlayTotal>0 && overlayValue>0){
+      overlayPercent=`${((overlayValue/overlayTotal)*100).toFixed(2)}%`;
+    }
+    labels.push(label);
+    parents.push(rootLabel);
+    values.push(primaryValue);
+    const displayParts=[String(primaryValue)];
+    if(primaryPercent) displayParts.push(primaryPercent);
+    text.push(`${label}<br>${displayParts.join(' · ')}`);
+    const hoverLines=[`<b>${label}</b>`, `${options.primaryLabel||'数量'}：${primaryValue}${primaryPercent?`（${primaryPercent}）`:''}`];
+    if(hasOverlay && (overlayValue>0 || overlayPercent)){
+      hoverLines.push(`${options.overlayLabel||'对比'}：${overlayValue}${overlayPercent?`（${overlayPercent}）`:''}`);
+    }
+    hovers.push(hoverLines.join('<br>'));
+  });
+  const colors=['rgba(148,163,184,0.18)'];
+  limitedEntries.forEach((entry,idx)=>{
+    const baseColor=entry.isOther?'rgba(148,163,184,0.35)':TREEMAP_COLORS[idx % TREEMAP_COLORS.length];
+    colors.push(baseColor);
+  });
+  const trace={
+    type:'treemap',
+    labels,
+    parents,
+    values,
+    branchvalues:'total',
+    text,
+    textinfo:'text',
+    textfont:{size:12,color:'#0f172a',family:'"Inter","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif'},
+    hoverinfo:'text',
+    hovertext:hovers,
+    marker:{colors,line:{color:'rgba(255,255,255,0.85)',width:1}},
+    root:{color:'rgba(148,163,184,0.18)'}
+  };
+  const layout={
+    margin:{l:4,r:4,t:4,b:4},
+    paper_bgcolor:'rgba(0,0,0,0)',
+    plot_bgcolor:'rgba(0,0,0,0)',
+    uniformtext:{minsize:12,mode:'hide'}
+  };
+  TREEMAP_PLOTS[key]=container;
+  const config={displayModeBar:false,responsive:true};
+  try{
+    const plotPromise=Plotly.react(container,[trace],layout,config);
+    const onError=err=>{
+      console.error('Treemap 渲染失败',err);
+      container.innerHTML='<div class="treemap-empty">可视化渲染失败</div>';
+      destroyTreemap(key);
+    };
+    if(plotPromise && typeof plotPromise.then==='function'){
+      plotPromise.then(()=>{
+        if(window.Plotly){
+          try{ Plotly.Plots.resize(container); }catch(e){}
+        }
+      }).catch(onError);
+    }else if(window.Plotly){
+      try{ Plotly.Plots.resize(container); }catch(e){}
+    }
+  }catch(err){
+    console.error('Treemap 渲染失败',err);
+    container.innerHTML='<div class="treemap-empty">可视化渲染失败</div>';
+    destroyTreemap(key);
+  }
 }
+function renderDeferredTreemaps(){
+  Object.entries(TREEMAP_STATE).forEach(([key,state])=>{
+    const container=qs(state.containerId);
+    if(!container) return;
+    if(isTreemapHidden(container)) return;
+    if(TREEMAP_PLOTS[key]===container){
+      if(window.Plotly){
+        try{ Plotly.Plots.resize(container); }catch(e){}
+      }
+      return;
+    }
+    renderTreemap(state.containerId, state.primaryRaw, key, state.options, true);
+  });
+}
+function resizeVisibleTreemaps(){
+  if(!window.Plotly) return;
+  Object.values(TREEMAP_PLOTS).forEach(container=>{
+    if(!container) return;
+    if(isTreemapHidden(container)) return;
+    try{ Plotly.Plots.resize(container); }catch(e){}
+  });
+}
+window.addEventListener('resize',()=>{
+  resizeVisibleTreemaps();
+  scheduleScatterResize();
+});
 async function refreshStats(){
   if(!SESSION_ID) return;
   const r=await fetch(`/stats?session_id=${encodeURIComponent(SESSION_ID)}`,{cache:"no-store"}); if(!r.ok) return;
@@ -1179,10 +1277,10 @@ async function refreshStats(){
   renderChips("chips_field_orig", d.field_orig, "field_orig");
   renderChips("chips_topic_adj", d.topic_adj, "topic_adj", { overlay:d.topic_orig, primaryLabel:'调整后', overlayLabel:'原始' });
   renderChips("chips_field_adj", d.field_adj, "field_adj", { overlay:d.field_orig, primaryLabel:'调整后', overlayLabel:'原始' });
-  drawBar("chart_topic_orig", d.topic_orig, "chart_topic_orig", { primaryLabel:'原始分类', primaryColor:'rgb(37,99,235)', primaryBackgroundColor:'rgba(37,99,235,0.85)' });
-  drawBar("chart_field_orig", d.field_orig, "chart_field_orig", { primaryLabel:'原始分类', primaryColor:'rgb(37,99,235)', primaryBackgroundColor:'rgba(37,99,235,0.85)' });
-  drawBar("chart_topic_adj", d.topic_adj, "chart_topic_adj", { overlay:d.topic_orig, primaryLabel:'调整后', overlayLabel:'原始', primaryColor:'rgb(239,68,68)', primaryBackgroundColor:'rgba(239,68,68,0.85)', overlayColor:'rgb(37,99,235)', overlayBackgroundColor:'rgba(37,99,235,0.45)' });
-  drawBar("chart_field_adj", d.field_adj, "chart_field_adj", { overlay:d.field_orig, primaryLabel:'调整后', overlayLabel:'原始', primaryColor:'rgb(239,68,68)', primaryBackgroundColor:'rgba(239,68,68,0.85)', overlayColor:'rgb(37,99,235)', overlayBackgroundColor:'rgba(37,99,235,0.45)' });
+  renderTreemap("treemap_topic_orig", d.topic_orig, "chart_topic_orig", { primaryLabel:'原始分类', rootLabel:'研究主题（原）', limit:24 });
+  renderTreemap("treemap_field_orig", d.field_orig, "chart_field_orig", { primaryLabel:'原始分类', rootLabel:'研究领域（原）', limit:24 });
+  renderTreemap("treemap_topic_adj", d.topic_adj, "chart_topic_adj", { overlay:d.topic_orig, primaryLabel:'调整后', overlayLabel:'原始', rootLabel:'研究主题（调整）', limit:24 });
+  renderTreemap("treemap_field_adj", d.field_adj, "chart_field_adj", { overlay:d.field_orig, primaryLabel:'调整后', overlayLabel:'原始', rootLabel:'研究领域（调整）', limit:24 });
   qs('total_msg').textContent=`行数：${d.total}`;
 
   const collectLabels=arr=>Array.isArray(arr)?arr.map(x=>x.label).filter(Boolean):[];
@@ -1279,12 +1377,13 @@ function setVisualTab(tab){
   });
   const activePanel=document.querySelector(`[data-vis-panel="${target}"]`);
   if(activePanel){
-    activePanel.querySelectorAll('canvas[data-chart-key]').forEach(cv=>{
-      const key=cv.dataset.chartKey;
-      const chart=BAR_CHARTS[key];
-      if(chart && typeof chart.resize==='function'){ try{ chart.resize(); }catch(e){} }
+    activePanel.querySelectorAll('[data-treemap-key]').forEach(div=>{
+      if(window.Plotly){
+        try{ Plotly.Plots.resize(div); }catch(e){}
+      }
     });
   }
+  renderDeferredTreemaps();
   document.querySelectorAll('[data-vis-tab]').forEach(btn=>{
     const active = btn.dataset?.visTab===target;
     btn.classList.toggle('vis-tab-btn-active', active);
