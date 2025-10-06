@@ -518,6 +518,122 @@ const SCATTER_CONFIG={
 };
 let AUTO_SAVE_TIMER=null;
 let AUTO_SAVE_ENABLED=false;
+
+/* ===================== 统计与图表工具 ===================== */
+function safeNumber(value){
+  if(typeof value==='number' && Number.isFinite(value)) return value;
+  if(typeof value==='string'){
+    const cleaned=value.replace(/[,\s]/g,'');
+    const num=Number(cleaned);
+    if(Number.isFinite(num)) return num;
+  }
+  const num=Number(value);
+  return Number.isFinite(num)?num:0;
+}
+function parsePercentValue(value){
+  if(value===undefined||value===null||value==='') return null;
+  if(typeof value==='number' && Number.isFinite(value)) return value;
+  const text=String(value).trim();
+  if(!text) return null;
+  const normalized=text.endsWith('%')?text.slice(0,-1):text;
+  const num=Number(normalized);
+  return Number.isFinite(num)?num:null;
+}
+function formatPercentText(percent){
+  if(percent===undefined||percent===null) return '';
+  const num=Number(percent);
+  if(!Number.isFinite(num)) return '';
+  return `${num.toFixed(2)}%`;
+}
+function normalizeStatItems(rawList){
+  const arr=Array.isArray(rawList)?rawList:[];
+  const entryMap=new Map();
+  let order=0;
+  arr.forEach((item,idx)=>{
+    if(!item) return;
+    let label=String(item.label??'').trim();
+    if(!label) label=`未命名${idx+1}`;
+    const count=safeNumber(item.count);
+    const percent=parsePercentValue(item.percent);
+    if(!entryMap.has(label)){
+      entryMap.set(label,{label,count:0,percent:percent,order:order++});
+    }
+    const entry=entryMap.get(label);
+    entry.count+=count;
+    if(percent!==null){ entry.percent=percent; }
+  });
+  return Array.from(entryMap.values()).sort((a,b)=>a.order-b.order);
+}
+const MAX_BAR_CATEGORIES=40;
+
+function buildBarChartEntries(primaryRaw, overlayRaw){
+  const primary=normalizeStatItems(primaryRaw);
+  const overlay=normalizeStatItems(overlayRaw);
+  const primaryMap=new Map(primary.map(item=>[item.label,item]));
+  const overlayMap=new Map(overlay.map(item=>[item.label,item]));
+  const entryMap=new Map();
+  let order=0;
+  const ensureEntry=label=>{
+    if(entryMap.has(label)) return entryMap.get(label);
+    const entry={label,primary:0,overlay:0,order:order++};
+    entryMap.set(label,entry);
+    return entry;
+  };
+  primary.forEach(item=>{
+    const entry=ensureEntry(item.label);
+    entry.primary+=safeNumber(item.count);
+  });
+  overlay.forEach(item=>{
+    const entry=ensureEntry(item.label);
+    entry.overlay+=safeNumber(item.count);
+  });
+  const entries=Array.from(entryMap.values()).sort((a,b)=>a.order-b.order);
+  return { entries, primaryMap, overlayMap };
+}
+function limitBarEntries(entries, limit=MAX_BAR_CATEGORIES){
+  if(!Array.isArray(entries)) return [];
+  const maxCount=Number.isFinite(limit)&&limit>0?Math.floor(limit):MAX_BAR_CATEGORIES;
+  if(entries.length<=maxCount) return entries;
+  const scored=entries.map((entry,idx)=>({
+    entry,
+    idx,
+    score:safeNumber(entry.primary)+safeNumber(entry.overlay)
+  }));
+  const picked=new Set(
+    scored
+      .sort((a,b)=>b.score-a.score||(a.idx-b.idx))
+      .slice(0,maxCount)
+      .map(item=>item.idx)
+  );
+  return entries.filter((_,idx)=>picked.has(idx));
+}
+function destroyBarChart(key, canvas){
+  const chart=BAR_CHARTS[key];
+  if(chart){
+    try{ chart.destroy(); }catch(e){}
+    delete BAR_CHARTS[key];
+  }
+  if(canvas && typeof Chart!=='undefined' && typeof Chart.getChart==='function'){
+    const live=Chart.getChart(canvas);
+    if(live && live!==chart){
+      try{ live.destroy(); }catch(e){}
+    }
+  }
+  if(canvas){
+    const attrHeight=canvas.getAttribute('height');
+    const attrWidth=canvas.getAttribute('width');
+    if(attrHeight && !Number.isNaN(Number(attrHeight))){
+      canvas.height=Number(attrHeight);
+    }
+    if(attrWidth && !Number.isNaN(Number(attrWidth))){
+      canvas.width=Number(attrWidth);
+    }else if(canvas.parentElement){
+      canvas.width=canvas.parentElement.clientWidth||canvas.width;
+    }
+    canvas.style.removeProperty('width');
+    canvas.style.removeProperty('height');
+  }
+}
 let AUTO_SAVE_MINUTES=5;
 let IS_BATCH_SAVING=false;
 let HAS_RANKING_DATA=false;
@@ -945,113 +1061,115 @@ function uploadFile(){
 }
 
 /* ===================== 统计/图表/筛选 ===================== */
-function renderChips(elId,arr,targetKey,options={}){
-  const el=qs(elId); if(!el) return; el.innerHTML="";
-  const overlayList=Array.isArray(options.overlay)?options.overlay:[];
-  const overlayMap=new Map(overlayList.map(item=>[String(item?.label??''), item]));
-  const formatPercent=v=>{
-    if(v===undefined||v===null||v==='') return '';
-    const num=Number(v);
-    if(Number.isFinite(num)) return `${num.toFixed(2)}%`;
-    const text=String(v);
-    return text.includes('%')?text:`${text}%`;
-  };
-  (arr||[]).forEach(it=>{
-    if(!it) return;
-    const label=String(it.label??'未命名');
-    const btn=document.createElement('button'); btn.className='chip text-sm';
-    const primaryCount = Number(it.count??0);
-    const primaryPercent = formatPercent(it.percent);
+function renderChips(elId,primaryRaw,targetKey,options={}){
+  const el=qs(elId);
+  if(!el) return;
+  el.innerHTML="";
+  const { entries, primaryMap, overlayMap } = buildBarChartEntries(primaryRaw, options.overlay);
+  if(!entries.length){
+    return;
+  }
+  const primaryPrefix=options.primaryLabel?`${options.primaryLabel}：`:'';
+  const overlayPrefix=options.overlayLabel?`${options.overlayLabel}：`:'';
+  entries.forEach(entry=>{
+    const label=entry.label;
+    const primaryItem=primaryMap.get(label);
     const overlayItem=overlayMap.get(label);
-    const primaryPrefix = options.primaryLabel?`${options.primaryLabel}：`:'';
-    const overlayPrefix = options.overlayLabel?`${options.overlayLabel}：`:'';
-    const primaryParts=[`${primaryPrefix}${primaryCount}`];
+    const btn=document.createElement('button');
+    btn.className='chip text-sm';
+    const primaryParts=[`${primaryPrefix}${safeNumber(primaryItem?.count??0)}`];
+    const primaryPercent=formatPercentText(primaryItem?.percent);
     if(primaryPercent) primaryParts.push(primaryPercent);
     const displayParts=[primaryParts.join(' | ')];
     if(overlayItem){
-      const overlayCount=Number(overlayItem.count??0);
-      const overlayPercent=formatPercent(overlayItem.percent);
-      const overlayParts=[`${overlayPrefix}${overlayCount}`];
+      const overlayParts=[`${overlayPrefix}${safeNumber(overlayItem.count??0)}`];
+      const overlayPercent=formatPercentText(overlayItem.percent);
       if(overlayPercent) overlayParts.push(overlayPercent);
-      displayParts.push(overlayParts.join(' | '));
+      if(overlayPrefix || safeNumber(overlayItem.count??0)!==0 || overlayPercent){
+        displayParts.push(overlayParts.join(' | '));
+      }
     }
     btn.textContent=`${label}（${displayParts.join(' · ')}）`;
     btn.onclick=()=>quickFilter(targetKey,label);
     el.appendChild(btn);
   });
 }
-function drawBar(canvasId,arr,key,options={}){
-  const canvas=qs(canvasId); if(!canvas) return;
-  if(typeof Chart==='undefined'){ return; }
-  const overlayList=Array.isArray(options.overlay)?options.overlay:[];
-  const primaryList=Array.isArray(arr)?arr:[];
-  const entryMap=new Map();
-  primaryList.forEach((item,idx)=>{
-    const label=String(item?.label??`未命名${idx+1}`);
-    if(!entryMap.has(label)) entryMap.set(label,{label,order:idx});
-    const entry=entryMap.get(label); entry.primary=item; if(entry.order===undefined) entry.order=idx;
-  });
-  const baseOrder=primaryList.length;
-  overlayList.forEach((item,idx)=>{
-    const label=String(item?.label??`未命名${idx+1}`);
-    if(!entryMap.has(label)) entryMap.set(label,{label,order:baseOrder+idx});
-    const entry=entryMap.get(label); entry.overlay=item;
-  });
-  const entries=Array.from(entryMap.values()).sort((a,b)=>{
-    const ao=Number.isFinite(a.order)?a.order:Number.MAX_SAFE_INTEGER;
-    const bo=Number.isFinite(b.order)?b.order:Number.MAX_SAFE_INTEGER;
-    return ao-bo;
-  });
-  const labels=entries.map(en=>en.label);
-  const hasOverlay=overlayList.length>0;
+function drawBar(canvasId,primaryRaw,key,options={}){
+  const canvas=qs(canvasId);
+  if(!canvas || typeof Chart==='undefined') return;
+  const { entries } = buildBarChartEntries(primaryRaw, options.overlay);
+  const limitedEntries=limitBarEntries(entries, options.limit);
+  if(!limitedEntries.length){
+    destroyBarChart(key, canvas);
+    const ctx=canvas.getContext('2d');
+    if(ctx){ ctx.clearRect(0,0,canvas.width,canvas.height); }
+    return;
+  }
+  const labels=limitedEntries.map(entry=>entry.label);
+  const primaryData=limitedEntries.map(entry=>safeNumber(entry.primary));
+  const overlayData=limitedEntries.map(entry=>safeNumber(entry.overlay));
+  const overlayProvided=Array.isArray(options.overlay) && options.overlay.length>0;
   const overlayColor=options.overlayColor||'rgb(37,99,235)';
-  const overlayBackground=options.overlayBackgroundColor||'rgba(37,99,235,0.45)';
+  const overlayBackground=options.overlayBackgroundColor||'rgba(37,99,235,0.35)';
   const primaryColor=options.primaryColor||'rgb(37,99,235)';
   const primaryBackground=options.primaryBackgroundColor||primaryColor;
   const datasets=[];
-  if(hasOverlay){
+  if(overlayProvided){
     datasets.push({
       label: options.overlayLabel||'原始分类',
-      data: entries.map(en=>Number(en.overlay?.count??0)),
+      data: overlayData,
       backgroundColor: overlayBackground,
       borderColor: overlayColor,
       borderWidth: 1,
-      maxBarThickness: 46
+      maxBarThickness: 46,
+      borderRadius: 6
     });
   }
   datasets.push({
     label: options.primaryLabel||'数量',
-    data: entries.map(en=>Number(en.primary?.count??0)),
+    data: primaryData,
     backgroundColor: primaryBackground,
     borderColor: primaryColor,
     borderWidth: 1,
-    maxBarThickness: 46
+    maxBarThickness: 46,
+    borderRadius: 6
   });
   const cfg={
     type:'bar',
-    data:{labels, datasets},
+    data:{labels,datasets},
     options:{
       responsive:true,
       maintainAspectRatio:false,
+      animation:false,
+      interaction:{mode:'index',intersect:false},
       plugins:{
-        legend:{display:hasOverlay, labels:{usePointStyle:true}},
-        tooltip:{mode:'index', intersect:false}
+        legend:{display:overlayProvided,labels:{usePointStyle:true}},
+        tooltip:{
+          mode:'index',
+          intersect:false,
+          callbacks:{
+            label:(ctx)=>{
+              const label=ctx.dataset?.label||'';
+              const value=ctx.parsed?.y??ctx.parsed??0;
+              return `${label}: ${value}`;
+            }
+          }
+        }
       },
       scales:{
-        x:{ticks:{autoSkip:false, maxRotation:30, minRotation:0}, grid:{display:false}},
-        y:{beginAtZero:true, ticks:{precision:0}}
+        x:{ticks:{autoSkip:false,maxRotation:30,minRotation:0},grid:{display:false}},
+        y:{beginAtZero:true,ticks:{precision:0}}
       }
     }
   };
-  if(BAR_CHARTS[key]){
-    BAR_CHARTS[key].data.labels=labels;
-    BAR_CHARTS[key].data.datasets=datasets;
-    BAR_CHARTS[key].options=cfg.options;
-    BAR_CHARTS[key].update();
-  }else{
-    const ctx=canvas.getContext('2d');
-    BAR_CHARTS[key]=new Chart(ctx,cfg);
+  const maxValue=Math.max(...primaryData,...(overlayProvided?overlayData:[0]));
+  if(Number.isFinite(maxValue) && maxValue>0){
+    const padding=Math.max(1,Math.ceil(maxValue*0.08));
+    cfg.options.scales.y.suggestedMax=maxValue+padding;
   }
+  destroyBarChart(key, canvas);
+  const ctx=canvas.getContext('2d');
+  BAR_CHARTS[key]=new Chart(ctx,cfg);
 }
 async function refreshStats(){
   if(!SESSION_ID) return;
