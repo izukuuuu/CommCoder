@@ -367,22 +367,48 @@
               <h3 class="font-semibold">分类概览（点击类别即可筛选）</h3>
               <div class="text-sm text-gray-500" id="total_msg">—</div>
             </div>
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div>
-                <div class="flex items-center justify-between">
-                  <h4 class="text-sm font-semibold">研究主题（原）</h4>
-                  <button class="text-xs text-sky-700" id="btn_only_other_topic">只看『其他议题』</button>
+            <div class="vis-tab-toggle" role="tablist">
+              <button id="btn_vis_tab_orig" class="vis-tab-btn" role="tab" aria-selected="true" data-vis-tab="orig">原始分类</button>
+              <button id="btn_vis_tab_adj" class="vis-tab-btn" role="tab" aria-selected="false" data-vis-tab="adj">调整后分类</button>
+            </div>
+            <div id="vis_panel_orig" class="vis-tab-panel" data-vis-panel="orig">
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <div class="flex items-center justify-between">
+                    <h4 class="text-sm font-semibold">研究主题（原）</h4>
+                    <button class="text-xs text-sky-700" id="btn_only_other_topic_orig">只看『其他议题』</button>
+                  </div>
+                  <div id="chips_topic_orig" class="flex flex-wrap gap-2 my-2"></div>
+                  <canvas id="chart_topic_orig" data-chart-key="chart_topic_orig" height="140"></canvas>
                 </div>
-                <div id="chips_topic_orig" class="flex flex-wrap gap-2 my-2"></div>
-                <canvas id="chart_topic_orig" height="140"></canvas>
+                <div>
+                  <div class="flex items-center justify-between">
+                    <h4 class="text-sm font-semibold">研究领域（原）</h4>
+                    <button class="text-xs text-sky-700" id="btn_only_other_field_orig">只看『其他领域』</button>
+                  </div>
+                  <div id="chips_field_orig" class="flex flex-wrap gap-2 my-2"></div>
+                  <canvas id="chart_field_orig" data-chart-key="chart_field_orig" height="140"></canvas>
+                </div>
               </div>
-              <div>
-                <div class="flex items-center justify-between">
-                  <h4 class="text-sm font-semibold">研究领域（原）</h4>
-                  <button class="text-xs text-sky-700" id="btn_only_other_field">只看『其他领域』</button>
+            </div>
+            <div id="vis_panel_adj" class="vis-tab-panel hidden" data-vis-panel="adj">
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <div class="flex items-center justify-between">
+                    <h4 class="text-sm font-semibold">研究主题（调整后）</h4>
+                    <button class="text-xs text-sky-700" id="btn_only_other_topic_adj">只看『其他议题』</button>
+                  </div>
+                  <div id="chips_topic_adj" class="flex flex-wrap gap-2 my-2"></div>
+                  <canvas id="chart_topic_adj" data-chart-key="chart_topic_adj" height="140"></canvas>
                 </div>
-                <div id="chips_field_orig" class="flex flex-wrap gap-2 my-2"></div>
-                <canvas id="chart_field_orig" height="140"></canvas>
+                <div>
+                  <div class="flex items-center justify-between">
+                    <h4 class="text-sm font-semibold">研究领域（调整后）</h4>
+                    <button class="text-xs text-sky-700" id="btn_only_other_field_adj">只看『其他领域』</button>
+                  </div>
+                  <div id="chips_field_adj" class="flex flex-wrap gap-2 my-2"></div>
+                  <canvas id="chart_field_adj" data-chart-key="chart_field_adj" height="140"></canvas>
+                </div>
               </div>
             </div>
           </div>
@@ -476,13 +502,14 @@ let SESSION_ID=""; let SESSION_META=null; let CURRENT_FILTER={target:"",value:""
 let ACTIVE_COL="topic"; // "topic"|"field"
 const PAGER = { page:1, size:50, total:0, pages:1 };
 let LAST_EXPORT_URL=""; // 可选下载地址
-let _ct1=null, _ct2=null;
+const BAR_CHARTS={};
 let RANK_VIS_EXPANDED=false;
 let AUTO_SAVE_TIMER=null;
 let AUTO_SAVE_ENABLED=false;
 let AUTO_SAVE_MINUTES=5;
 let IS_BATCH_SAVING=false;
 let HAS_RANKING_DATA=false;
+let VISUAL_TAB='orig';
 
 const SORT_VALUE_DEFAULT='default';
 const SORT_VALUE_RANK_ASC='rank_asc';
@@ -907,18 +934,18 @@ function uploadFile(){
 
 /* ===================== 统计/图表/筛选 ===================== */
 function renderChips(elId,arr,targetKey){
-  const el=qs(elId); el.innerHTML=""; (arr||[]).forEach(it=>{
+  const el=qs(elId); if(!el) return; el.innerHTML=""; (arr||[]).forEach(it=>{
     const b=document.createElement("button"); b.className="chip text-sm";
     b.textContent=`${it.label}（${it.count} | ${it.percent}%）`; b.onclick=()=>quickFilter(targetKey,it.label); el.appendChild(b);
   });
 }
 function drawBar(canvasId,arr,key){
-  const labels=(arr||[]).map(x=>x.label), counts=(arr||[]).map(x=>x.count), ctx=qs(canvasId).getContext('2d');
+  const canvas=qs(canvasId); if(!canvas) return;
+  if(typeof Chart==='undefined'){ return; }
+  const labels=(arr||[]).map(x=>x.label), counts=(arr||[]).map(x=>x.count), ctx=canvas.getContext('2d');
   const cfg={type:'bar', data:{labels, datasets:[{label:'Count', data:counts}]}, options:{responsive:true, plugins:{legend:{display:false}}, scales:{x:{ticks:{autoSkip:false}}, y:{beginAtZero:true}}}};
-  if(key==="chart_topic_orig"&&window._ct1){ window._ct1.destroy(); }
-  if(key==="chart_field_orig"&&window._ct2){ window._ct2.destroy(); }
-  if(key==="chart_topic_orig") window._ct1=new Chart(ctx,cfg);
-  if(key==="chart_field_orig") window._ct2=new Chart(ctx,cfg);
+  if(BAR_CHARTS[key]){ try{ BAR_CHARTS[key].destroy(); }catch(e){} }
+  BAR_CHARTS[key]=new Chart(ctx,cfg);
 }
 async function refreshStats(){
   if(!SESSION_ID) return;
@@ -926,13 +953,21 @@ async function refreshStats(){
   const d=await r.json();
   renderChips("chips_topic_orig", d.topic_orig, "topic_orig");
   renderChips("chips_field_orig", d.field_orig, "field_orig");
+  renderChips("chips_topic_adj", d.topic_adj, "topic_adj");
+  renderChips("chips_field_adj", d.field_adj, "field_adj");
   drawBar("chart_topic_orig", d.topic_orig, "chart_topic_orig");
   drawBar("chart_field_orig", d.field_orig, "chart_field_orig");
+  drawBar("chart_topic_adj", d.topic_adj, "chart_topic_adj");
+  drawBar("chart_field_adj", d.field_adj, "chart_field_adj");
   qs('total_msg').textContent=`行数：${d.total}`;
 
-  if(!TOPIC_LIST.length){ TOPIC_LIST=(d.topic_orig||[]).map(x=>x.label); if(!TOPIC_LIST.length) TOPIC_LIST=[...DEF_TOPICS]; }
-  if(!FIELD_LIST.length){ FIELD_LIST=(d.field_orig||[]).map(x=>x.label); if(!FIELD_LIST.length) FIELD_LIST=[...DEF_FIELDS]; }
+  const collectLabels=arr=>Array.isArray(arr)?arr.map(x=>x.label).filter(Boolean):[];
+  const topicLabels=[...collectLabels(d.topic_orig), ...collectLabels(d.topic_adj)];
+  const fieldLabels=[...collectLabels(d.field_orig), ...collectLabels(d.field_adj)];
+  TOPIC_LIST=topicLabels.length?Array.from(new Set(topicLabels)):[...DEF_TOPICS];
+  FIELD_LIST=fieldLabels.length?Array.from(new Set(fieldLabels)):[...DEF_FIELDS];
   populateFilterOptions();
+  setVisualTab(VISUAL_TAB||'orig');
 }
 
 function clearScatterPlot(message){
@@ -940,6 +975,30 @@ function clearScatterPlot(message){
   if(plotEl && window.Plotly){ try{ Plotly.purge(plotEl); }catch(e){} }
   if(plotEl) plotEl.innerHTML="";
   const msg=qs('rank_vis_msg'); if(msg) msg.textContent=message||'等待计算后展示。';
+}
+
+function setVisualTab(tab){
+  const target = tab==='adj' ? 'adj' : 'orig';
+  VISUAL_TAB = target;
+  document.querySelectorAll('[data-vis-panel]').forEach(panel=>{
+    const active = panel.dataset?.visPanel===target;
+    panel.classList.toggle('hidden', !active);
+    if(active){ panel.classList.remove('opacity-0'); }
+  });
+  const activePanel=document.querySelector(`[data-vis-panel="${target}"]`);
+  if(activePanel){
+    activePanel.querySelectorAll('canvas[data-chart-key]').forEach(cv=>{
+      const key=cv.dataset.chartKey;
+      const chart=BAR_CHARTS[key];
+      if(chart && typeof chart.resize==='function'){ try{ chart.resize(); }catch(e){} }
+    });
+  }
+  document.querySelectorAll('[data-vis-tab]').forEach(btn=>{
+    const active = btn.dataset?.visTab===target;
+    btn.classList.toggle('vis-tab-btn-active', active);
+    btn.setAttribute('aria-selected', active? 'true':'false');
+    btn.tabIndex = active?0:-1;
+  });
 }
 
 function setRankVisExpanded(expanded){
@@ -1579,8 +1638,10 @@ function bindEvents(){
   const autoInterval=qs('auto_save_interval'); if(autoInterval) autoInterval.addEventListener('change', applyAutoSaveSettings);
 
   // 筛选
-  qs('btn_only_other_topic').onclick=()=>quickFilter('topic_orig','其他议题');
-  qs('btn_only_other_field').onclick=()=>quickFilter('field_orig','其他领域');
+  const btnOtherTopicOrig=qs('btn_only_other_topic_orig'); if(btnOtherTopicOrig) btnOtherTopicOrig.onclick=()=>quickFilter('topic_orig','其他议题');
+  const btnOtherFieldOrig=qs('btn_only_other_field_orig'); if(btnOtherFieldOrig) btnOtherFieldOrig.onclick=()=>quickFilter('field_orig','其他领域');
+  const btnOtherTopicAdj=qs('btn_only_other_topic_adj'); if(btnOtherTopicAdj) btnOtherTopicAdj.onclick=()=>quickFilter('topic_adj','其他议题');
+  const btnOtherFieldAdj=qs('btn_only_other_field_adj'); if(btnOtherFieldAdj) btnOtherFieldAdj.onclick=()=>quickFilter('field_adj','其他领域');
   qs('btn_apply_filter').onclick=()=>{
     CURRENT_FILTER={ target:qs('filter_target').value, value:qs('filter_value').value };
     PAGER.page=1;
@@ -1603,7 +1664,10 @@ function bindEvents(){
   qs('btn_do_ranking').onclick=doRanking;
   const btnRefreshVis=qs('btn_refresh_vis'); if(btnRefreshVis) btnRefreshVis.onclick=()=>fetchScatterAndRender(true);
   const btnToggleVis=qs('btn_toggle_vis'); if(btnToggleVis) btnToggleVis.onclick=toggleRankVis;
+  const tabOrig=qs('btn_vis_tab_orig'); if(tabOrig) tabOrig.onclick=()=>setVisualTab('orig');
+  const tabAdj=qs('btn_vis_tab_adj'); if(tabAdj) tabAdj.onclick=()=>setVisualTab('adj');
   setRankVisExpanded(false);
+  setVisualTab('orig');
   qs('rank_algo').addEventListener('change', handleAlgoChange);
   handleAlgoChange();
 
