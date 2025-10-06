@@ -425,6 +425,23 @@
               <span id="cfg_msg" class="text-sm text-gray-600"></span>
             </div>
           </div>
+          <div class="bg-white rounded-2xl shadow p-6 space-y-5">
+            <div class="space-y-1">
+              <h3 class="text-base font-semibold text-slate-900">智能分类黑名单</h3>
+              <p class="text-sm text-slate-500">勾选后，智能建议在提示词中将不再包含这些分类，避免模型输出被屏蔽的选项。</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="space-y-2">
+                <h4 class="text-sm font-semibold text-slate-800">议题分类黑名单</h4>
+                <div id="topic_blacklist_options" class="flex flex-wrap gap-2"></div>
+              </div>
+              <div class="space-y-2">
+                <h4 class="text-sm font-semibold text-slate-800">领域分类黑名单</h4>
+                <div id="field_blacklist_options" class="flex flex-wrap gap-2"></div>
+              </div>
+            </div>
+            <p class="text-xs text-slate-400">提示：黑名单仅影响智能建议的提示词，手动调整仍可选择全部分类。</p>
+          </div>
         </section>
       </main>
     </div>
@@ -445,6 +462,7 @@
 <script>
 /* ===================== 全局状态 ===================== */
 let TOPIC_LIST=[], FIELD_LIST=[], ADJ_TOPIC_COL="", ADJ_FIELD_COL="";
+let TOPIC_BLACKLIST=[], FIELD_BLACKLIST=[];
 let SESSION_ID=""; let SESSION_META=null; let CURRENT_FILTER={target:"",value:""}; let CURRENT_SORT={by:"",order:""};
 let ACTIVE_COL="topic"; // "topic"|"field"
 const PAGER = { page:1, size:50, total:0, pages:1 };
@@ -768,6 +786,7 @@ async function fetchFrontendConfig(){
     ADJ_FIELD_COL="研究领域分类_调整";
     TOPIC_LIST=[...DEF_TOPICS]; FIELD_LIST=[...DEF_FIELDS];
   }
+  setBlacklistSelections(TOPIC_BLACKLIST, FIELD_BLACKLIST);
 }
 async function fetchEnvDefaults(){
   const r=await fetch("/default_llm_config"); if(!r.ok) return;
@@ -777,16 +796,67 @@ async function fetchEnvDefaults(){
     qs('cfg_model').value=j.model||""; qs('cfg_temp').value=j.temp??0.2;
   }
 }
+function renderBlacklistOptions(topicSelected=TOPIC_BLACKLIST, fieldSelected=FIELD_BLACKLIST){
+  const renderGroup=(list, selected, kind)=>{
+    if(!Array.isArray(list) || !list.length){
+      return '<p class="text-xs text-slate-400">暂无候选分类</p>';
+    }
+    return list.map(name=>{
+      const checked = Array.isArray(selected) && selected.includes(name);
+      return `<label class="inline-flex items-center cursor-pointer select-none">
+  <input type="checkbox" class="sr-only peer blacklist-input" data-kind="${kind}" value="${escapeAttr(name)}" ${checked?'checked':''}>
+  <span class="px-3 py-2 rounded-full border border-slate-200 text-sm text-slate-600 bg-white transition-colors peer-checked:bg-slate-900 peer-checked:text-white peer-checked:border-slate-900">${escapeHtml(name)}</span>
+</label>`;
+    }).join("");
+  };
+  const topicWrap=qs('topic_blacklist_options');
+  if(topicWrap){ topicWrap.innerHTML = renderGroup(TOPIC_LIST, topicSelected, 'topic'); }
+  const fieldWrap=qs('field_blacklist_options');
+  if(fieldWrap){ fieldWrap.innerHTML = renderGroup(FIELD_LIST, fieldSelected, 'field'); }
+}
+function setBlacklistSelections(topicList=[], fieldList=[]){
+  TOPIC_BLACKLIST = Array.isArray(topicList)?topicList.filter(it=>TOPIC_LIST.includes(it)):[];
+  FIELD_BLACKLIST = Array.isArray(fieldList)?fieldList.filter(it=>FIELD_LIST.includes(it)):[];
+  renderBlacklistOptions(TOPIC_BLACKLIST, FIELD_BLACKLIST);
+}
+function collectBlacklistSelections(){
+  const topicSet=new Set();
+  document.querySelectorAll('#topic_blacklist_options input[data-kind="topic"]:checked').forEach(el=>{
+    const v=(el.value||"").trim(); if(v){ topicSet.add(v); }
+  });
+  const fieldSet=new Set();
+  document.querySelectorAll('#field_blacklist_options input[data-kind="field"]:checked').forEach(el=>{
+    const v=(el.value||"").trim(); if(v){ fieldSet.add(v); }
+  });
+  TOPIC_BLACKLIST=[...topicSet];
+  FIELD_BLACKLIST=[...fieldSet];
+  return { topic:[...topicSet], field:[...fieldSet] };
+}
 function loadCfgFromLocal(){
-  const raw=localStorage.getItem("llm_cfg"); if(!raw) return;
-  try{ const c=JSON.parse(raw);
-    qs('cfg_base_url').value=c.base_url||""; qs('cfg_api_key').value=c.api_key||"";
-    qs('cfg_model').value=c.model||""; qs('cfg_temp').value=c.temp??0.2;
-  }catch(e){}
+  const raw=localStorage.getItem("llm_cfg"); if(!raw){ setBlacklistSelections([], []); return; }
+  try{
+    const c=JSON.parse(raw);
+    qs('cfg_base_url').value=c.base_url||"";
+    qs('cfg_api_key').value=c.api_key||"";
+    qs('cfg_model').value=c.model||"";
+    qs('cfg_temp').value=c.temp??0.2;
+    setBlacklistSelections(c.topic_blacklist, c.field_blacklist);
+  }catch(e){
+    setBlacklistSelections([], []);
+  }
 }
 function saveCfgToLocal(){
-  const c={ base_url:qs('cfg_base_url').value.trim(), api_key:qs('cfg_api_key').value.trim(), model:qs('cfg_model').value.trim(), temp:parseFloat(qs('cfg_temp').value||"0.2") };
-  localStorage.setItem("llm_cfg", JSON.stringify(c)); qs('cfg_msg').innerText="已保存到浏览器";
+  const { topic:topicBlacklist, field:fieldBlacklist } = collectBlacklistSelections();
+  const c={
+    base_url:qs('cfg_base_url').value.trim(),
+    api_key:qs('cfg_api_key').value.trim(),
+    model:qs('cfg_model').value.trim(),
+    temp:parseFloat(qs('cfg_temp').value||"0.2"),
+    topic_blacklist:topicBlacklist,
+    field_blacklist:fieldBlacklist
+  };
+  localStorage.setItem("llm_cfg", JSON.stringify(c));
+  qs('cfg_msg').innerText="已保存到浏览器";
 }
 async function saveEnvToServer(){
   const c={ base_url:qs('cfg_base_url').value.trim(), api_key:qs('cfg_api_key').value.trim(), model:qs('cfg_model').value.trim(), temp:parseFloat(qs('cfg_temp').value||"0.2") };
@@ -1068,10 +1138,11 @@ async function saveRow(index, btn){
 }
 async function suggestRow(index, btn){
   const cfg=JSON.parse(localStorage.getItem("llm_cfg")||"{}"); // 有则用；后端已做兜底
+  const { topic:topicBlacklist, field:fieldBlacklist } = collectBlacklistSelections();
   btn.disabled=true; btn.textContent="建议中...";
   let success=false;
   try{
-    const resp=await fetch("/autosuggest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID,index,base_url:cfg.base_url,api_key:cfg.api_key,model:cfg.model,temperature:cfg.temp??0.2})});
+    const resp=await fetch("/autosuggest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID,index,base_url:cfg.base_url,api_key:cfg.api_key,model:cfg.model,temperature:cfg.temp??0.2,topic_blacklist:topicBlacklist,field_blacklist:fieldBlacklist})});
     if(!resp.ok){
       const msg=(await resp.text())||resp.statusText||"未知错误";
       throw new Error(`建议失败：${msg}`);
@@ -1435,6 +1506,10 @@ function bindEvents(){
 
   // LLM 配置
   qs('btn_save_cfg').onclick=saveCfgToLocal; qs('btn_save_env').onclick=saveEnvToServer;
+  const topicWrap=qs('topic_blacklist_options');
+  if(topicWrap){ topicWrap.addEventListener('change', e=>{ if(e.target?.matches('input[data-kind]')) collectBlacklistSelections(); }); }
+  const fieldWrap=qs('field_blacklist_options');
+  if(fieldWrap){ fieldWrap.addEventListener('change', e=>{ if(e.target?.matches('input[data-kind]')) collectBlacklistSelections(); }); }
 
   // 只编辑哪一列
   qs('op_col_select').addEventListener('change', e=> setActiveCol(e.target.value));

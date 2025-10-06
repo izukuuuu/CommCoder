@@ -200,6 +200,30 @@ def _counts(ser: pd.Series) -> List[Dict[str,Any]]:
     vc = s.value_counts()
     return [{"label":str(k),"count":int(v),"percent":round(v*100.0/total,2)} for k,v in vc.items()]
 
+
+def _sanitize_blacklist(raw, allowed: List[str]) -> List[str]:
+    """清理来自前端的黑名单，过滤非法值并保持顺序。"""
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        candidates = [raw]
+    else:
+        try:
+            candidates = list(raw)
+        except TypeError:
+            candidates = []
+    seen = set()
+    cleaned: List[str] = []
+    for item in candidates:
+        if not isinstance(item, str):
+            continue
+        name = item.strip()
+        if not name or name not in allowed or name in seen:
+            continue
+        cleaned.append(name)
+        seen.add(name)
+    return cleaned
+
 def slice_df(df: pd.DataFrame, page:int, page_size:int) -> pd.DataFrame:
     start = max(0,(page-1)*page_size); end = start + page_size
     return df.iloc[start:end].copy()
@@ -884,7 +908,11 @@ def healthz():
     return PlainTextResponse("ok")
 
 # ================== 可选：智能建议占位（防止前端报错） ==================
-def _format_topic_prompt(row: pd.Series, retry_hint: Optional[str] = None) -> List[Dict[str, str]]:
+def _format_topic_prompt(
+    row: pd.Series,
+    available_topics: List[str],
+    retry_hint: Optional[str] = None,
+) -> List[Dict[str, str]]:
     """生成用于请求议题分类的提示词。"""
     title = safe_get(row, "Article Title")
     abstract = safe_get(row, "Abstract")
@@ -897,7 +925,7 @@ def _format_topic_prompt(row: pd.Series, retry_hint: Optional[str] = None) -> Li
         "  \"topic_suggestion\": \"候选列表中的研究主题（议题）名称\",",
         "  \"structured_summary\": \"150字以内的中文结构化总结，如已有可适当润色后返回\"",
         "}",
-        "研究主题（议题）候选列表：" + "、".join(TOPIC_LIST),
+        "研究主题（议题）候选列表：" + "、".join(available_topics),
     ]
     if retry_hint:
         content_lines.append(f"上一次回答未通过校验，原因：{retry_hint}。请务必从候选列表中选择正确的主题，并严格返回 JSON。")
@@ -922,6 +950,7 @@ def _format_topic_prompt(row: pd.Series, retry_hint: Optional[str] = None) -> Li
 def _format_field_prompt(
     row: pd.Series,
     structured_summary: str,
+    available_fields: List[str],
     retry_hint: Optional[str] = None,
 ) -> List[Dict[str, str]]:
     """生成用于请求领域分类的提示词。"""
@@ -935,7 +964,7 @@ def _format_field_prompt(
         "{",
         "  \"field_suggestion\": \"候选列表中的研究领域名称\"",
         "}",
-        "研究领域候选列表：" + "、".join(FIELD_LIST),
+        "研究领域候选列表：" + "、".join(available_fields),
     ]
     if retry_hint:
         content_lines.append(f"上一次回答未通过校验，原因：{retry_hint}。请重新从候选列表中选择正确的领域，并严格返回 JSON。")
@@ -1015,8 +1044,23 @@ def _invoke_llm_json(
         raise ValueError(f"LLM 返回的内容不是合法 JSON：{content}") from e
 
 
-def _llm_autosuggest(row: pd.Series) -> Dict[str, Any]:
+def _llm_autosuggest(
+    row: pd.Series,
+    topic_blacklist: Optional[List[str]] = None,
+    field_blacklist: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     base_url, api_key, model = _prepare_llm_config()
+
+    topic_blacklist_clean = _sanitize_blacklist(topic_blacklist, TOPIC_LIST)
+    field_blacklist_clean = _sanitize_blacklist(field_blacklist, FIELD_LIST)
+    topic_blacklist_set = set(topic_blacklist_clean)
+    field_blacklist_set = set(field_blacklist_clean)
+    available_topics = [t for t in TOPIC_LIST if t not in topic_blacklist_set]
+    available_fields = [f for f in FIELD_LIST if f not in field_blacklist_set]
+    if not available_topics:
+        raise RuntimeError("议题分类黑名单排除了所有候选项，请调整设置。")
+    if not available_fields:
+        raise RuntimeError("领域分类黑名单排除了所有候选项，请调整设置。")
 
     topic_retry_hint: Optional[str] = None
     topic_last_error: Optional[str] = None
@@ -1024,7 +1068,12 @@ def _llm_autosuggest(row: pd.Series) -> Dict[str, Any]:
     structured_summary: str = safe_get(row, "结构化总结")
     for _ in range(2):
         try:
-            topic_resp = _invoke_llm_json(_format_topic_prompt(row, topic_retry_hint), base_url, api_key, model)
+            topic_resp = _invoke_llm_json(
+                _format_topic_prompt(row, available_topics, topic_retry_hint),
+                base_url,
+                api_key,
+                model,
+            )
         except ValueError as ve:
             topic_last_error = str(ve)
             topic_retry_hint = str(ve)
@@ -1035,7 +1084,7 @@ def _llm_autosuggest(row: pd.Series) -> Dict[str, Any]:
         summary_candidate = str(topic_resp.get("structured_summary", "")).strip()
         if summary_candidate:
             structured_summary = summary_candidate
-        if topic_candidate in TOPIC_LIST:
+        if topic_candidate in available_topics:
             topic_suggestion = topic_candidate
             break
         topic_last_error = f"LLM 议题分类不在候选列表中：{topic_candidate or '（空）'}"
@@ -1049,7 +1098,12 @@ def _llm_autosuggest(row: pd.Series) -> Dict[str, Any]:
     for _ in range(2):
         try:
             field_resp = _invoke_llm_json(
-                _format_field_prompt(row, structured_summary, field_retry_hint),
+                _format_field_prompt(
+                    row,
+                    structured_summary,
+                    available_fields,
+                    field_retry_hint,
+                ),
                 base_url,
                 api_key,
                 model,
@@ -1061,7 +1115,7 @@ def _llm_autosuggest(row: pd.Series) -> Dict[str, Any]:
         except RuntimeError:
             raise
         field_candidate = str(field_resp.get("field_suggestion", "")).strip()
-        if field_candidate in FIELD_LIST:
+        if field_candidate in available_fields:
             field_suggestion = field_candidate
             break
         field_last_error = f"LLM 领域分类不在候选列表中：{field_candidate or '（空）'}"
@@ -1091,8 +1145,11 @@ def autosuggest(payload: Dict[str,Any]):
     if idx<0 or idx>=df.shape[0]: return PlainTextResponse("行号越界", 400)
     row = df.iloc[idx]
 
+    topic_blacklist = payload.get("topic_blacklist")
+    field_blacklist = payload.get("field_blacklist")
+
     try:
-        result = _llm_autosuggest(row)
+        result = _llm_autosuggest(row, topic_blacklist=topic_blacklist, field_blacklist=field_blacklist)
     except Exception as e:
         return PlainTextResponse(str(e), 500)
 
