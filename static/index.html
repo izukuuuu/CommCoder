@@ -65,11 +65,6 @@
             <span class="nav-label">编码工作台</span>
           </button>
           <button class="nav-link" data-target="page-visual" data-requires-session="true" title="数据可视化" aria-label="数据可视化">
-          <button class="nav-link nav-link-active" data-target="page-coding" title="编码工作台" aria-label="编码工作台">
-            <svg class="nav-icon w-5 h-5" data-heroicon="adjustments-horizontal" aria-hidden="true"></svg>
-            <span class="nav-label">编码工作台</span>
-          </button>
-          <button class="nav-link" data-target="page-visual" title="数据可视化" aria-label="数据可视化">
             <svg class="nav-icon w-5 h-5" data-heroicon="chart-pie" aria-hidden="true"></svg>
             <span class="nav-label">数据可视化</span>
           </button>
@@ -150,37 +145,21 @@
                         <div id="up_bar" class="home-progress-bar"></div>
                       </div>
                       <span id="up_msg" class="home-progress-msg"></span>
-                <div class="flex flex-wrap items-center gap-3">
-                  <button id="btn_upload" class="action-btn bg-blue-600 text-white hover:bg-blue-500 shadow-sm" title="上传并新建会话">
-                    <svg class="w-5 h-5" data-heroicon="arrow-up-tray" aria-hidden="true"></svg>
-                    <span>上传并新建会话</span>
-                  </button>
-                  <div class="flex-1 min-w-[200px]">
-                    <div class="bg-slate-100 rounded-full h-2 overflow-hidden">
-                      <div id="up_bar" class="bg-blue-600 h-2 w-0 transition-[width] duration-300"></div>
                     </div>
                   </div>
+                  <p class="home-card-footnote">上传完成后系统将自动创建新会话并刷新界面。</p>
                 </div>
-              </div>
-              <div class="info-card rounded-2xl p-5 space-y-4">
-                <div class="text-xs uppercase tracking-wide text-slate-500">会话与导出</div>
-                <div class="grid gap-3 sm:grid-cols-2">
-                  <button id="btn_save_session" class="action-btn justify-center bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm" title="将当前会话写入服务器磁盘（sessions/）">
-                    <svg class="w-5 h-5" data-heroicon="cloud-arrow-up" aria-hidden="true"></svg>
-                    <span>保存会话</span>
-                  </button>
-                  <button id="btn_load_session" class="action-btn justify-center bg-slate-800 text-white hover:bg-slate-700 shadow-sm" title="从服务器读取会话">
-                    <svg class="w-5 h-5" data-heroicon="folder-arrow-down" aria-hidden="true"></svg>
-                    <span>载入会话</span>
-                  </button>
-                  <button id="btn_save_excel" class="action-btn justify-center bg-indigo-600 text-white hover:bg-indigo-500 shadow-sm" title="写入 Output/<session>/export_*.xlsx">
-                    <svg class="w-5 h-5" data-heroicon="document-arrow-down" aria-hidden="true"></svg>
-                    <span>保存 Excel</span>
-                  </button>
-                  <button id="btn_download_last" class="action-btn justify-center bg-slate-600 text-white hover:bg-slate-500 shadow-sm" title="从服务器下载最近一次导出副本（可选）">
-                    <svg class="w-5 h-5" data-heroicon="arrow-down-tray" aria-hidden="true"></svg>
-                    <span>下载最新导出</span>
-                  </button>
+              </section>
+              <section class="home-card home-card-secondary">
+                <div class="home-card-header">
+                  <div>
+                    <p class="home-card-eyebrow">会话与导出</p>
+                    <h3 class="home-card-title">管理当前进度与结果</h3>
+                    <p class="home-card-subtitle">保存会话、导出 Excel 或下载最近一次导出文件，随时切换工作节点。</p>
+                  </div>
+                  <div class="home-card-icon">
+                    <svg class="w-7 h-7" data-heroicon="rectangle-stack" aria-hidden="true"></svg>
+                  </div>
                 </div>
                 <div class="home-card-body">
                   <div class="home-action-collection">
