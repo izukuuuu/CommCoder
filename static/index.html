@@ -7,7 +7,6 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
-  <script src="https://code.iconify.design/iconify-icon/1.0.8/iconify-icon.min.js" defer></script>
   <link rel="stylesheet" href="/static/style.css"/>
 </head>
 <body class="bg-slate-100">
@@ -27,7 +26,7 @@
       <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
         <div id="session_meta_summary" class="hidden md:flex items-start gap-3 px-4 py-3 rounded-2xl bg-slate-100/90 text-xs text-slate-600 shadow-inner">
           <div class="shrink-0">
-            <iconify-icon icon="heroicons-outline:clipboard-document-list" class="w-6 h-6 text-slate-500"></iconify-icon>
+            <svg class="w-6 h-6 text-slate-500" data-heroicon="clipboard-document-list" aria-hidden="true"></svg>
           </div>
           <div class="leading-tight space-y-1">
             <p id="session_meta_primary" class="text-sm font-medium text-slate-700">暂无会话</p>
@@ -38,8 +37,9 @@
         <div class="md:hidden w-full">
           <label class="sr-only" for="mobile_page_select">页面导航</label>
           <select id="mobile_page_select" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-600 bg-white">
-            <option value="page-coding">编码工作台</option>
-            <option value="page-visual">数据可视化</option>
+            <option value="page-home">主页</option>
+            <option value="page-coding" data-requires-session="true">编码工作台</option>
+            <option value="page-visual" data-requires-session="true">数据可视化</option>
             <option value="page-settings">OpenAI API 设置</option>
           </select>
         </div>
@@ -49,25 +49,29 @@
   <div class="flex flex-1">
     <aside id="sidebar" class="hidden md:flex border-r border-slate-200 bg-white/80 backdrop-blur-sm transition-all duration-300" data-collapsed="false">
       <div class="flex flex-col w-full h-full">
-        <div class="px-4 pt-6 pb-4 flex items-center justify-between">
+        <div class="sidebar-header px-4 pt-6 pb-4 flex items-center justify-between">
           <p class="nav-section-label text-xs font-semibold text-slate-400 uppercase tracking-wide">导航</p>
           <button id="sidebar_toggle" class="sidebar-toggle btn btn-ghost" type="button" aria-expanded="true" aria-label="收起侧边栏" title="收起侧边栏">
-            <iconify-icon icon="heroicons-outline:chevron-left" class="w-5 h-5"></iconify-icon>
+            <svg class="w-5 h-5" data-heroicon="chevron-left" aria-hidden="true"></svg>
           </button>
         </div>
         <nav class="flex-1 flex flex-col gap-2 px-2">
-          <button class="nav-link nav-link-active" data-target="page-coding" title="编码工作台" aria-label="编码工作台">
-            <iconify-icon icon="heroicons-outline:adjustments-horizontal" class="nav-icon w-5 h-5"></iconify-icon>
+          <button class="nav-link nav-link-active" data-target="page-home" title="主页" aria-label="主页">
+            <svg class="nav-icon w-5 h-5" data-heroicon="home-modern" aria-hidden="true"></svg>
+            <span class="nav-label">主页</span>
+          </button>
+          <button class="nav-link" data-target="page-coding" data-requires-session="true" title="编码工作台" aria-label="编码工作台">
+            <svg class="nav-icon w-5 h-5" data-heroicon="adjustments-horizontal" aria-hidden="true"></svg>
             <span class="nav-label">编码工作台</span>
           </button>
-          <button class="nav-link" data-target="page-visual" title="数据可视化" aria-label="数据可视化">
-            <iconify-icon icon="heroicons-outline:chart-pie" class="nav-icon w-5 h-5"></iconify-icon>
+          <button class="nav-link" data-target="page-visual" data-requires-session="true" title="数据可视化" aria-label="数据可视化">
+            <svg class="nav-icon w-5 h-5" data-heroicon="chart-pie" aria-hidden="true"></svg>
             <span class="nav-label">数据可视化</span>
           </button>
         </nav>
         <div class="sidebar-footer px-2 pt-4 pb-6 border-t border-slate-200">
           <button class="nav-link" data-target="page-settings" title="OpenAI API 设置" aria-label="OpenAI API 设置">
-            <iconify-icon icon="heroicons-outline:cog-6-tooth" class="nav-icon w-5 h-5"></iconify-icon>
+            <svg class="nav-icon w-5 h-5" data-heroicon="cog-6-tooth" aria-hidden="true"></svg>
             <span class="nav-label">OpenAI API 设置</span>
           </button>
         </div>
@@ -75,52 +79,154 @@
     </aside>
     <div class="flex-1 overflow-y-auto">
       <main class="max-w-7xl mx-auto w-full px-6 py-8 space-y-10">
-        <section id="page-coding" class="page-section space-y-8">
-          <div class="bg-white rounded-2xl shadow p-6">
-            <div class="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] xl:items-end">
-              <div class="space-y-4">
-                <div class="space-y-2">
-                  <label class="block text-sm font-medium text-slate-600">选择表格（.xlsx/.xls/.csv）</label>
-                  <input id="file_input" class="file-input" type="file" accept=".xlsx,.xls,.csv">
-                  <p class="text-xs text-slate-500">支持 Excel 与 CSV 文件，上传后将自动开启新的会话。</p>
-                </div>
-                <div class="flex flex-wrap items-center gap-3">
-                  <button id="btn_upload" class="action-btn bg-blue-600 text-white hover:bg-blue-500 shadow-sm" title="上传并新建会话">
-                    <iconify-icon icon="heroicons-outline:arrow-up-tray" class="w-5 h-5"></iconify-icon>
-                    <span>上传并新建会话</span>
-                  </button>
-                  <div class="flex-1 min-w-[200px]">
-                    <div class="bg-slate-100 rounded-full h-2 overflow-hidden">
-                      <div id="up_bar" class="bg-blue-600 h-2 w-0 transition-[width] duration-300"></div>
-                    </div>
-                  </div>
-                  <span id="up_msg" class="text-sm text-gray-600 whitespace-nowrap"></span>
-                </div>
+        <section id="page-home" class="page-section space-y-10">
+          <div class="home-hero rounded-3xl overflow-hidden shadow">
+            <div class="home-hero-content">
+              <div class="home-hero-text">
+                <p class="home-hero-eyebrow">CommCoder Studio</p>
+                <h2 class="home-hero-title">专业级人工编码启动中心</h2>
+                <p class="home-hero-subtitle">整理流程、载入历史会话或创建新的数据集，一站式启动精细化的分类与洞察。</p>
               </div>
-              <div class="info-card rounded-2xl p-5 space-y-4">
-                <div class="text-xs uppercase tracking-wide text-slate-500">会话与导出</div>
-                <div class="grid gap-3 sm:grid-cols-2">
-                  <button id="btn_save_session" class="action-btn justify-center bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm" title="将当前会话写入服务器磁盘（sessions/）">
-                    <iconify-icon icon="heroicons-outline:cloud-arrow-up" class="w-5 h-5"></iconify-icon>
-                    <span>保存会话</span>
-                  </button>
-                  <button id="btn_load_session" class="action-btn justify-center bg-slate-800 text-white hover:bg-slate-700 shadow-sm" title="从服务器读取会话">
-                    <iconify-icon icon="heroicons-outline:folder-arrow-down" class="w-5 h-5"></iconify-icon>
-                    <span>载入会话</span>
-                  </button>
-                  <button id="btn_save_excel" class="action-btn justify-center bg-indigo-600 text-white hover:bg-indigo-500 shadow-sm" title="写入 Output/<session>/export_*.xlsx">
-                    <iconify-icon icon="heroicons-outline:document-arrow-down" class="w-5 h-5"></iconify-icon>
-                    <span>保存 Excel</span>
-                  </button>
-                  <button id="btn_download_last" class="action-btn justify-center bg-slate-600 text-white hover:bg-slate-500 shadow-sm" title="从服务器下载最近一次导出副本（可选）">
-                    <iconify-icon icon="heroicons-outline:arrow-down-tray" class="w-5 h-5"></iconify-icon>
-                    <span>下载最新导出</span>
-                  </button>
+              <div class="home-hero-aside">
+                <div class="home-hero-card">
+                  <p class="home-hero-card-title">工作台能力</p>
+                  <p class="home-hero-card-desc">批量标注 · 智能建议 · 多维可视化</p>
+                </div>
+                <div class="home-hero-card">
+                  <p class="home-hero-card-title">上线准备</p>
+                  <p class="home-hero-card-desc">推荐使用桌面宽屏以获得最佳体验</p>
                 </div>
               </div>
             </div>
           </div>
 
+          <div class="home-launch-hub space-y-8">
+            <div class="home-launch-header">
+              <div>
+                <p class="home-launch-eyebrow">Workspace Launch</p>
+                <h2 class="home-launch-title">准备工作台</h2>
+                <p class="home-launch-subtitle">上传新的数据集，或从历史会话继续，解锁编码工作台。</p>
+              </div>
+              <div class="home-launch-meta">
+                <span>当前 Session ID</span>
+                <code class="home-launch-meta-code" id="home_session_hint">—</code>
+              </div>
+            </div>
+            <div id="home_lock_hint_wrapper" class="home-lock-banner" data-state="locked">
+              <div class="home-lock-icon">
+                <svg id="home_lock_icon" class="w-5 h-5" data-heroicon="lock-closed" aria-hidden="true"></svg>
+              </div>
+              <p id="home_lock_hint" class="home-lock-hint-text">请在下方上传数据集或载入会话以解锁编码工作台与数据可视化。</p>
+            </div>
+            <div class="home-card-grid">
+              <section class="home-card home-card-primary">
+                <div class="home-card-header">
+                  <div>
+                    <p class="home-card-eyebrow">新建会话</p>
+                    <h3 class="home-card-title">上传文件并自动开启新会话</h3>
+                    <p class="home-card-subtitle">支持 Excel 与 CSV 文件，系统将为每次上传生成独立会话。</p>
+                  </div>
+                  <div class="home-card-icon">
+                    <svg class="w-7 h-7" data-heroicon="cloud-arrow-up" aria-hidden="true"></svg>
+                  </div>
+                </div>
+                <div class="home-card-body space-y-6">
+                  <div class="space-y-2">
+                    <label class="block text-sm font-medium text-slate-700">选择表格（.xlsx/.xls/.csv）</label>
+                    <input id="file_input" class="file-input" type="file" accept=".xlsx,.xls,.csv">
+                  </div>
+                  <div class="home-upload-actions">
+                    <button id="btn_upload" class="action-btn home-upload-btn" title="上传并新建会话">
+                      <svg class="w-5 h-5" data-heroicon="arrow-up-tray" aria-hidden="true"></svg>
+                      <span>上传并新建会话</span>
+                    </button>
+                    <div class="home-progress">
+                      <div class="home-progress-track">
+                        <div id="up_bar" class="home-progress-bar"></div>
+                      </div>
+                      <span id="up_msg" class="home-progress-msg"></span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+              <section class="home-card home-card-secondary">
+                <div class="home-card-header">
+                  <div>
+                    <p class="home-card-eyebrow">会话与导出</p>
+                    <h3 class="home-card-title">继续之前的流程或输出结果</h3>
+                    <p class="home-card-subtitle">针对不同阶段提供独立操作卡片，确保重要动作一目了然。</p>
+                  </div>
+                  <div class="home-card-icon">
+                    <svg class="w-7 h-7" data-heroicon="folder-arrow-down" aria-hidden="true"></svg>
+                  </div>
+                </div>
+                <div class="home-card-body">
+                  <div class="home-action-collection">
+                    <article class="home-action-card" data-action="save-session">
+                      <div class="home-action-head">
+                        <div class="home-action-icon bg-emerald-100 text-emerald-600">
+                          <svg class="w-6 h-6" data-heroicon="cloud-arrow-up" aria-hidden="true"></svg>
+                        </div>
+                        <div>
+                          <h4 class="home-action-title">保存当前会话</h4>
+                          <p class="home-action-desc">写入服务器 sessions/ 目录，保障进度安全。</p>
+                        </div>
+                      </div>
+                      <button id="btn_save_session" class="action-btn home-action-btn bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm" title="将当前会话写入服务器磁盘（sessions/）">
+                        <span>立即保存</span>
+                      </button>
+                    </article>
+                    <article class="home-action-card" data-action="load-session">
+                      <div class="home-action-head">
+                        <div class="home-action-icon bg-slate-900/10 text-slate-900">
+                          <svg class="w-6 h-6" data-heroicon="folder-arrow-down" aria-hidden="true"></svg>
+                        </div>
+                        <div>
+                          <h4 class="home-action-title">载入历史会话</h4>
+                          <p class="home-action-desc">浏览服务器记录，快速恢复之前的工作现场。</p>
+                        </div>
+                      </div>
+                      <button id="btn_load_session" class="action-btn home-action-btn bg-slate-900 text-white hover:bg-slate-800 shadow-sm" title="从服务器读取会话">
+                        <span>选择会话</span>
+                      </button>
+                    </article>
+                    <article class="home-action-card" data-action="export-excel">
+                      <div class="home-action-head">
+                        <div class="home-action-icon bg-indigo-100 text-indigo-600">
+                          <svg class="w-6 h-6" data-heroicon="document-arrow-down" aria-hidden="true"></svg>
+                        </div>
+                        <div>
+                          <h4 class="home-action-title">导出为 Excel</h4>
+                          <p class="home-action-desc">生成 Output/&lt;session&gt;/export_*.xlsx 供分析或交付。</p>
+                        </div>
+                      </div>
+                      <button id="btn_save_excel" class="action-btn home-action-btn bg-indigo-600 text-white hover:bg-indigo-500 shadow-sm" title="写入 Output/&lt;session&gt;/export_*.xlsx">
+                        <span>生成文件</span>
+                      </button>
+                    </article>
+                    <article class="home-action-card" data-action="download-export">
+                      <div class="home-action-head">
+                        <div class="home-action-icon bg-slate-200 text-slate-700">
+                          <svg class="w-6 h-6" data-heroicon="arrow-down-tray" aria-hidden="true"></svg>
+                        </div>
+                        <div>
+                          <h4 class="home-action-title">下载最新导出</h4>
+                          <p class="home-action-desc">一键获取最近一次导出成果，导出生成后自动激活下载。</p>
+                        </div>
+                      </div>
+                      <button id="btn_download_last" class="action-btn home-action-btn bg-slate-600 text-white hover:bg-slate-500 shadow-sm" title="从服务器下载最近一次导出副本（可选）">
+                        <span>下载文件</span>
+                      </button>
+                    </article>
+                  </div>
+                  <p class="home-card-footnote">所有操作都会作用于当前会话，未解锁时将保持禁用状态。</p>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <section id="page-coding" class="page-section space-y-8 hidden">
           <div class="bg-white rounded-2xl shadow p-6 space-y-3">
             <div class="flex flex-wrap items-center gap-3">
               <span class="text-sm">当前仅编辑：</span>
@@ -333,6 +439,7 @@
     <button class="btn bg-slate-700 text-white hover:bg-slate-600" onclick="qs('dlg_sessions').close()">关闭</button>
   </div>
 </dialog>
+<script src="/static/heroicons.js"></script>
 <script>
 /* ===================== 全局状态 ===================== */
 let TOPIC_LIST=[], FIELD_LIST=[], ADJ_TOPIC_COL="", ADJ_FIELD_COL="";
@@ -351,7 +458,12 @@ const qs = id=>document.getElementById(id);
 const escapeHtml = s=>String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
 const escapeAttr = s=>escapeHtml(s).replaceAll('"','&quot;');
 const numberFormatter = new Intl.NumberFormat('zh-CN');
-const setBadge = ()=>{ qs('session_badge').textContent = "Session: " + (SESSION_ID||"—"); };
+const setBadge = ()=>{
+  const badge = qs('session_badge');
+  if(badge){ badge.textContent = "Session: " + (SESSION_ID||"—"); }
+  const homeHint = qs('home_session_hint');
+  if(homeHint){ homeHint.textContent = SESSION_ID || '—'; }
+};
 
 function renderSessionMeta(meta){
   const summary = qs('session_meta_summary');
@@ -365,6 +477,8 @@ function renderSessionMeta(meta){
     primary.textContent = '暂无会话';
     secondary.textContent = '请上传或载入数据集';
     LAST_EXPORT_URL = '';
+    refreshHomeActions();
+    updateWorkspaceAccess();
     return;
   }
   const fileName = meta.origin_filename ? meta.origin_filename : '未命名数据集';
@@ -380,6 +494,8 @@ function renderSessionMeta(meta){
   }else{
     LAST_EXPORT_URL = '';
   }
+  refreshHomeActions();
+  updateWorkspaceAccess();
 }
 
 async function refreshSessionMeta(){
@@ -427,9 +543,14 @@ function applySidebarState(collapsed){
     SIDEBAR_TOGGLE.setAttribute('aria-expanded', (!collapsed).toString());
     SIDEBAR_TOGGLE.title = collapsed ? '展开侧边栏' : '收起侧边栏';
     SIDEBAR_TOGGLE.setAttribute('aria-label', SIDEBAR_TOGGLE.title);
-    const icon = SIDEBAR_TOGGLE.querySelector('iconify-icon');
+    const icon = SIDEBAR_TOGGLE.querySelector('svg[data-heroicon]');
     if(icon){
-      icon.setAttribute('icon', collapsed ? 'heroicons-outline:chevron-right' : 'heroicons-outline:chevron-left');
+      const targetIcon = collapsed ? 'chevron-right' : 'chevron-left';
+      if(window.Heroicons && typeof window.Heroicons.apply === 'function'){
+        window.Heroicons.apply(icon, targetIcon);
+      }else{
+        icon.dataset.heroicon = targetIcon;
+      }
     }
   }
   try{ localStorage.setItem('sidebar_collapsed', collapsed ? '1' : '0'); }catch(e){}
@@ -451,21 +572,141 @@ try{
 const PAGE_SECTIONS = Array.from(document.querySelectorAll('.page-section'));
 const NAV_BUTTONS = Array.from(document.querySelectorAll('.nav-link[data-target]'));
 const MOBILE_PAGE_SELECT = document.getElementById('mobile_page_select');
+const HOME_LOCK_WRAP = document.getElementById('home_lock_hint_wrapper');
+const HOME_LOCK_HINT = document.getElementById('home_lock_hint');
+const HOME_LOCK_ICON = document.getElementById('home_lock_icon');
+const SESSION_REQUIRED_PAGES = new Set(['page-coding','page-visual']);
+const HOME_ACTION_CONFIG = [
+  { action: 'save-session', btnId: 'btn_save_session', requiresSession: true },
+  { action: 'load-session', btnId: 'btn_load_session', requiresSession: false },
+  { action: 'export-excel', btnId: 'btn_save_excel', requiresSession: true },
+  { action: 'download-export', btnId: 'btn_download_last', requiresSession: true, requiresExport: true }
+];
+let ACTIVE_PAGE = 'page-home';
 
-function activatePage(targetId){
+function pingHomeLock(){
+  if(!HOME_LOCK_WRAP) return;
+  HOME_LOCK_WRAP.classList.remove('home-lock-bounce');
+  void HOME_LOCK_WRAP.offsetWidth;
+  HOME_LOCK_WRAP.classList.add('home-lock-bounce');
+  setTimeout(()=>{
+    if(HOME_LOCK_WRAP){
+      HOME_LOCK_WRAP.classList.remove('home-lock-bounce');
+    }
+  }, 950);
+}
+
+function updateWorkspaceAccess(){
+  const hasSession = !!SESSION_ID;
+  NAV_BUTTONS.forEach(btn=>{
+    const target = btn.dataset.target;
+    const locked = SESSION_REQUIRED_PAGES.has(target) && !hasSession;
+    btn.dataset.locked = locked ? '1' : '0';
+    btn.setAttribute('aria-disabled', locked ? 'true' : 'false');
+    btn.classList.toggle('nav-link-disabled', locked);
+    if(!btn.dataset.baseTitle && btn.title){
+      btn.dataset.baseTitle = btn.title;
+    }
+    if(locked){
+      const baseTitle = btn.dataset.baseTitle || btn.title || '';
+      const lockedTitle = baseTitle ? `${baseTitle}（未解锁）` : '页面未解锁';
+      btn.title = lockedTitle;
+      btn.setAttribute('aria-label', lockedTitle);
+    }else if(btn.dataset.baseTitle){
+      btn.title = btn.dataset.baseTitle;
+      btn.setAttribute('aria-label', btn.dataset.baseTitle);
+    }
+  });
+  if(MOBILE_PAGE_SELECT){
+    Array.from(MOBILE_PAGE_SELECT.options).forEach(opt=>{
+      const locked = SESSION_REQUIRED_PAGES.has(opt.value) && !hasSession;
+      opt.disabled = locked;
+    });
+    if(SESSION_REQUIRED_PAGES.has(MOBILE_PAGE_SELECT.value) && !hasSession){
+      MOBILE_PAGE_SELECT.value = 'page-home';
+    }
+  }
+  if(!hasSession && SESSION_REQUIRED_PAGES.has(ACTIVE_PAGE)){
+    activatePage('page-home', {force:true});
+  }
+  if(HOME_LOCK_WRAP){
+    HOME_LOCK_WRAP.dataset.state = hasSession ? 'ready' : 'locked';
+  }
+  if(HOME_LOCK_HINT){
+    if(hasSession){
+      const fileName = SESSION_META?.origin_filename ? SESSION_META.origin_filename : '未命名数据集';
+      const rowsNum = (SESSION_META && typeof SESSION_META.rows === 'number' && isFinite(SESSION_META.rows)) ? `${numberFormatter.format(SESSION_META.rows)} 行` : '行数待获取';
+      HOME_LOCK_HINT.textContent = `当前会话：${fileName} · ${rowsNum}，工作台已解锁。`;
+    }else{
+      HOME_LOCK_HINT.textContent = '请在下方上传数据集或载入会话以解锁编码工作台与数据可视化。';
+    }
+  }
+  if(HOME_LOCK_ICON){
+    const iconName = hasSession ? 'lock-open' : 'lock-closed';
+    if(window.Heroicons && typeof window.Heroicons.apply === 'function'){
+      window.Heroicons.apply(HOME_LOCK_ICON, iconName);
+    }else{
+      HOME_LOCK_ICON.dataset.heroicon = iconName;
+    }
+  }
+  refreshHomeActions();
+}
+
+function refreshHomeActions(){
+  const hasSession = !!SESSION_ID;
+  const hasExport = !!LAST_EXPORT_URL;
+  HOME_ACTION_CONFIG.forEach(cfg=>{
+    const btn = document.getElementById(cfg.btnId);
+    const card = document.querySelector(`.home-action-card[data-action="${cfg.action}"]`);
+    const disabled = (cfg.requiresSession && !hasSession) || (cfg.requiresExport && !hasExport);
+    if(btn){ btn.disabled = disabled; }
+    if(card){ card.dataset.disabled = disabled ? 'true' : 'false'; }
+  });
+}
+
+function activatePage(targetId, options={}){
+  const force = options.force === true;
+  if(!force && SESSION_REQUIRED_PAGES.has(targetId) && !SESSION_ID){
+    pingHomeLock();
+    return;
+  }
   PAGE_SECTIONS.forEach(section=>section.classList.toggle('hidden', section.id !== targetId));
-  NAV_BUTTONS.forEach(btn=>btn.classList.toggle('nav-link-active', btn.dataset.target === targetId));
+  NAV_BUTTONS.forEach(btn=>{
+    const isActive = btn.dataset.target === targetId;
+    btn.classList.toggle('nav-link-active', isActive);
+  });
   if(MOBILE_PAGE_SELECT && MOBILE_PAGE_SELECT.value !== targetId){
     MOBILE_PAGE_SELECT.value = targetId;
   }
+  ACTIVE_PAGE = targetId;
 }
 
-NAV_BUTTONS.forEach(btn=>btn.addEventListener('click', ()=>activatePage(btn.dataset.target)));
+function enterWorkspace(){
+  updateWorkspaceAccess();
+  activatePage('page-coding');
+}
+
+NAV_BUTTONS.forEach(btn=>btn.addEventListener('click', ()=>{
+  if(btn.dataset.locked === '1'){
+    pingHomeLock();
+    return;
+  }
+  activatePage(btn.dataset.target);
+}));
 if(MOBILE_PAGE_SELECT){
-  MOBILE_PAGE_SELECT.addEventListener('change', e=>activatePage(e.target.value));
+  MOBILE_PAGE_SELECT.addEventListener('change', e=>{
+    const target = e.target.value;
+    if(SESSION_REQUIRED_PAGES.has(target) && !SESSION_ID){
+      e.target.value = ACTIVE_PAGE;
+      pingHomeLock();
+      return;
+    }
+    activatePage(target);
+  });
 }
 
-activatePage('page-coding');
+activatePage('page-home', {force:true});
+updateWorkspaceAccess();
 
 /* ---- 默认兜底表 ---- */
 const DEF_TOPICS = ["健康议题","经济议题","政治议题","环境议题","传播模式与行为","媒介制度与平台治理","科技议题","文化议题","宗教议题","其他议题"];
@@ -521,9 +762,10 @@ function uploadFile(){
   xhr.upload.onprogress=e=>{ if(e.lengthComputable){ const p=Math.round(e.loaded*100/e.total); bar.style.width=p+"%"; msg.textContent=p+"%"; } };
   xhr.onreadystatechange=async ()=>{ if(xhr.readyState===4){ btn.disabled=false; btn.textContent="上传并新建会话";
       if(xhr.status>=200&&xhr.status<300){ const d=JSON.parse(xhr.responseText);
-        SESSION_ID=d.session_id; setBadge(); qs('total_msg').textContent=`共 ${d.total} 行`; msg.textContent="加载成功";
+        SESSION_ID=d.session_id; setBadge(); enterWorkspace(); qs('total_msg').textContent=`共 ${d.total} 行`; msg.textContent="加载成功";
         PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
         LAST_EXPORT_URL=""; // 新会话清空
+        refreshHomeActions();
         clearScatterPlot('等待计算后展示。');
         await refreshSessionMeta();
         await refreshStats(); populateFilterOptions(); CURRENT_FILTER={target:"",value:""}; CURRENT_SORT={by:"",order:""}; await loadPage();
@@ -1049,7 +1291,7 @@ async function loadSession(sid){
   const r=await fetch(`/session/load?session_id=${encodeURIComponent(sid)}`,{cache:"no-store"});
   if(!r.ok){ alert("加载失败："+await r.text()); return; }
   const j=await r.json();
-  SESSION_ID=j.session_id; setBadge(); qs('total_msg').textContent=`行数：${j.total}`;
+  SESSION_ID=j.session_id; setBadge(); enterWorkspace(); qs('total_msg').textContent=`行数：${j.total}`;
   PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
   clearScatterPlot('等待计算后展示。');
   renderSessionMeta(j.meta||null);
@@ -1065,6 +1307,7 @@ async function saveExcelServer(){
   const r=await fetch("/export_excel_save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID,file_name:name||undefined})});
   if(!r.ok){ alert("导出失败："+await r.text()); return; }
   const j=await r.json(); LAST_EXPORT_URL=j.download_url||"";
+  refreshHomeActions();
   await refreshSessionMeta();
   alert("已保存到服务器：\n"+(j.saved_path||""));
 }
@@ -1077,6 +1320,7 @@ async function downloadLast(){
         const x=await info.json();
         renderSessionMeta(x.meta||SESSION_META);
         LAST_EXPORT_URL = x?.meta?.last_export_path ? `/file?path=${encodeURIComponent(x.meta.last_export_path)}` : "";
+        refreshHomeActions();
       }
     }catch(e){}
   }
