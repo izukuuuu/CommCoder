@@ -933,19 +933,113 @@ function uploadFile(){
 }
 
 /* ===================== 统计/图表/筛选 ===================== */
-function renderChips(elId,arr,targetKey){
-  const el=qs(elId); if(!el) return; el.innerHTML=""; (arr||[]).forEach(it=>{
-    const b=document.createElement("button"); b.className="chip text-sm";
-    b.textContent=`${it.label}（${it.count} | ${it.percent}%）`; b.onclick=()=>quickFilter(targetKey,it.label); el.appendChild(b);
+function renderChips(elId,arr,targetKey,options={}){
+  const el=qs(elId); if(!el) return; el.innerHTML="";
+  const overlayList=Array.isArray(options.overlay)?options.overlay:[];
+  const overlayMap=new Map(overlayList.map(item=>[String(item?.label??''), item]));
+  const formatPercent=v=>{
+    if(v===undefined||v===null||v==='') return '';
+    const num=Number(v);
+    if(Number.isFinite(num)) return `${num.toFixed(2)}%`;
+    const text=String(v);
+    return text.includes('%')?text:`${text}%`;
+  };
+  (arr||[]).forEach(it=>{
+    if(!it) return;
+    const label=String(it.label??'未命名');
+    const btn=document.createElement('button'); btn.className='chip text-sm';
+    const primaryCount = Number(it.count??0);
+    const primaryPercent = formatPercent(it.percent);
+    const overlayItem=overlayMap.get(label);
+    const primaryPrefix = options.primaryLabel?`${options.primaryLabel}：`:'';
+    const overlayPrefix = options.overlayLabel?`${options.overlayLabel}：`:'';
+    const primaryParts=[`${primaryPrefix}${primaryCount}`];
+    if(primaryPercent) primaryParts.push(primaryPercent);
+    const displayParts=[primaryParts.join(' | ')];
+    if(overlayItem){
+      const overlayCount=Number(overlayItem.count??0);
+      const overlayPercent=formatPercent(overlayItem.percent);
+      const overlayParts=[`${overlayPrefix}${overlayCount}`];
+      if(overlayPercent) overlayParts.push(overlayPercent);
+      displayParts.push(overlayParts.join(' | '));
+    }
+    btn.textContent=`${label}（${displayParts.join(' · ')}）`;
+    btn.onclick=()=>quickFilter(targetKey,label);
+    el.appendChild(btn);
   });
 }
-function drawBar(canvasId,arr,key){
+function drawBar(canvasId,arr,key,options={}){
   const canvas=qs(canvasId); if(!canvas) return;
   if(typeof Chart==='undefined'){ return; }
-  const labels=(arr||[]).map(x=>x.label), counts=(arr||[]).map(x=>x.count), ctx=canvas.getContext('2d');
-  const cfg={type:'bar', data:{labels, datasets:[{label:'Count', data:counts}]}, options:{responsive:true, plugins:{legend:{display:false}}, scales:{x:{ticks:{autoSkip:false}}, y:{beginAtZero:true}}}};
-  if(BAR_CHARTS[key]){ try{ BAR_CHARTS[key].destroy(); }catch(e){} }
-  BAR_CHARTS[key]=new Chart(ctx,cfg);
+  const overlayList=Array.isArray(options.overlay)?options.overlay:[];
+  const primaryList=Array.isArray(arr)?arr:[];
+  const entryMap=new Map();
+  primaryList.forEach((item,idx)=>{
+    const label=String(item?.label??`未命名${idx+1}`);
+    if(!entryMap.has(label)) entryMap.set(label,{label,order:idx});
+    const entry=entryMap.get(label); entry.primary=item; if(entry.order===undefined) entry.order=idx;
+  });
+  const baseOrder=primaryList.length;
+  overlayList.forEach((item,idx)=>{
+    const label=String(item?.label??`未命名${idx+1}`);
+    if(!entryMap.has(label)) entryMap.set(label,{label,order:baseOrder+idx});
+    const entry=entryMap.get(label); entry.overlay=item;
+  });
+  const entries=Array.from(entryMap.values()).sort((a,b)=>{
+    const ao=Number.isFinite(a.order)?a.order:Number.MAX_SAFE_INTEGER;
+    const bo=Number.isFinite(b.order)?b.order:Number.MAX_SAFE_INTEGER;
+    return ao-bo;
+  });
+  const labels=entries.map(en=>en.label);
+  const hasOverlay=overlayList.length>0;
+  const overlayColor=options.overlayColor||'rgb(37,99,235)';
+  const overlayBackground=options.overlayBackgroundColor||'rgba(37,99,235,0.45)';
+  const primaryColor=options.primaryColor||'rgb(37,99,235)';
+  const primaryBackground=options.primaryBackgroundColor||primaryColor;
+  const datasets=[];
+  if(hasOverlay){
+    datasets.push({
+      label: options.overlayLabel||'原始分类',
+      data: entries.map(en=>Number(en.overlay?.count??0)),
+      backgroundColor: overlayBackground,
+      borderColor: overlayColor,
+      borderWidth: 1,
+      maxBarThickness: 46
+    });
+  }
+  datasets.push({
+    label: options.primaryLabel||'数量',
+    data: entries.map(en=>Number(en.primary?.count??0)),
+    backgroundColor: primaryBackground,
+    borderColor: primaryColor,
+    borderWidth: 1,
+    maxBarThickness: 46
+  });
+  const cfg={
+    type:'bar',
+    data:{labels, datasets},
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{
+        legend:{display:hasOverlay, labels:{usePointStyle:true}},
+        tooltip:{mode:'index', intersect:false}
+      },
+      scales:{
+        x:{ticks:{autoSkip:false, maxRotation:30, minRotation:0}, grid:{display:false}},
+        y:{beginAtZero:true, ticks:{precision:0}}
+      }
+    }
+  };
+  if(BAR_CHARTS[key]){
+    BAR_CHARTS[key].data.labels=labels;
+    BAR_CHARTS[key].data.datasets=datasets;
+    BAR_CHARTS[key].options=cfg.options;
+    BAR_CHARTS[key].update();
+  }else{
+    const ctx=canvas.getContext('2d');
+    BAR_CHARTS[key]=new Chart(ctx,cfg);
+  }
 }
 async function refreshStats(){
   if(!SESSION_ID) return;
@@ -953,12 +1047,12 @@ async function refreshStats(){
   const d=await r.json();
   renderChips("chips_topic_orig", d.topic_orig, "topic_orig");
   renderChips("chips_field_orig", d.field_orig, "field_orig");
-  renderChips("chips_topic_adj", d.topic_adj, "topic_adj");
-  renderChips("chips_field_adj", d.field_adj, "field_adj");
-  drawBar("chart_topic_orig", d.topic_orig, "chart_topic_orig");
-  drawBar("chart_field_orig", d.field_orig, "chart_field_orig");
-  drawBar("chart_topic_adj", d.topic_adj, "chart_topic_adj");
-  drawBar("chart_field_adj", d.field_adj, "chart_field_adj");
+  renderChips("chips_topic_adj", d.topic_adj, "topic_adj", { overlay:d.topic_orig, primaryLabel:'调整后', overlayLabel:'原始' });
+  renderChips("chips_field_adj", d.field_adj, "field_adj", { overlay:d.field_orig, primaryLabel:'调整后', overlayLabel:'原始' });
+  drawBar("chart_topic_orig", d.topic_orig, "chart_topic_orig", { primaryLabel:'原始分类', primaryColor:'rgb(37,99,235)', primaryBackgroundColor:'rgba(37,99,235,0.85)' });
+  drawBar("chart_field_orig", d.field_orig, "chart_field_orig", { primaryLabel:'原始分类', primaryColor:'rgb(37,99,235)', primaryBackgroundColor:'rgba(37,99,235,0.85)' });
+  drawBar("chart_topic_adj", d.topic_adj, "chart_topic_adj", { overlay:d.topic_orig, primaryLabel:'调整后', overlayLabel:'原始', primaryColor:'rgb(239,68,68)', primaryBackgroundColor:'rgba(239,68,68,0.85)', overlayColor:'rgb(37,99,235)', overlayBackgroundColor:'rgba(37,99,235,0.45)' });
+  drawBar("chart_field_adj", d.field_adj, "chart_field_adj", { overlay:d.field_orig, primaryLabel:'调整后', overlayLabel:'原始', primaryColor:'rgb(239,68,68)', primaryBackgroundColor:'rgba(239,68,68,0.85)', overlayColor:'rgb(37,99,235)', overlayBackgroundColor:'rgba(37,99,235,0.45)' });
   qs('total_msg').textContent=`行数：${d.total}`;
 
   const collectLabels=arr=>Array.isArray(arr)?arr.map(x=>x.label).filter(Boolean):[];
