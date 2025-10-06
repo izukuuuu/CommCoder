@@ -504,6 +504,7 @@ const PAGER = { page:1, size:50, total:0, pages:1 };
 let LAST_EXPORT_URL=""; // 可选下载地址
 const BAR_CHARTS={};
 let RANK_VIS_EXPANDED=false;
+const RANK_VIS_HEIGHT=460;
 let AUTO_SAVE_TIMER=null;
 let AUTO_SAVE_ENABLED=false;
 let AUTO_SAVE_MINUTES=5;
@@ -1068,6 +1069,7 @@ function clearScatterPlot(message){
   const plotEl=qs('rank_vis_plot');
   if(plotEl && window.Plotly){ try{ Plotly.purge(plotEl); }catch(e){} }
   if(plotEl) plotEl.innerHTML="";
+  if(plotEl) plotEl.style.height='';
   const msg=qs('rank_vis_msg'); if(msg) msg.textContent=message||'等待计算后展示。';
 }
 
@@ -1106,6 +1108,14 @@ function setRankVisExpanded(expanded){
   if(btn){
     btn.textContent=RANK_VIS_EXPANDED?"收起可视化":"展开可视化";
     btn.setAttribute('aria-expanded', RANK_VIS_EXPANDED?"true":"false");
+  }
+  if(RANK_VIS_EXPANDED && window.Plotly){
+    const plotEl=qs('rank_vis_plot');
+    if(plotEl){
+      requestAnimationFrame(()=>{
+        try{ Plotly.Plots.resize(plotEl); }catch(e){}
+      });
+    }
   }
 }
 
@@ -1173,11 +1183,19 @@ function renderScatterPlot(data){
   }
   const layout={
     margin:{l:40,r:10,t:30,b:40},
+    height:RANK_VIS_HEIGHT,
     xaxis:{title:'PC1', zeroline:false},
     yaxis:{title:'PC2', zeroline:false},
     legend:{orientation:'h'}
   };
-  Plotly.newPlot(plotEl, traces, layout, {responsive:true, displaylogo:false});
+  Plotly.newPlot(plotEl, traces, layout, {responsive:true, displaylogo:false}).then(()=>{
+    try{ plotEl.style.height=RANK_VIS_HEIGHT+'px'; }catch(e){}
+    if(RANK_VIS_EXPANDED){
+      requestAnimationFrame(()=>{
+        try{ Plotly.Plots.resize(plotEl); }catch(e){}
+      });
+    }
+  });
   const msg=qs('rank_vis_msg');
   if(msg){
     const outCount=outliers.filter(Boolean).length;
