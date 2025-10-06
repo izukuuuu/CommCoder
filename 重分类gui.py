@@ -884,50 +884,96 @@ def healthz():
     return PlainTextResponse("ok")
 
 # ================== 可选：智能建议占位（防止前端报错） ==================
-def _format_llm_prompt(row: pd.Series) -> List[Dict[str, str]]:
-    title = str(row.get("Article Title", "") or "").strip()
-    abstract = str(row.get("Abstract", "") or "").strip()
-    structured = str(row.get("结构化总结", "") or "").strip()
+def _format_topic_prompt(row: pd.Series, retry_hint: Optional[str] = None) -> List[Dict[str, str]]:
+    """生成用于请求议题分类的提示词。"""
+    title = safe_get(row, "Article Title")
+    abstract = safe_get(row, "Abstract")
+    structured = safe_get(row, "结构化总结")
     content_lines = [
-        "请你扮演一个学术文本分类助手，负责根据用户提供的文献信息完成分类任务。",
-        "请严格遵循以下规则：",
-        "1. 从给定的【研究主题（议题）】候选列表中只选择一个最贴切的类别，绝不能创造或选择列表之外的选项。",
-        "2. 从给定的【研究领域】候选列表中只选择一个最贴切的类别，绝不能创造或选择列表之外的选项。",
-        "3. 如果文本无法明确判断，请分别选择“其他议题”和“其他领域”。",
-        "4. 在需要时，请基于文本生成一个150字以内的中文结构化总结；若原文已提供合适总结，可在此基础上适当润色。",
-        "5. 输出必须是 JSON 格式，不包含额外的解释或自然语言。",
-        "输出 JSON 的格式如下（不要包含注释）：",
+        "请你扮演中文学术分类助手。根据题目、摘要与结构化总结判断研究主题（议题）分类，并在需要时补全结构化总结。",
+        "必须从候选列表中严格选择一个研究主题（议题），不要创造或输出列表外内容。",
+        "输出 JSON，字段定义如下：",
         "{",
-        "  \"topic_suggestion\": \"从列表中选择的议题名称\",",
-        "  \"field_suggestion\": \"从列表中选择的领域名称\",",
-        "  \"structured_summary\": \"150字以内的中文结构化总结\"",
+        "  \"topic_suggestion\": \"候选列表中的研究主题（议题）名称\",",
+        "  \"structured_summary\": \"150字以内的中文结构化总结，如已有可适当润色后返回\"",
         "}",
-        "【研究主题（议题）】候选列表：" + "、".join(TOPIC_LIST),
-        "【研究领域】候选列表：" + "、".join(FIELD_LIST),
-        "请根据以下文献内容给出判断：",
-        f"标题：{title or '（无）'}",
-        f"摘要：{abstract or '（无）'}",
-        f"结构化总结：{structured or '（无）'}",
+        "研究主题（议题）候选列表：" + "、".join(TOPIC_LIST),
     ]
+    if retry_hint:
+        content_lines.append(f"上一次回答未通过校验，原因：{retry_hint}。请务必从候选列表中选择正确的主题，并严格返回 JSON。")
+    content_lines.extend(
+        [
+            "请根据以下文献内容完成任务：",
+            f"标题：{title or '（无）'}",
+            f"摘要：{abstract or '（无）'}",
+            f"结构化总结：{structured or '（无）'}",
+        ]
+    )
     user_prompt = "\n".join(content_lines)
-    messages = [
+    return [
         {
             "role": "system",
-            "content": "You are a helpful assistant that returns strict JSON responses for academic text classification.",
+            "content": "You are a helpful assistant that returns strict JSON responses for academic topic classification.",
         },
         {"role": "user", "content": user_prompt},
     ]
-    return messages
 
 
-def _llm_autosuggest(row: pd.Series) -> Dict[str, Any]:
+def _format_field_prompt(
+    row: pd.Series,
+    structured_summary: str,
+    retry_hint: Optional[str] = None,
+) -> List[Dict[str, str]]:
+    """生成用于请求领域分类的提示词。"""
+    title = safe_get(row, "Article Title")
+    abstract = safe_get(row, "Abstract")
+    structured = structured_summary or safe_get(row, "结构化总结")
+    content_lines = [
+        "请你扮演中文学术分类助手。根据题目、摘要与结构化总结判断研究领域分类。",
+        "必须从候选列表中严格选择一个研究领域，不要创造或输出列表外内容。",
+        "输出 JSON，字段定义如下：",
+        "{",
+        "  \"field_suggestion\": \"候选列表中的研究领域名称\"",
+        "}",
+        "研究领域候选列表：" + "、".join(FIELD_LIST),
+    ]
+    if retry_hint:
+        content_lines.append(f"上一次回答未通过校验，原因：{retry_hint}。请重新从候选列表中选择正确的领域，并严格返回 JSON。")
+    content_lines.extend(
+        [
+            "请根据以下文献内容完成任务：",
+            f"标题：{title or '（无）'}",
+            f"摘要：{abstract or '（无）'}",
+            f"结构化总结：{structured or '（无）'}",
+        ]
+    )
+    user_prompt = "\n".join(content_lines)
+    return [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant that returns strict JSON responses for academic field classification.",
+        },
+        {"role": "user", "content": user_prompt},
+    ]
+
+
+def _prepare_llm_config() -> Tuple[str, str, str]:
     base_url = (os.getenv("OPENAI_BASE_URL") or "").strip()
     api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     model = (os.getenv("OPENAI_MODEL") or "").strip()
     if not (base_url and api_key and model):
-        raise RuntimeError("未配置 LLM 访问参数，请在环境变量或 .env 文件中设置 OPENAI_BASE_URL / OPENAI_API_KEY / OPENAI_MODEL。")
+        raise RuntimeError(
+            "未配置 LLM 访问参数，请在环境变量或 .env 文件中设置 OPENAI_BASE_URL / OPENAI_API_KEY / OPENAI_MODEL。"
+        )
+    return base_url, api_key, model
 
-    messages = _format_llm_prompt(row)
+
+def _invoke_llm(
+    messages: List[Dict[str, str]],
+    base_url: str,
+    api_key: str,
+    model: str,
+) -> str:
     url = base_url.rstrip("/") + "/chat/completions"
     payload = {
         "model": model,
@@ -939,42 +985,94 @@ def _llm_autosuggest(row: pd.Series) -> Dict[str, Any]:
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-
     try:
         resp = requests.post(url, headers=headers, data=json.dumps(payload).encode("utf-8"), timeout=60)
     except Exception as e:
         raise RuntimeError(f"请求 LLM 失败：{e}") from e
-
     if resp.status_code >= 400:
         raise RuntimeError(f"LLM 接口返回错误：{resp.status_code} {resp.text}")
-
     try:
         data = resp.json()
     except Exception as e:
         raise RuntimeError(f"解析 LLM 返回值失败：{e}") from e
-
     try:
         content = data["choices"][0]["message"]["content"].strip()
     except Exception as e:
         raise RuntimeError(f"LLM 返回格式不符合预期：{data}") from e
+    return content
 
+
+def _invoke_llm_json(
+    messages: List[Dict[str, str]],
+    base_url: str,
+    api_key: str,
+    model: str,
+) -> Dict[str, Any]:
+    content = _invoke_llm(messages, base_url, api_key, model)
     try:
-        parsed = json.loads(content)
+        return json.loads(content)
     except json.JSONDecodeError as e:
-        raise RuntimeError(f"LLM 返回的内容不是合法 JSON：{content}") from e
+        raise ValueError(f"LLM 返回的内容不是合法 JSON：{content}") from e
 
-    topic = parsed.get("topic_suggestion", "")
-    field = parsed.get("field_suggestion", "")
-    summary = parsed.get("structured_summary", "")
-    if topic not in TOPIC_LIST:
-        raise RuntimeError(f"LLM 议题分类不在候选列表中：{topic}")
-    if field not in FIELD_LIST:
-        raise RuntimeError(f"LLM 领域分类不在候选列表中：{field}")
+
+def _llm_autosuggest(row: pd.Series) -> Dict[str, Any]:
+    base_url, api_key, model = _prepare_llm_config()
+
+    topic_retry_hint: Optional[str] = None
+    topic_last_error: Optional[str] = None
+    topic_suggestion: Optional[str] = None
+    structured_summary: str = safe_get(row, "结构化总结")
+    for _ in range(2):
+        try:
+            topic_resp = _invoke_llm_json(_format_topic_prompt(row, topic_retry_hint), base_url, api_key, model)
+        except ValueError as ve:
+            topic_last_error = str(ve)
+            topic_retry_hint = str(ve)
+            continue
+        except RuntimeError:
+            raise
+        topic_candidate = str(topic_resp.get("topic_suggestion", "")).strip()
+        summary_candidate = str(topic_resp.get("structured_summary", "")).strip()
+        if summary_candidate:
+            structured_summary = summary_candidate
+        if topic_candidate in TOPIC_LIST:
+            topic_suggestion = topic_candidate
+            break
+        topic_last_error = f"LLM 议题分类不在候选列表中：{topic_candidate or '（空）'}"
+        topic_retry_hint = f"返回的议题“{topic_candidate or '（空）'}”不在候选列表中。"
+    if not topic_suggestion:
+        raise RuntimeError(topic_last_error or "LLM 未能返回有效的议题分类")
+
+    field_retry_hint: Optional[str] = None
+    field_last_error: Optional[str] = None
+    field_suggestion: Optional[str] = None
+    for _ in range(2):
+        try:
+            field_resp = _invoke_llm_json(
+                _format_field_prompt(row, structured_summary, field_retry_hint),
+                base_url,
+                api_key,
+                model,
+            )
+        except ValueError as ve:
+            field_last_error = str(ve)
+            field_retry_hint = str(ve)
+            continue
+        except RuntimeError:
+            raise
+        field_candidate = str(field_resp.get("field_suggestion", "")).strip()
+        if field_candidate in FIELD_LIST:
+            field_suggestion = field_candidate
+            break
+        field_last_error = f"LLM 领域分类不在候选列表中：{field_candidate or '（空）'}"
+        field_retry_hint = f"返回的领域“{field_candidate or '（空）'}”不在候选列表中。"
+    if not field_suggestion:
+        raise RuntimeError(field_last_error or "LLM 未能返回有效的领域分类")
 
     return {
-        "topic_suggestion": topic,
-        "field_suggestion": field,
-        "structured_summary": summary or row.get("结构化总结", "") or "",
+        "topic_suggestion": topic_suggestion,
+        "field_suggestion": field_suggestion,
+        "structured_summary": structured_summary or safe_get(row, "结构化总结"),
     }
 
 

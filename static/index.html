@@ -430,6 +430,7 @@
     </div>
   </div>
 </div>
+<div id="toast_stack" class="fixed top-6 right-6 z-[1200] flex flex-col gap-3 max-w-sm pointer-events-none"></div>
 <dialog id="dlg_sessions" class="rounded-xl p-0 w-[680px] max-w-[95vw]">
   <div class="p-4 border-b flex items-center justify-between">
     <h3 class="font-semibold">载入会话</h3>
@@ -459,6 +460,46 @@ const qs = id=>document.getElementById(id);
 const escapeHtml = s=>String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
 const escapeAttr = s=>escapeHtml(s).replaceAll('"','&quot;');
 const numberFormatter = new Intl.NumberFormat('zh-CN');
+const TOAST_THEMES = {
+  info: "bg-slate-900/90 text-white",
+  success: "bg-emerald-600 text-white",
+  error: "bg-rose-600 text-white",
+  warning: "bg-amber-500 text-slate-900",
+};
+
+function getToastContainer(){
+  return document.getElementById('toast_stack');
+}
+
+function showToast(message, type='info', options={}){
+  const container = getToastContainer();
+  if(!container) return;
+  const theme = TOAST_THEMES[type] || TOAST_THEMES.info;
+  const toast = document.createElement('div');
+  toast.className = `pointer-events-auto rounded-2xl shadow-lg shadow-slate-900/20 px-4 py-3 text-sm leading-relaxed transition duration-300 ease-out transform translate-y-2 opacity-0 ${theme}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+  requestAnimationFrame(()=>{
+    toast.classList.remove('opacity-0','translate-y-2');
+  });
+  const duration = typeof options.duration === 'number' && options.duration>0 ? options.duration : 5000;
+  setTimeout(()=>{
+    toast.classList.add('opacity-0','translate-y-2');
+    setTimeout(()=>{ toast.remove(); }, 300);
+  }, duration);
+}
+
+window.showToast = showToast;
+window.alert = (msg)=>{
+  const text = String(msg ?? '');
+  let type = 'info';
+  if(text.includes('失败') || text.includes('错误') || text.includes('异常')){
+    type = 'error';
+  }else if(text.includes('已') || text.includes('成功') || text.includes('完成')){
+    type = 'success';
+  }
+  showToast(text, type);
+};
 const setBadge = ()=>{
   const badge = qs('session_badge');
   if(badge){ badge.textContent = "Session: " + (SESSION_ID||"—"); }
@@ -1028,19 +1069,51 @@ async function saveRow(index, btn){
 async function suggestRow(index, btn){
   const cfg=JSON.parse(localStorage.getItem("llm_cfg")||"{}"); // 有则用；后端已做兜底
   btn.disabled=true; btn.textContent="建议中...";
-  const r=await fetch("/autosuggest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID,index,base_url:cfg.base_url,api_key:cfg.api_key,model:cfg.model,temperature:cfg.temp??0.2})});
-  if(!r.ok){ alert("建议失败："+await r.text()); btn.disabled=false; btn.textContent="智能建议"; return; }
-  const data=await r.json();
-  const rows=document.querySelectorAll("#table_zone tbody tr");
-  rows.forEach(row=>{
-    const n=parseInt(row.children[1].innerText.trim())-1;
-    if(n===index){
-      row.querySelector(".sum_input").value=data.structured_summary||"";
-      if(ACTIVE_COL==="topic"){ const el=row.querySelector(".topic_sel"); if(el) el.value=data.topic_suggestion||el.value; }
-      else{ const el=row.querySelector(".field_sel"); if(el) el.value=data.field_suggestion||el.value; }
+  let success=false;
+  try{
+    const resp=await fetch("/autosuggest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({session_id:SESSION_ID,index,base_url:cfg.base_url,api_key:cfg.api_key,model:cfg.model,temperature:cfg.temp??0.2})});
+    if(!resp.ok){
+      const msg=(await resp.text())||resp.statusText||"未知错误";
+      throw new Error(`建议失败：${msg}`);
     }
-  });
-  btn.textContent="完成"; setTimeout(()=>{btn.disabled=false; btn.textContent="智能建议";}, 600); refreshStats();
+    let data;
+    try{
+      data=await resp.json();
+    }catch(err){
+      throw new Error("建议失败：返回数据解析失败");
+    }
+    if(!data || typeof data!=='object'){
+      throw new Error("建议失败：返回数据格式不正确");
+    }
+    const rows=document.querySelectorAll("#table_zone tbody tr");
+    rows.forEach(row=>{
+      const n=parseInt(row.children[1].innerText.trim())-1;
+      if(n===index){
+        const sumEl=row.querySelector(".sum_input");
+        if(sumEl) sumEl.value=data.structured_summary||"";
+        if(ACTIVE_COL==="topic"){
+          const el=row.querySelector(".topic_sel");
+          if(el && data.topic_suggestion) el.value=data.topic_suggestion;
+        }else{
+          const el=row.querySelector(".field_sel");
+          if(el && data.field_suggestion) el.value=data.field_suggestion;
+        }
+      }
+    });
+    success=true;
+    btn.textContent="完成";
+    showToast("智能建议已更新", 'success');
+    setTimeout(()=>{btn.disabled=false; btn.textContent="智能建议";}, 600);
+    refreshStats();
+  }catch(e){
+    const msg=e?.message||e;
+    showToast(msg, 'error');
+  }finally{
+    if(!success){
+      btn.disabled=false;
+      btn.textContent="智能建议";
+    }
+  }
 }
 
 function setAutoSaveMsg(msg){
