@@ -2102,6 +2102,13 @@ function bindEvents(){
     PAGER.page=1;
     loadPage();
   };
+  const filterTargetSel=qs('filter_target');
+  if(filterTargetSel){
+    filterTargetSel.addEventListener('change', e=>{
+      CURRENT_FILTER={ target:e.target.value, value:"" };
+      populateFilterOptions();
+    });
+  }
   qs('btn_clear_filter').onclick=()=>{
     CURRENT_FILTER={target:"",value:""};
     CURRENT_SORT={by:"",order:""};
