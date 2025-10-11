@@ -236,7 +236,7 @@
               </select>
               <span id="op_col_hint" class="text-xs text-gray-500">（仅显示并可编辑：研究主题（调整））</span>
 
-              <span class="ml-6 text-sm">筛选列：</span>
+              <span class="md:ml-6 text-sm">筛选列：</span>
               <select id="filter_target" class="border rounded px-2 py-1">
                 <option value="topic_orig">研究主题（原）</option>
                 <option value="field_orig">研究领域（原）</option>
@@ -247,7 +247,22 @@
               <button id="btn_apply_filter" class="btn btn-sm bg-slate-700 text-white hover:bg-slate-600">应用筛选</button>
               <button id="btn_clear_filter" class="btn btn-sm bg-slate-200 text-slate-700 hover:bg-slate-300">清除筛选</button>
 
-              <span class="ml-6 text-sm">目标类别：</span>
+              <div class="flex flex-wrap items-center gap-2 basis-full md:basis-auto md:ml-6">
+                <span class="text-sm">关键词搜索：</span>
+                <label class="inline-flex items-center gap-1 text-sm">
+                  <input type="radio" name="search_scope" value="title" checked>
+                  <span>Article Title</span>
+                </label>
+                <label class="inline-flex items-center gap-1 text-sm">
+                  <input type="radio" name="search_scope" value="summary">
+                  <span>结构化总结</span>
+                </label>
+                <input id="search_keyword" class="border rounded px-2 py-1 w-64" type="text" placeholder="输入提示词，空格分隔多个关键词">
+                <button id="btn_apply_search" class="btn btn-sm bg-slate-700 text-white hover:bg-slate-600">应用搜索</button>
+                <button id="btn_clear_search" class="btn btn-sm bg-slate-200 text-slate-700 hover:bg-slate-300">清除搜索</button>
+              </div>
+
+              <span class="md:ml-6 text-sm">目标类别：</span>
               <select id="bulk_target" class="border rounded px-2 py-1"></select>
               <button id="btn_bulk_selected" class="btn btn-sm bg-amber-600 text-white hover:bg-amber-500">将本页勾选 → 目标类别</button>
               <button id="btn_bulk_filtered" class="btn btn-sm bg-amber-700 text-white hover:bg-amber-600">将当前筛选全部 → 目标类别</button>
@@ -497,7 +512,8 @@
 /* ===================== 全局状态 ===================== */
 let TOPIC_LIST=[], FIELD_LIST=[], ADJ_TOPIC_COL="", ADJ_FIELD_COL="";
 let TOPIC_BLACKLIST=[], FIELD_BLACKLIST=[];
-let SESSION_ID=""; let SESSION_META=null; let CURRENT_FILTER={target:"",value:""}; let CURRENT_SORT={by:"",order:""};
+const SEARCH_SCOPE_DEFAULT='title';
+let SESSION_ID=""; let SESSION_META=null; let CURRENT_FILTER={target:"",value:""}; let CURRENT_SORT={by:"",order:""}; let CURRENT_SEARCH={scope:SEARCH_SCOPE_DEFAULT, keyword:""};
 let ACTIVE_COL="topic"; // "topic"|"field"
 const PAGER = { page:1, size:50, total:0, pages:1 };
 let LAST_EXPORT_URL=""; // 可选下载地址
@@ -1028,6 +1044,8 @@ function uploadFile(){
         await refreshSessionMeta();
         await refreshStats();
         populateFilterOptions();
+        CURRENT_SEARCH={scope:SEARCH_SCOPE_DEFAULT, keyword:""};
+        syncSearchControls();
         CURRENT_FILTER={target:"",value:""};
         CURRENT_SORT={by:"",order:""};
         setSortAvailability(false);
@@ -1577,9 +1595,34 @@ function populateBulkTarget(){
   const list=(ACTIVE_COL==="topic")?TOPIC_LIST:FIELD_LIST;
   const bulk=qs('bulk_target'); bulk.innerHTML=""; list.forEach(o=>{ const op=document.createElement('option'); op.value=o; op.textContent=o; bulk.appendChild(op); });
 }
+function syncSearchControls(){
+  const scope=CURRENT_SEARCH.scope||SEARCH_SCOPE_DEFAULT;
+  document.querySelectorAll('input[name="search_scope"]').forEach(radio=>{
+    if(radio.value===scope){ radio.checked=true; }
+    else{ radio.checked=false; }
+  });
+  const input=qs('search_keyword');
+  if(input){ input.value=CURRENT_SEARCH.keyword||""; }
+}
 function syncFilterControls(){
   const tSel=qs('filter_target'); if(CURRENT_FILTER.target) tSel.value=CURRENT_FILTER.target;
   populateFilterOptions(); setTimeout(()=>{ const vSel=qs('filter_value'); if(CURRENT_FILTER.value){ for(let i=0;i<vSel.options.length;i++){ if(vSel.options[i].value===CURRENT_FILTER.value){ vSel.selectedIndex=i; break; } } } },0);
+}
+function applySearchKeyword(){
+  const input=qs('search_keyword');
+  if(!input) return;
+  const rawKeyword=(input.value||"").trim();
+  const radio=document.querySelector('input[name="search_scope"]:checked');
+  const scope=radio?.value||SEARCH_SCOPE_DEFAULT;
+  CURRENT_SEARCH={ scope, keyword:rawKeyword };
+  PAGER.page=1;
+  loadPage();
+}
+function clearSearchKeyword(){
+  CURRENT_SEARCH={ scope:SEARCH_SCOPE_DEFAULT, keyword:"" };
+  syncSearchControls();
+  PAGER.page=1;
+  loadPage();
 }
 
 /* ===================== 只编辑哪一列 ===================== */
@@ -1665,6 +1708,7 @@ async function loadPage(){
   }
   const p=new URLSearchParams({session_id:SESSION_ID, page:PAGER.page, page_size:PAGER.size});
   if(CURRENT_FILTER.target&&CURRENT_FILTER.value){ p.set("filter_target",CURRENT_FILTER.target); p.set("filter_value",CURRENT_FILTER.value); }
+  if(CURRENT_SEARCH.keyword){ p.set("search_scope", CURRENT_SEARCH.scope||SEARCH_SCOPE_DEFAULT); p.set("search_keyword", CURRENT_SEARCH.keyword); }
   if(CURRENT_SORT.by==="rank"){ p.set("sort_by","rank"); p.set("sort_order", CURRENT_SORT.order||"asc"); p.set("only_outliers", qs('rank_only_outliers')?.checked?"1":"0"); }
   qs('table_zone').innerHTML='<div class="p-3 text-sm text-gray-500">加载中…</div>';
   const r=await fetch(`/data?${p.toString()}`,{cache:"no-store"}); if(!r.ok){ qs('table_zone').innerHTML=`<div class="p-3 text-sm text-red-600">加载失败：${await r.text()}</div>`; return; }
@@ -2043,6 +2087,8 @@ async function loadSession(sid){
   renderSessionMeta(j.meta||null);
   await refreshStats();
   populateFilterOptions();
+  CURRENT_SEARCH={scope:SEARCH_SCOPE_DEFAULT, keyword:""};
+  syncSearchControls();
   CURRENT_FILTER={target:"",value:""};
   CURRENT_SORT={by:"",order:""};
   setSortAvailability(false);
@@ -2102,6 +2148,22 @@ function bindEvents(){
     PAGER.page=1;
     loadPage();
   };
+  qs('btn_apply_search').onclick=applySearchKeyword;
+  qs('btn_clear_search').onclick=clearSearchKeyword;
+  document.querySelectorAll('input[name="search_scope"]').forEach(radio=>{
+    radio.addEventListener('change', e=>{
+      CURRENT_SEARCH.scope = e.target?.value || SEARCH_SCOPE_DEFAULT;
+    });
+  });
+  const searchInput=qs('search_keyword');
+  if(searchInput){
+    searchInput.addEventListener('keydown', e=>{
+      if(e.key==='Enter'){
+        e.preventDefault();
+        applySearchKeyword();
+      }
+    });
+  }
   const filterTargetSel=qs('filter_target');
   if(filterTargetSel){
     filterTargetSel.addEventListener('change', e=>{
@@ -2164,6 +2226,7 @@ function bindEvents(){
     setActiveCol('topic'); // 默认编辑“主题（调整）”
     PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
     populateFilterOptions();
+    syncSearchControls();
     clearScatterPlot('等待计算后展示。');
   }catch(e){ alert("前端初始化失败："+e.message); console.error(e); }
 })();
