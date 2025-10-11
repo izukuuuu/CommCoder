@@ -375,6 +375,8 @@ def get_data(
     page_size: int = Query(50, ge=1, le=5000),
     filter_target: Optional[str] = Query(None),
     filter_value: Optional[str] = Query(None),
+    search_scope: Optional[str] = Query(None),
+    search_keyword: Optional[str] = Query(None),
     sort_by: Optional[str] = Query(None),        # "rank"
     sort_order: Optional[str] = Query("asc"),    # "asc"|"desc"
     only_outliers: Optional[int] = Query(0)      # 1|0
@@ -397,6 +399,24 @@ def get_data(
         elif filter_target=="field_adj":  m = df[ADJUST_FIELD_COL].astype(str)   == filter_value
         else: m = pd.Series([True]*df.shape[0], index=df.index)
         dfv = df[m]
+
+    # 关键词搜索
+    keyword = (search_keyword or "").strip()
+    if keyword:
+        scope = (search_scope or "title").lower()
+        if scope == "summary":
+            column = "结构化总结"
+        else:
+            column = "Article Title"
+        if column in dfv.columns:
+            series = dfv[column].fillna("").astype(str)
+            mask = pd.Series(True, index=dfv.index)
+            parts = [p for p in re.split(r"\s+", keyword) if p]
+            if not parts:
+                parts = [keyword]
+            for part in parts:
+                mask &= series.str.contains(part, case=False, na=False, regex=False)
+            dfv = dfv[mask]
 
     # 只看离群
     if only_outliers and RANK_OUTLIER_COL in dfv.columns:
