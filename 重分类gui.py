@@ -349,8 +349,168 @@ def upload(file: UploadFile = File(...)):
     except Exception as e:
         return PlainTextResponse(f"读取失败：{e}", status_code=400)
 
+def _timeline(df: pd.DataFrame, bin_years: int) -> Dict[str, Any]:
+    try:
+        bin_size = int(bin_years)
+    except Exception:
+        bin_size = 5
+    if bin_size < 1:
+        bin_size = 1
+
+    if "Publication Year" not in df.columns:
+        return {
+            "bin_size": bin_size,
+            "total": 0,
+            "min_year": None,
+            "max_year": None,
+            "bins": [],
+            "stack_topic": {"series": []},
+            "stack_field": {"series": []},
+        }
+
+    timeline_df = df[["Publication Year", ADJUST_TOPIC_COL, ADJUST_FIELD_COL]].copy()
+    timeline_df["Publication Year"] = pd.to_numeric(timeline_df["Publication Year"], errors="coerce")
+    timeline_df = timeline_df.dropna(subset=["Publication Year"])
+    if timeline_df.empty:
+        return {
+            "bin_size": bin_size,
+            "total": 0,
+            "min_year": None,
+            "max_year": None,
+            "bins": [],
+            "stack_topic": {"series": []},
+            "stack_field": {"series": []},
+        }
+
+    timeline_df["Publication Year"] = timeline_df["Publication Year"].astype(int)
+    years = timeline_df["Publication Year"]
+    min_year = int(years.min())
+    max_year = int(years.max())
+    # 将区间对齐到 bin_size 的整数倍，便于展示
+    start_year = int(math.floor(min_year / bin_size) * bin_size)
+    end_year = int(math.ceil((max_year + 1) / bin_size) * bin_size - 1)
+
+    labels: List[str] = []
+    total = int(timeline_df.shape[0])
+
+    # 预先计算每行所属的时间区间，便于后续统计
+    def _assign_bin(year: int) -> Tuple[int, int]:
+        offset = year - start_year
+        if offset < 0:
+            bucket_index = 0
+        else:
+            bucket_index = offset // bin_size
+        bucket_start = start_year + bucket_index * bin_size
+        bucket_end = bucket_start + bin_size - 1
+        return bucket_start, bucket_end
+
+    bin_starts: List[int] = []
+    bin_ends: List[int] = []
+    for start in range(start_year, end_year + 1, bin_size):
+        end = start + bin_size - 1
+        labels.append(f"{start}-{end}")
+        bin_starts.append(start)
+        bin_ends.append(end)
+
+    # 将区间标签加入数据帧
+    start_series = []
+    end_series = []
+    label_series = []
+    for year in timeline_df["Publication Year"].tolist():
+        s, e = _assign_bin(int(year))
+        start_series.append(s)
+        end_series.append(e)
+        label_series.append(f"{s}-{e}")
+    timeline_df = timeline_df.assign(
+        bin_start=start_series,
+        bin_end=end_series,
+        bin_label=label_series,
+    )
+
+    count_by_bin = timeline_df.groupby("bin_label").size()
+    bins: List[Dict[str, Any]] = []
+    cumulative = 0
+    for idx, label in enumerate(labels):
+        start = bin_starts[idx]
+        end = bin_ends[idx]
+        count = int(count_by_bin.get(label, 0))
+        cumulative += count
+        percent = (count / total * 100.0) if total else 0.0
+        cumulative_percent = (cumulative / total * 100.0) if total else 0.0
+        bins.append({
+            "label": label,
+            "start": int(start),
+            "end": int(end),
+            "count": count,
+            "percent": round(percent, 4),
+            "cumulative_count": cumulative,
+            "cumulative_percent": round(min(cumulative_percent, 100.0), 4),
+        })
+
+    def _build_stack(column: str, other_label: str, empty_label: str) -> Dict[str, Any]:
+        cat_series = timeline_df[column].fillna("").astype(str).str.strip()
+        cat_series = cat_series.replace("", empty_label)
+        stack_df = timeline_df.assign(stack_category=cat_series)
+        totals = stack_df.groupby("stack_category").size().sort_values(ascending=False)
+        if totals.empty:
+            return {"series": []}
+
+        top_n = 6
+        top_labels = list(totals.head(top_n).index)
+        pivot = (
+            stack_df.pivot_table(
+                index="bin_label",
+                columns="stack_category",
+                values="Publication Year",
+                aggfunc="count",
+                fill_value=0,
+            )
+        )
+        pivot = pivot.reindex(labels, fill_value=0)
+
+        series: List[Dict[str, Any]] = []
+        for cat in top_labels:
+            counts = pivot[cat].tolist() if cat in pivot.columns else [0] * len(labels)
+            total_count = int(sum(counts))
+            if total_count <= 0:
+                continue
+            series.append({
+                "label": str(cat),
+                "counts": [int(v) for v in counts],
+                "total": total_count,
+            })
+
+        other_cols = [c for c in pivot.columns if c not in top_labels]
+        if other_cols:
+            other_counts = pivot[other_cols].sum(axis=1).tolist()
+            other_total = int(sum(other_counts))
+            if other_total > 0:
+                series.append({
+                    "label": other_label,
+                    "counts": [int(v) for v in other_counts],
+                    "total": other_total,
+                    "is_other": True,
+                })
+
+        return {
+            "series": series,
+            "category_total": int(totals.sum()),
+            "unique_categories": int(totals.shape[0]),
+        }
+
+    return {
+        "bin_size": bin_size,
+        "total": total,
+        "min_year": min_year,
+        "max_year": max_year,
+        "bins": bins,
+        "stack_topic": _build_stack(ADJUST_TOPIC_COL, "其他主题", "未分类"),
+        "stack_field": _build_stack(ADJUST_FIELD_COL, "其他领域", "未分类"),
+    }
+
+
 @app.get("/stats")
-def stats(session_id: str = Query(...)):
+def stats(session_id: str = Query(...), bin_years: int = Query(5, ge=1, le=50)):
     if session_id not in DATASTORE:
         # 尝试从磁盘加载
         try:
@@ -366,6 +526,7 @@ def stats(session_id: str = Query(...)):
         "field_orig": _counts(df["研究领域分类"]),
         "topic_adj": _counts(df[ADJUST_TOPIC_COL]),
         "field_adj": _counts(df[ADJUST_FIELD_COL]),
+        "timeline": _timeline(df, bin_years),
     })
 
 @app.get("/data")
