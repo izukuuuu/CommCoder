@@ -84,6 +84,14 @@ dialog::backdrop { background: rgba(0,0,0,.25); }
 .flow-horizontal{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:1.5rem;}
 .flow-step{padding:1.1rem 1.35rem;border-radius:1.15rem;background:rgba(15,23,42,0.45);border:1px solid rgba(148,163,184,0.35);box-shadow:0 18px 45px -32px rgba(15,23,42,0.75);font-size:0.95rem;font-weight:600;color:#f8fafc;line-height:1.4;text-align:center;display:flex;align-items:center;justify-content:center;min-height:3.2rem;}
 .flow-step-strong{background:linear-gradient(135deg,rgba(59,130,246,0.25) 0%,rgba(147,197,253,0.32) 100%);border-color:rgba(147,197,253,0.7);box-shadow:0 20px 55px -30px rgba(59,130,246,0.8);color:#e0f2fe;}
+.flow-step-stack{flex-direction:column;align-items:flex-start;justify-content:flex-start;text-align:left;gap:1.25rem;padding:1.35rem 1.6rem;}
+.flow-step-title{font-size:0.92rem;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#e0f2fe;opacity:0.85;}
+.flow-step-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1rem;width:100%;}
+.flow-step-list li{display:flex;gap:0.8rem;align-items:flex-start;}
+.flow-step-badge{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;border-radius:9999px;background:rgba(148,163,184,0.35);color:#f8fafc;font-size:0.85rem;font-weight:700;box-shadow:0 12px 28px -24px rgba(148,163,184,0.9);flex-shrink:0;}
+.flow-step-list li>div{display:flex;flex-direction:column;gap:0.2rem;}
+.flow-step-list-title{font-size:0.95rem;font-weight:700;color:#f8fafc;line-height:1.45;}
+.flow-step-list-desc{font-size:0.82rem;font-weight:500;color:rgba(226,232,240,0.78);line-height:1.55;}
 .flow-arrow{position:relative;width:3.5rem;height:0.32rem;border-radius:9999px;background:rgba(226,232,240,0.65);box-shadow:0 6px 12px -10px rgba(148,163,184,0.65);}
 .flow-arrow::after{content:"";position:absolute;right:-0.85rem;top:50%;transform:translateY(-50%);border-width:0.48rem 0 0.48rem 0.85rem;border-style:solid;border-color:transparent transparent transparent rgba(226,232,240,0.75);}
 .flow-branch{position:relative;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1.5rem;padding:1.75rem 1.5rem 2rem;border-radius:1.6rem;background:rgba(15,23,42,0.35);border:1px solid rgba(148,163,184,0.45);box-shadow:0 24px 55px -38px rgba(15,23,42,0.85);}
