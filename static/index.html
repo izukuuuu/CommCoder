@@ -82,44 +82,48 @@
           <div class="home-hero rounded-3xl overflow-hidden shadow">
             <div class="home-hero-flow">
               <div class="home-hero-intro">
-                <p class="home-hero-eyebrow">CommCoder Studio</p>
-                <h2 class="home-hero-title">编码协同流程总览</h2>
-                <p class="home-hero-subtitle">以下流程呈现从自动化产出的原始结果，到人工覆核与统计抽样验证的完整闭环。</p>
+                <p class="home-hero-eyebrow" data-i18n-key="hero.eyebrow">CommCoder Studio</p>
+                <h2 class="home-hero-title" data-i18n-key="hero.title">编码协同流程总览</h2>
+                <p class="home-hero-subtitle" data-i18n-key="hero.subtitle">以下流程呈现从自动化产出的原始结果，到人工覆核与统计抽样验证的完整闭环。</p>
+                <button id="lang_toggle" class="lang-toggle-btn" type="button" aria-label="切换为英文" title="切换为英文">
+                  <svg class="w-5 h-5" data-heroicon="globe-alt" aria-hidden="true"></svg>
+                  <span id="lang_toggle_label">English</span>
+                </button>
               </div>
-              <div class="flow-diagram" aria-label="编码流程图">
+              <div id="hero_flow_diagram" class="flow-diagram" aria-label="编码流程图">
                 <div class="flow-horizontal">
-                  <div class="flow-step flow-step-strong">AI 自动编码</div>
+                  <div class="flow-step flow-step-strong" data-i18n-key="flow.aiAuto">AI 自动编码</div>
                   <div class="flow-arrow" aria-hidden="true"></div>
-                  <div class="flow-step">编码结果进入工作台</div>
+                  <div class="flow-step" data-i18n-key="flow.toWorkspace">编码结果进入工作台</div>
                 </div>
                 <div class="flow-branch">
                   <div class="flow-branch-column">
                     <div class="flow-branch-connector" aria-hidden="true"></div>
-                    <div class="flow-step">未识别主题人工分类</div>
+                    <div class="flow-step" data-i18n-key="flow.manualClassify">未识别主题人工分类</div>
                   </div>
                   <div class="flow-branch-column">
                     <div class="flow-branch-connector" aria-hidden="true"></div>
-                    <div class="flow-step">K-Means 聚类</div>
+                    <div class="flow-step" data-i18n-key="flow.kmeans">K-Means 聚类</div>
                     <div class="flow-arrow-vertical" aria-hidden="true"></div>
-                    <div class="flow-step">离群值识别</div>
+                    <div class="flow-step" data-i18n-key="flow.outlier">离群值识别</div>
                     <div class="flow-arrow-vertical" aria-hidden="true"></div>
-                    <div class="flow-step">人工覆核调整</div>
+                    <div class="flow-step" data-i18n-key="flow.review">人工覆核调整</div>
                   </div>
                 </div>
                 <div class="flow-merge">
                   <div class="flow-merge-connector" aria-hidden="true"></div>
                   <div class="flow-horizontal">
-                    <div class="flow-step">多通道结果整合</div>
+                    <div class="flow-step" data-i18n-key="flow.integrate">多通道结果整合</div>
                     <div class="flow-arrow" aria-hidden="true"></div>
-                    <div class="flow-step flow-step-strong">抽样验证可靠性</div>
+                    <div class="flow-step flow-step-strong" data-i18n-key="flow.validation">抽样验证可靠性</div>
                   </div>
                 </div>
               </div>
             </div>
             <div class="home-hero-abstract">
-              <h3 class="home-hero-abstract-title">方法论简介</h3>
-              <p>本工作台以自动化模型为前端引擎，借助语义聚类与人工干预协同推进，对主题空缺与离群样本实行双轨校准。</p>
-              <p>流程后段强调多源整合与质量抽检，旨在确保编码结果在统计意义上的稳定性与可复现性。</p>
+              <h3 class="home-hero-abstract-title" data-i18n-key="hero.abstractTitle">方法论简介</h3>
+              <p data-i18n-key="hero.abstractParagraph1">本工作台以自动化模型为前端引擎，借助语义聚类与人工干预协同推进，对主题空缺与离群样本实行双轨校准。</p>
+              <p data-i18n-key="hero.abstractParagraph2">流程后段强调多源整合与质量抽检，旨在确保编码结果在统计意义上的稳定性与可复现性。</p>
             </div>
           </div>
 
@@ -785,6 +789,90 @@ const SORT_VALUE_RANK_DESC='rank_desc';
 const qs = id=>document.getElementById(id);
 const escapeHtml = s=>String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
 const escapeAttr = s=>escapeHtml(s).replaceAll('"','&quot;');
+const LANGUAGE_TOGGLE = document.getElementById('lang_toggle');
+const LANGUAGE_TOGGLE_LABEL = document.getElementById('lang_toggle_label');
+const SUPPORTED_LANGS = ['zh','en'];
+const I18N_STRINGS = {
+  zh: {
+    'hero.eyebrow': 'CommCoder Studio',
+    'hero.title': '编码协同流程总览',
+    'hero.subtitle': '以下流程呈现从自动化产出的原始结果，到人工覆核与统计抽样验证的完整闭环。',
+    'hero.abstractTitle': '方法论简介',
+    'hero.abstractParagraph1': '本工作台以自动化模型为前端引擎，借助语义聚类与人工干预协同推进，对主题空缺与离群样本实行双轨校准。',
+    'hero.abstractParagraph2': '流程后段强调多源整合与质量抽检，旨在确保编码结果在统计意义上的稳定性与可复现性。',
+    'flow.aiAuto': 'AI 自动编码',
+    'flow.toWorkspace': '编码结果进入工作台',
+    'flow.manualClassify': '未识别主题人工分类',
+    'flow.kmeans': 'K-Means 聚类',
+    'flow.outlier': '离群值识别',
+    'flow.review': '人工覆核调整',
+    'flow.integrate': '多通道结果整合',
+    'flow.validation': '抽样验证可靠性'
+  },
+  en: {
+    'hero.eyebrow': 'CommCoder Studio',
+    'hero.title': 'Coding Collaboration Workflow Overview',
+    'hero.subtitle': 'This workflow outlines the full loop from automated outputs to human review and sampling validation.',
+    'hero.abstractTitle': 'Methodology Overview',
+    'hero.abstractParagraph1': 'The workspace is powered by automated models up front, pairing semantic clustering with human intervention to jointly correct topic gaps and outlier samples.',
+    'hero.abstractParagraph2': 'Later stages emphasise multi-source integration and quality sampling to secure statistical stability and reproducibility.',
+    'flow.aiAuto': 'AI Auto Coding',
+    'flow.toWorkspace': 'Results enter the workspace',
+    'flow.manualClassify': 'Manual classification for unidentified topics',
+    'flow.kmeans': 'K-Means clustering',
+    'flow.outlier': 'Outlier detection',
+    'flow.review': 'Human review & adjustment',
+    'flow.integrate': 'Multi-channel result integration',
+    'flow.validation': 'Sample-based reliability validation'
+  }
+};
+const I18N_ATTR_MAP = {
+  zh: {
+    '#hero_flow_diagram': { 'aria-label': '编码流程图' }
+  },
+  en: {
+    '#hero_flow_diagram': { 'aria-label': 'Coding workflow diagram' }
+  }
+};
+let CURRENT_LANG = 'zh';
+
+function applyLanguage(lang){
+  const target = SUPPORTED_LANGS.includes(lang) ? lang : 'zh';
+  CURRENT_LANG = target;
+  document.documentElement.setAttribute('lang', target === 'en' ? 'en' : 'zh');
+  document.querySelectorAll('[data-i18n-key]').forEach(el => {
+    const key = el.dataset.i18nKey;
+    const textMap = I18N_STRINGS[target] || {};
+    if(key && Object.prototype.hasOwnProperty.call(textMap, key)){
+      el.textContent = textMap[key];
+    }
+  });
+  const attrEntries = I18N_ATTR_MAP[target] || {};
+  Object.entries(attrEntries).forEach(([selector, attrs]) => {
+    const el = document.querySelector(selector);
+    if(!el){ return; }
+    Object.entries(attrs || {}).forEach(([attr, value]) => {
+      el.setAttribute(attr, value);
+    });
+  });
+  if(LANGUAGE_TOGGLE_LABEL){
+    LANGUAGE_TOGGLE_LABEL.textContent = target === 'zh' ? 'English' : '中文';
+  }
+  if(LANGUAGE_TOGGLE){
+    const toggleLabel = target === 'zh' ? '切换为英文' : 'Switch to Chinese';
+    LANGUAGE_TOGGLE.setAttribute('aria-label', toggleLabel);
+    LANGUAGE_TOGGLE.setAttribute('title', toggleLabel);
+  }
+}
+
+if(LANGUAGE_TOGGLE){
+  LANGUAGE_TOGGLE.addEventListener('click', () => {
+    applyLanguage(CURRENT_LANG === 'zh' ? 'en' : 'zh');
+  });
+}
+
+applyLanguage('zh');
+
 const numberFormatter = new Intl.NumberFormat('zh-CN');
 const TOAST_THEMES = {
   info: "bg-slate-900/90 text-white",
