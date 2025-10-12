@@ -463,7 +463,10 @@
                     <button type="button" id="btn_expand_timeline_stack" class="timeline-expand-btn">新标签全屏</button>
                   </div>
                 </div>
-                <div id="timeline_area_chart" class="timeline-chart-box"></div>
+                <div class="timeline-area-wrapper">
+                  <div id="timeline_area_chart" class="timeline-chart-box"></div>
+                  <div id="timeline_area_label" class="timeline-area-label" style="display:none;"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -586,7 +589,7 @@ const TIMELINE_CONFIG={
 };
 const TIMELINE_STACK_DIMENSIONS=['topic_adj','field_adj'];
 const TIMELINE_STACK_LABELS={ topic_adj:'研究主题（调整后）', field_adj:'研究领域（调整后）' };
-const TIMELINE_STACK_COLORS=['#2563eb','#9333ea','#f97316','#22c55e','#0ea5e9','#f43f5e','#6366f1','#14b8a6','#c084fc'];
+const TIMELINE_STACK_COLORS=['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
 const TIMELINE_CHART_IDS=['timeline_line_chart','timeline_area_chart'];
 let TIMELINE_BIN_SIZE=5;
 let TIMELINE_DATA=null;
@@ -1431,6 +1434,15 @@ function clearTimelineCharts(message){
       el.innerHTML='';
     }
   });
+  setTimelineAreaLabel('');
+}
+
+function setTimelineAreaLabel(text){
+  const labelEl=qs('timeline_area_label');
+  if(!labelEl) return;
+  const content=(text||'').trim();
+  labelEl.textContent=content;
+  labelEl.style.display=content?'':'none';
 }
 
 function renderTimelineCharts(timeline){
@@ -1516,6 +1528,7 @@ function renderTimelineStackChart(timeline){
   if(!areaEl){
     return;
   }
+  setTimelineAreaLabel(TIMELINE_STACK_LABELS[TIMELINE_STACK_DIM]||'');
   TIMELINE_STACK_FIGURE=null;
   if(!timeline || !Array.isArray(timeline.bins) || !timeline.bins.length){
     areaEl.innerHTML='<div class="treemap-empty">暂无分类占比数据</div>';
@@ -1574,14 +1587,7 @@ function renderTimelineStackChart(timeline){
     legend:{orientation:'h', yanchor:'bottom', y:1.02, xanchor:'left', x:0},
     xaxis:{title:'年份区间', tickangle:-30},
     yaxis:{title:'占比（%）', range:[0,100], ticksuffix:'%', rangemode:'tozero'},
-    font:{family:'"Inter",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', color:'#0f172a'},
-    title:{
-      text:TIMELINE_STACK_LABELS[TIMELINE_STACK_DIM]||'',
-      x:0,
-      xanchor:'left',
-      font:{size:14},
-      pad:{l:0,r:0,t:0,b:0},
-    }
+    font:{family:'"Inter",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', color:'#0f172a'}
   };
   const storedData=cloneDeep(traces);
   const storedLayout=cloneDeep(layout);
