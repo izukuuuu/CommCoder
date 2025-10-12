@@ -428,7 +428,7 @@
           </div>
 
           <div class="bg-white rounded-2xl shadow p-6 space-y-4">
-            <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-3 timeline-controls">
               <div>
                 <h3 class="font-semibold">时间趋势分析</h3>
                 <p class="text-sm text-slate-500">按年份区间查看发表数量趋势与累计占比。</p>
@@ -446,15 +446,21 @@
             <div id="timeline_summary" class="text-xs text-slate-500 hidden"></div>
             <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <div>
-                <h4 class="text-sm font-semibold text-slate-700 mb-2">发表数量趋势</h4>
+                <div class="flex items-center justify-between gap-3 mb-2 timeline-controls">
+                  <h4 class="text-sm font-semibold text-slate-700">发表数量趋势</h4>
+                  <button type="button" id="btn_expand_timeline_line" class="timeline-expand-btn">新标签全屏</button>
+                </div>
                 <div id="timeline_line_chart" class="timeline-chart-box"></div>
               </div>
               <div>
-                <div class="flex items-center justify-between gap-3 mb-2">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-2 timeline-controls">
                   <h4 class="text-sm font-semibold text-slate-700">分类占比堆叠图</h4>
-                  <div class="timeline-stack-toggle" role="group" aria-label="时间序列分类切换">
-                    <button type="button" class="timeline-stack-btn timeline-stack-btn-active" data-timeline-stack="topic_adj" aria-pressed="true">研究主题（调整后）</button>
-                    <button type="button" class="timeline-stack-btn" data-timeline-stack="field_adj" aria-pressed="false">研究领域（调整后）</button>
+                  <div class="flex items-center gap-2">
+                    <div class="timeline-stack-toggle" role="group" aria-label="时间序列分类切换">
+                      <button type="button" class="timeline-stack-btn timeline-stack-btn-active" data-timeline-stack="topic_adj" aria-pressed="true">研究主题（调整后）</button>
+                      <button type="button" class="timeline-stack-btn" data-timeline-stack="field_adj" aria-pressed="false">研究领域（调整后）</button>
+                    </div>
+                    <button type="button" id="btn_expand_timeline_stack" class="timeline-expand-btn">新标签全屏</button>
                   </div>
                 </div>
                 <div id="timeline_area_chart" class="timeline-chart-box"></div>
@@ -585,6 +591,8 @@ const TIMELINE_CHART_IDS=['timeline_line_chart','timeline_area_chart'];
 let TIMELINE_BIN_SIZE=5;
 let TIMELINE_DATA=null;
 let TIMELINE_STACK_DIM='topic_adj';
+let TIMELINE_LINE_FIGURE=null;
+let TIMELINE_STACK_FIGURE=null;
 let AUTO_SAVE_TIMER=null;
 let AUTO_SAVE_ENABLED=false;
 
@@ -613,6 +621,19 @@ function formatPercentText(percent){
   const num=Number(percent);
   if(!Number.isFinite(num)) return '';
   return `${num.toFixed(2)}%`;
+}
+function cloneDeep(value){
+  if(value===undefined||value===null){
+    return value;
+  }
+  if(typeof structuredClone==='function'){
+    try{ return structuredClone(value); }catch(e){}
+  }
+  try{
+    return JSON.parse(JSON.stringify(value));
+  }catch(e){
+    return value;
+  }
 }
 function normalizeStatItems(rawList){
   const arr=Array.isArray(rawList)?rawList:[];
@@ -898,6 +919,20 @@ TIMELINE_STACK_TOGGLES.forEach(btn=>{
   });
 });
 updateTimelineStackToggle();
+
+const TIMELINE_LINE_EXPAND_BTN = document.getElementById('btn_expand_timeline_line');
+if(TIMELINE_LINE_EXPAND_BTN){
+  TIMELINE_LINE_EXPAND_BTN.addEventListener('click',()=>{
+    openTimelineFigureFullScreen(TIMELINE_LINE_FIGURE, '发表数量趋势');
+  });
+}
+const TIMELINE_STACK_EXPAND_BTN = document.getElementById('btn_expand_timeline_stack');
+if(TIMELINE_STACK_EXPAND_BTN){
+  TIMELINE_STACK_EXPAND_BTN.addEventListener('click',()=>{
+    const label = TIMELINE_STACK_LABELS[TIMELINE_STACK_DIM] || '分类占比堆叠图';
+    openTimelineFigureFullScreen(TIMELINE_STACK_FIGURE, label);
+  });
+}
 
 function pingHomeLock(){
   if(!HOME_LOCK_WRAP) return;
@@ -1370,6 +1405,8 @@ function renderDeferredTreemaps(){
 }
 
 function clearTimelineCharts(message){
+  TIMELINE_LINE_FIGURE=null;
+  TIMELINE_STACK_FIGURE=null;
   const summary=qs('timeline_summary');
   if(summary){
     if(message){
@@ -1386,7 +1423,13 @@ function clearTimelineCharts(message){
     if(window.Plotly){
       try{ Plotly.purge(el); }catch(e){}
     }
-    el.innerHTML=`<div class="treemap-empty">${message||'暂无数据'}</div>`;
+    const shouldShowMessage = message===undefined || (message!==null && String(message).trim()!=='');
+    if(shouldShowMessage){
+      const text = message===undefined ? '暂无数据' : String(message);
+      el.innerHTML=`<div class="treemap-empty">${escapeHtml(text)}</div>`;
+    }else{
+      el.innerHTML='';
+    }
   });
 }
 
@@ -1394,6 +1437,8 @@ function renderTimelineCharts(timeline){
   TIMELINE_DATA=timeline||null;
   const summary=qs('timeline_summary');
   const select=qs('timeline_bin_select');
+  TIMELINE_LINE_FIGURE=null;
+  TIMELINE_STACK_FIGURE=null;
   if(!timeline || !Array.isArray(timeline.bins) || !timeline.bins.length){
     if(select && TIMELINE_BIN_SIZE){
       const val=String(TIMELINE_BIN_SIZE);
@@ -1452,8 +1497,13 @@ function renderTimelineCharts(timeline){
       showlegend:false,
       font:{family:'"Inter",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', color:'#0f172a'},
     };
-    try{ Plotly.react(lineEl,[lineTrace],lineLayout,{...TIMELINE_CONFIG}); }catch(e){
+    const lineData=[lineTrace];
+    const storedData=cloneDeep(lineData);
+    const storedLayout=cloneDeep(lineLayout);
+    TIMELINE_LINE_FIGURE={ data: storedData, layout: storedLayout };
+    try{ Plotly.react(lineEl, cloneDeep(lineData), cloneDeep(lineLayout), {...TIMELINE_CONFIG}); }catch(e){
       lineEl.innerHTML='<div class="treemap-empty">可视化渲染失败</div>';
+      TIMELINE_LINE_FIGURE=null;
     }
   }
   updateTimelineStackToggle();
@@ -1466,6 +1516,7 @@ function renderTimelineStackChart(timeline){
   if(!areaEl){
     return;
   }
+  TIMELINE_STACK_FIGURE=null;
   if(!timeline || !Array.isArray(timeline.bins) || !timeline.bins.length){
     areaEl.innerHTML='<div class="treemap-empty">暂无分类占比数据</div>';
     return;
@@ -1512,6 +1563,7 @@ function renderTimelineStackChart(timeline){
     areaEl.innerHTML='<div class="treemap-empty">暂无分类占比数据</div>';
     return;
   }
+  areaEl.innerHTML='';
   traces[0].fill='tozeroy';
   const layout={
     margin:{l:64,r:24,t:46,b:60},
@@ -1531,10 +1583,80 @@ function renderTimelineStackChart(timeline){
       pad:{l:0,r:0,t:0,b:0},
     }
   };
+  const storedData=cloneDeep(traces);
+  const storedLayout=cloneDeep(layout);
+  TIMELINE_STACK_FIGURE={ data: storedData, layout: storedLayout };
   try{
-    Plotly.react(areaEl,traces,layout,{...TIMELINE_CONFIG});
+    Plotly.react(areaEl, cloneDeep(traces), cloneDeep(layout), {...TIMELINE_CONFIG});
   }catch(e){
     areaEl.innerHTML='<div class="treemap-empty">可视化渲染失败</div>';
+    TIMELINE_STACK_FIGURE=null;
+  }
+}
+
+function openTimelineFigureFullScreen(figure, fallbackTitle){
+  if(!figure || !Array.isArray(figure.data) || !figure.data.length){
+    window.alert('暂无可视化数据');
+    return;
+  }
+  if(!window.Plotly){
+    window.alert('Plotly 尚未加载');
+    return;
+  }
+  const win=window.open('', '_blank');
+  if(!win){
+    window.alert('浏览器阻止了弹窗，请允许后重试');
+    return;
+  }
+  const titleText=fallbackTitle||'时间趋势图表';
+  const safeTitle=escapeHtml(titleText);
+  win.document.open();
+  win.document.write(`<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>${safeTitle} - 全屏图表</title><style>html,body{margin:0;height:100%;background:#fff;font-family:"Inter","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;}#plot_container{width:100%;height:100%;padding:1.5rem;box-sizing:border-box;background:linear-gradient(135deg,rgba(248,250,252,0.8) 0%,rgba(226,232,240,0.6) 100%);}#plot{width:100%;height:100%;border-radius:1rem;background:#fff;box-shadow:0 35px 65px -50px rgba(15,23,42,0.55);padding:1rem;box-sizing:border-box;}</style></head><body><div id="plot_container"><div id="plot"></div></div></body></html>`);
+  win.document.close();
+  const attach=()=>{
+    if(!win.Plotly){
+      win.Plotly=window.Plotly;
+    }
+    const container=win.document.getElementById('plot');
+    if(!container || !win.Plotly){
+      return;
+    }
+    const data=cloneDeep(figure.data)||[];
+    const layout=cloneDeep(figure.layout)||{};
+    if(typeof layout.title==='string'){
+      layout.title={ text: layout.title };
+    }
+    const defaultTitle=titleText||'时间趋势图表';
+    if(!layout.title){
+      layout.title={ text: defaultTitle };
+    }else if(!layout.title.text){
+      layout.title.text=defaultTitle;
+    }
+    layout.title.x = layout.title.x ?? 0.03;
+    layout.title.xanchor = layout.title.xanchor || 'left';
+    layout.autosize=true;
+    layout.height=Math.max(480, win.innerHeight-120);
+    layout.width=Math.max(640, win.innerWidth-120);
+    const config={...TIMELINE_CONFIG, responsive:true, displayModeBar:true};
+    try{
+      win.Plotly.newPlot(container, cloneDeep(data), cloneDeep(layout), config);
+    }catch(e){
+      console.error('全屏图表渲染失败', e);
+      win.document.body.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:1rem;color:#dc2626;">图表渲染失败：${escapeHtml(String(e?.message||e||''))}</div>`;
+      return;
+    }
+    const resizeHandler=()=>{
+      if(!win.Plotly) return;
+      layout.height=Math.max(480, win.innerHeight-120);
+      layout.width=Math.max(640, win.innerWidth-120);
+      try{ win.Plotly.Plots.resize(container); }catch(err){ console.error(err); }
+    };
+    win.addEventListener('resize', resizeHandler);
+  };
+  if(win.document.readyState==='complete' || win.document.readyState==='interactive'){
+    attach();
+  }else{
+    win.addEventListener('load', attach, { once:true });
   }
 }
 

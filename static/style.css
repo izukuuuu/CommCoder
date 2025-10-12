@@ -6,7 +6,7 @@
 .treemap-box{ position:relative; min-height:280px; height:100%; width:100%; max-width:100%; overflow:hidden; }
 @media (max-width:768px){ .treemap-box{ min-height:240px; } }
 .treemap-empty{ display:flex; align-items:center; justify-content:center; min-height:220px; font-size:0.875rem; color:#64748b; background:rgba(248,250,252,0.8); border:1px dashed rgba(148,163,184,0.45); border-radius:1rem; padding:1.25rem; text-align:center; }
-.timeline-chart-box{ position:relative; min-height:280px; width:100%; max-width:100%; background:rgba(248,250,252,0.4); border-radius:1rem; padding:0.75rem; overflow:hidden; }
+.timeline-chart-box{ position:relative; z-index:1; min-height:280px; width:100%; max-width:100%; background:rgba(248,250,252,0.4); border-radius:1rem; padding:0.75rem; overflow:hidden; }
 .timeline-chart-box .plot-container,
 .timeline-chart-box .svg-container,
 .timeline-chart-box .plotly,
@@ -19,6 +19,10 @@
 .timeline-stack-btn:focus-visible{ outline:2px solid rgba(37,99,235,0.45); outline-offset:2px; }
 .timeline-stack-btn-active,
 .timeline-stack-btn[aria-pressed="true"]{ background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%); color:#fff; box-shadow:0 14px 30px -20px rgba(37,99,235,0.65); }
+.timeline-controls{ position:relative; z-index:2; }
+.timeline-expand-btn{ display:inline-flex; align-items:center; gap:0.35rem; padding:0.32rem 0.85rem; border-radius:0.75rem; font-size:0.75rem; font-weight:600; color:#1d4ed8; background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.28); transition:background-color .15s ease,color .15s ease,border-color .15s ease,box-shadow .15s ease; }
+.timeline-expand-btn:hover{ background:rgba(59,130,246,0.18); color:#1e3a8a; border-color:rgba(59,130,246,0.35); box-shadow:0 10px 22px -18px rgba(59,130,246,0.45); }
+.timeline-expand-btn:focus-visible{ outline:2px solid rgba(37,99,235,0.4); outline-offset:2px; }
 .vis-tab-toggle{ display:flex; gap:0.75rem; padding-bottom:0.5rem; margin-bottom:1.5rem; border-bottom:1px solid rgba(148,163,184,0.35); }
 .vis-tab-btn{ position:relative; padding:0.35rem 0.9rem; border-radius:9999px; font-size:0.85rem; font-weight:600; color:#475569; background:rgba(148,163,184,0.12); transition:background-color .15s ease,color .15s ease,box-shadow .15s ease; }
 .vis-tab-btn:hover{ background:rgba(148,163,184,0.24); color:#1e293b; }
