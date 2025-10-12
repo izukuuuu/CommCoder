@@ -1951,7 +1951,7 @@ function renderJournalChart(dim, index, entry){
     marker:{ color:colors },
     text:texts,
     textposition:'outside',
-    textfont:{ size:12, color:'#0f172a' },
+    textfont:{ size:11, color:'#0f172a' },
     hovertext:hoverTexts,
     hovertemplate:'%{hovertext}<extra></extra>',
     cliponaxis:false,
@@ -1961,15 +1961,15 @@ function renderJournalChart(dim, index, entry){
   const rect=typeof container.getBoundingClientRect==='function'?container.getBoundingClientRect():null;
   const containerHeight=rect && Number.isFinite(rect.height) ? rect.height : (container.clientHeight||0);
   const height=Math.max(320, containerHeight>0?containerHeight+80:360);
-  const bottomMargin=Math.max(84, Math.min(220, estimatedLabelHeight+52));
+  const bottomMargin=Math.max(84, Math.min(260, estimatedLabelHeight+60));
   const yRangeMax=maxCount>0?maxCount*1.18:1;
   const layout={
     margin:{ l:72, r:32, t:36, b:bottomMargin },
     height,
     paper_bgcolor:'rgba(0,0,0,0)',
     plot_bgcolor:'rgba(0,0,0,0)',
-    xaxis:{ tickfont:{ size:12, color:'#334155' }, tickangle:-32, ticklen:0, automargin:true },
-    yaxis:{ tickfont:{ size:12, color:'#334155' }, gridcolor:'rgba(148,163,184,0.25)', zeroline:false, rangemode:'tozero', range:[0,yRangeMax], automargin:true },
+    xaxis:{ tickfont:{ size:11, color:'#334155' }, tickangle:-42, ticklen:0, automargin:true },
+    yaxis:{ tickfont:{ size:11, color:'#334155' }, gridcolor:'rgba(148,163,184,0.25)', zeroline:false, rangemode:'tozero', range:[0,yRangeMax], automargin:true },
     showlegend:false,
     bargap:0.32,
   };
