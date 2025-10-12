@@ -201,6 +201,92 @@ def _counts(ser: pd.Series) -> List[Dict[str,Any]]:
     return [{"label":str(k),"count":int(v),"percent":round(v*100.0/total,2)} for k,v in vc.items()]
 
 
+def _top_sources_by_category(
+    df: pd.DataFrame,
+    category_col: str,
+    source_col: str = "Source Title",
+    fallback_category: str = "未分类",
+    fallback_source: str = "未提供期刊",
+    top_n: int = 5,
+    max_categories: int = 24,
+) -> List[Dict[str, Any]]:
+    """统计每个分类下按 Source Title 排名前 N 的期刊列表。"""
+
+    if source_col not in df.columns or category_col not in df.columns:
+        return []
+
+    work_df = df[[category_col, source_col]].copy()
+    work_df[category_col] = (
+        work_df[category_col]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .replace("", fallback_category)
+    )
+    work_df[source_col] = (
+        work_df[source_col]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .replace("", fallback_source)
+    )
+
+    if work_df.empty:
+        return []
+
+    grouped = (
+        work_df.groupby([category_col, source_col]).size().reset_index(name="count")
+    )
+    if grouped.empty:
+        return []
+
+    totals = grouped.groupby(category_col)["count"].sum()
+    if totals.empty:
+        return []
+
+    ordered_categories = (
+        totals.sort_values(ascending=False).index.tolist()
+    )
+    if max_categories > 0:
+        ordered_categories = ordered_categories[:max_categories]
+
+    result: List[Dict[str, Any]] = []
+    for cat in ordered_categories:
+        cat_total = int(totals.get(cat, 0))
+        if cat_total <= 0:
+            continue
+        sub_df = grouped[grouped[category_col] == cat]
+        if sub_df.empty:
+            continue
+        sub_sorted = sub_df.sort_values(
+            by=["count", source_col], ascending=[False, True]
+        ).head(top_n)
+        items: List[Dict[str, Any]] = []
+        for _, row in sub_sorted.iterrows():
+            count = int(row["count"])
+            if count <= 0:
+                continue
+            items.append(
+                {
+                    "label": str(row[source_col]),
+                    "count": count,
+                    "percent": round(count * 100.0 / cat_total, 2) if cat_total else 0.0,
+                }
+            )
+        if not items:
+            continue
+        result.append(
+            {
+                "category": str(cat),
+                "total": cat_total,
+                "unique_sources": int(sub_df.shape[0]),
+                "items": items,
+            }
+        )
+
+    return result
+
+
 def _sanitize_blacklist(raw, allowed: List[str]) -> List[str]:
     """清理来自前端的黑名单，过滤非法值并保持顺序。"""
     if not raw:
@@ -505,6 +591,22 @@ def stats(session_id: str = Query(...), bin_years: int = Query(5, ge=1, le=50)):
         except Exception:
             return PlainTextResponse("无效 session_id", status_code=400)
     df = DATASTORE[session_id]
+    source_col = "Source Title"
+    journal_topic = _top_sources_by_category(
+        df,
+        ADJUST_TOPIC_COL,
+        source_col=source_col,
+        fallback_category="未分类",
+        fallback_source="未提供期刊",
+    )
+    journal_field = _top_sources_by_category(
+        df,
+        ADJUST_FIELD_COL,
+        source_col=source_col,
+        fallback_category="未分类",
+        fallback_source="未提供期刊",
+    )
+
     return JSONResponse({
         "total": int(df.shape[0]),
         "topic_orig": _counts(df["研究主题（议题）分类"]),
@@ -512,6 +614,9 @@ def stats(session_id: str = Query(...), bin_years: int = Query(5, ge=1, le=50)):
         "topic_adj": _counts(df[ADJUST_TOPIC_COL]),
         "field_adj": _counts(df[ADJUST_FIELD_COL]),
         "timeline": _timeline(df, bin_years),
+        "journal_source_available": bool(source_col in df.columns),
+        "journal_topic_adj": journal_topic,
+        "journal_field_adj": journal_field,
     })
 
 @app.get("/data")
