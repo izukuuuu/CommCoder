@@ -7,6 +7,7 @@
   打开 http://127.0.0.1:8000
 """
 import io, os, gc, re, json, uuid, time, math, traceback
+from collections import Counter
 from datetime import datetime
 from threading import Lock
 from typing import Dict, Any, List, Optional, Tuple
@@ -21,6 +22,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import PCA
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 try:
     import hdbscan  # type: ignore
@@ -68,6 +70,16 @@ SESSION_TOUCH: Dict[str, float] = {}  # 最近访问时间戳（LRU）
 SESSION_LOCKS_LOCK = Lock()
 
 SCATTER_CACHE: Dict[str, Dict[str, Any]] = {}
+TOPIC_VIZ_CACHE: Dict[str, Dict[str, Any]] = {}
+
+TEXT_COLUMNS = ["结构化总结", "Abstract", "Article Title"]
+TOKEN_PATTERN = re.compile(r"[A-Za-z]{2,}|[\u4e00-\u9fa5]{2,}|\d{2,}")
+STOPWORDS = set([
+    "the", "and", "with", "from", "that", "this", "which", "were", "have", "has",
+    "research", "study", "analysis", "based", "results", "data", "using", "into",
+    "对于", "以及", "研究", "方法", "结果", "分析", "提出", "进行", "领域", "主题", "意义", "探讨",
+    "关注", "问题", "关系", "影响", "发展", "中国", "美国", "社会", "文章", "作者", "指出"
+])
 
 def _get_lock(sid: str) -> Lock:
     with SESSION_LOCKS_LOCK:
@@ -91,6 +103,7 @@ def _evict_if_needed():
             # 不删除磁盘文件，只释放内存
             try:
                 del DATASTORE[sid]
+                TOPIC_VIZ_CACHE.pop(sid, None)
             except Exception:
                 pass
         gc.collect()
@@ -199,6 +212,182 @@ def _counts(ser: pd.Series) -> List[Dict[str,Any]]:
     total = int(s.shape[0]) if s.shape[0] else 1
     vc = s.value_counts()
     return [{"label":str(k),"count":int(v),"percent":round(v*100.0/total,2)} for k,v in vc.items()]
+
+
+def _invalidate_topic_viz(sid: str):
+    try:
+        TOPIC_VIZ_CACHE.pop(sid, None)
+    except Exception:
+        pass
+
+
+def _tokenize_text(text: str) -> List[str]:
+    if not text:
+        return []
+    raw = TOKEN_PATTERN.findall(str(text))
+    tokens: List[str] = []
+    for tok in raw:
+        if not tok:
+            continue
+        if re.fullmatch(r"[A-Za-z]{2,}", tok):
+            norm = tok.lower()
+        else:
+            norm = tok
+        if norm in STOPWORDS:
+            continue
+        tokens.append(norm)
+    return tokens
+
+
+def _combine_text_columns(df: pd.DataFrame) -> List[str]:
+    cols = [c for c in TEXT_COLUMNS if c in df.columns]
+    if not cols:
+        return []
+    series = df[cols[0]].fillna("").astype(str)
+    for c in cols[1:]:
+        series = series + " " + df[c].fillna("").astype(str)
+    return series.tolist()
+
+
+def _category_keywords(
+    df: pd.DataFrame,
+    column: str,
+    fallback_label: str,
+    top_n: int = 12,
+) -> Tuple[List[Dict[str, Any]], List[str], List[int], List[str]]:
+    if column not in df.columns or df.empty:
+        return [], [], [], []
+    work = df[[column] + [c for c in TEXT_COLUMNS if c in df.columns]].copy()
+    work[column] = work[column].fillna("").astype(str).str.strip().replace("", fallback_label)
+    categories: List[Dict[str, Any]] = []
+    texts: List[str] = []
+    labels: List[str] = []
+    counts: List[int] = []
+    for label, group in work.groupby(column):
+        label_str = str(label).strip() or fallback_label
+        total = int(group.shape[0])
+        combined_texts = _combine_text_columns(group)
+        freq: Counter[str] = Counter()
+        for text in combined_texts:
+            freq.update(_tokenize_text(text))
+        total_tokens = sum(freq.values())
+        top_words = [
+            {
+                "token": tok,
+                "count": int(cnt),
+                "weight": round(cnt / total_tokens, 4) if total_tokens else 0.0,
+            }
+            for tok, cnt in freq.most_common(top_n)
+        ]
+        categories.append(
+            {
+                "label": label_str,
+                "count": total,
+                "top_words": top_words,
+                "total_tokens": int(total_tokens),
+            }
+        )
+        labels.append(label_str)
+        counts.append(total)
+        texts.append(" ".join(combined_texts))
+    categories.sort(key=lambda x: (-x.get("count", 0), x.get("label", "")))
+    return categories, texts, counts, labels
+
+
+def _category_scatter(texts: List[str], labels: List[str], counts: List[int]) -> Dict[str, Any]:
+    n = len(labels)
+    if n == 0:
+        return {"points": [], "cluster_count": 0, "explained_variance": 0.0}
+    vectorizer_name = "tfidf"
+    reduction_method = "pca"
+    try:
+        vectorizer = TfidfVectorizer(
+            tokenizer=_tokenize_text,
+            lowercase=True,
+            token_pattern=None,
+            max_features=2000,
+        )
+        matrix = vectorizer.fit_transform(texts)
+        arr = matrix.toarray()
+    except Exception:
+        arr = np.zeros((n, 1), dtype=float)
+    if arr.shape[0] != n:
+        arr = np.zeros((n, max(1, arr.shape[1] if arr.ndim == 2 else 1)), dtype=float)
+    coords = np.zeros((n, 2), dtype=float)
+    explained = 0.0
+    if n == 1:
+        coords[0, :] = 0.0
+    else:
+        try:
+            if arr.shape[1] >= 2:
+                pca = PCA(n_components=2)
+                coords = pca.fit_transform(arr)
+                explained = float(np.sum(pca.explained_variance_ratio_))
+            elif arr.shape[1] == 1:
+                coords[:, 0] = arr[:, 0]
+            else:
+                coords = np.zeros((n, 2), dtype=float)
+        except Exception:
+            coords = np.zeros((n, 2), dtype=float)
+    cluster_labels = np.zeros(n, dtype=int)
+    cluster_count = 0
+    cluster_algo: Optional[str] = None
+    if n >= 3:
+        try:
+            cluster_count = min(6, n)
+            km = KMeans(n_clusters=cluster_count, n_init=10, random_state=42)
+            cluster_labels = km.fit_predict(arr).astype(int)
+            cluster_algo = "kmeans"
+        except Exception:
+            cluster_labels = np.zeros(n, dtype=int)
+            cluster_count = 0
+            cluster_algo = None
+    points = []
+    for i in range(n):
+        points.append(
+            {
+                "label": labels[i],
+                "x": float(coords[i, 0]),
+                "y": float(coords[i, 1]),
+                "count": int(counts[i]),
+                "cluster": int(cluster_labels[i]) if cluster_count else 0,
+            }
+        )
+    if hasattr(cluster_labels, "tolist"):
+        unique_clusters = len(set(cluster_labels.tolist())) if cluster_count else (1 if n else 0)
+    else:
+        unique_clusters = len(set(cluster_labels)) if cluster_count else (1 if n else 0)
+    effective_clusters = int(cluster_count) if cluster_count else (1 if n else 0)
+    return {
+        "points": points,
+        "cluster_count": effective_clusters,
+        "unique_clusters": int(unique_clusters),
+        "explained_variance": round(explained, 4),
+        "cluster_algorithm": cluster_algo or "",
+        "vectorizer": vectorizer_name,
+        "reduction": reduction_method,
+    }
+
+
+def _topic_visual_payload(df: pd.DataFrame) -> Dict[str, Any]:
+    topic_categories, topic_texts, topic_counts, topic_labels = _category_keywords(
+        df, ADJUST_TOPIC_COL, "未分类"
+    )
+    field_categories, field_texts, field_counts, field_labels = _category_keywords(
+        df, ADJUST_FIELD_COL, "未分类"
+    )
+    topic_scatter = _category_scatter(topic_texts, topic_labels, topic_counts)
+    field_scatter = _category_scatter(field_texts, field_labels, field_counts)
+    return {
+        "topic_adj": {
+            "categories": topic_categories,
+            "scatter": topic_scatter,
+        },
+        "field_adj": {
+            "categories": field_categories,
+            "scatter": field_scatter,
+        },
+    }
 
 
 def _top_sources_by_category(
@@ -619,6 +808,32 @@ def stats(session_id: str = Query(...), bin_years: int = Query(5, ge=1, le=50)):
         "journal_field_adj": journal_field,
     })
 
+
+@app.get("/topic_visuals")
+def topic_visuals(session_id: str = Query(...)):
+    if session_id not in DATASTORE:
+        try:
+            with _get_lock(session_id):
+                DATASTORE[session_id] = load_session_from_disk(session_id)
+                _touch(session_id)
+                _evict_if_needed()
+        except Exception:
+            return PlainTextResponse("无效 session_id", status_code=400)
+    df = DATASTORE[session_id]
+    cache = TOPIC_VIZ_CACHE.get(session_id)
+    if not cache:
+        payload = _topic_visual_payload(df)
+        cache = {"data": payload, "updated_at": time.time()}
+        TOPIC_VIZ_CACHE[session_id] = cache
+    else:
+        payload = cache.get("data", {})
+        if not payload:
+            payload = _topic_visual_payload(df)
+            cache = {"data": payload, "updated_at": time.time()}
+            TOPIC_VIZ_CACHE[session_id] = cache
+    _touch(session_id)
+    return JSONResponse({"ok": True, **(payload or {})})
+
 @app.get("/data")
 def get_data(
     session_id: str = Query(...),
@@ -704,9 +919,11 @@ def update_row(payload: Dict[str, Any]):
         df = DATASTORE[sid]
         if idx<0 or idx>=df.shape[0]: return PlainTextResponse("行号越界", 400)
 
+        changed = False
         # 结构化总结可独立保存
         if "structured" in payload:
             df.at[idx, "结构化总结"] = payload.get("structured","")
+            changed = True
 
         which = (payload.get("which_adjust","") or "").strip()  # "topic"|"field"
         val   = payload.get("target_value","")
@@ -720,21 +937,30 @@ def update_row(payload: Dict[str, Any]):
             if t_old is not None and str(t_old)!="": which, val = "topic", str(t_old)
             elif f_old is not None and str(f_old)!="": which, val = "field", str(f_old)
             else:
-                save_session_to_disk(sid)  # 即便只改了结构化总结也落盘
+                if changed:
+                    DATASTORE[sid] = df
+                    save_session_to_disk(sid)
+                    _invalidate_topic_viz(sid)
+                else:
+                    save_session_to_disk(sid)  # 即便只改了结构化总结也落盘
                 _touch(sid)
                 return JSONResponse({"ok": True})
 
         if which=="topic":
             if val not in TOPIC_LIST: return PlainTextResponse("目标值不在主题参考列表中", 400)
             df.at[idx, ADJUST_TOPIC_COL] = val
+            changed = True
         elif which=="field":
             if val not in FIELD_LIST: return PlainTextResponse("目标值不在领域参考列表中", 400)
             df.at[idx, ADJUST_FIELD_COL] = val
+            changed = True
         else:
             return PlainTextResponse("which_adjust 必须是 topic 或 field", 400)
 
         DATASTORE[sid] = df
         save_session_to_disk(sid)
+        if changed:
+            _invalidate_topic_viz(sid)
         _touch(sid)
         return JSONResponse({"ok": True})
     except Exception as e:
@@ -764,6 +990,8 @@ def bulk_update_indices(payload: Dict[str, Any]):
             n+=1
     DATASTORE[sid] = df
     save_session_to_disk(sid)
+    if n>0:
+        _invalidate_topic_viz(sid)
     _touch(sid)
     return JSONResponse({"ok": True, "updated": n})
 
@@ -793,6 +1021,8 @@ def bulk_update_filtered(payload: Dict[str, Any]):
         else: df.at[i, ADJUST_FIELD_COL] = val
     DATASTORE[sid] = df
     save_session_to_disk(sid)
+    if idxs:
+        _invalidate_topic_viz(sid)
     _touch(sid)
     return JSONResponse({"ok": True, "updated": len(idxs)})
 
@@ -812,6 +1042,7 @@ def bulk_copy(session_id: str = Query(...)):
     df.loc[mf, ADJUST_FIELD_COL]  = df.loc[mf, "研究领域分类"].where(df["研究领域分类"].isin(FIELD_LIST), "")
     DATASTORE[session_id] = df
     save_session_to_disk(session_id)
+    _invalidate_topic_viz(session_id)
     _touch(session_id)
     return JSONResponse({"ok": True})
 
