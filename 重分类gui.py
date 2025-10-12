@@ -447,7 +447,7 @@ def _timeline(df: pd.DataFrame, bin_years: int) -> Dict[str, Any]:
             "cumulative_percent": round(min(cumulative_percent, 100.0), 4),
         })
 
-    def _build_stack(column: str, other_label: str, empty_label: str) -> Dict[str, Any]:
+    def _build_stack(column: str, empty_label: str) -> Dict[str, Any]:
         cat_series = timeline_df[column].fillna("").astype(str).str.strip()
         cat_series = cat_series.replace("", empty_label)
         stack_df = timeline_df.assign(stack_category=cat_series)
@@ -455,8 +455,6 @@ def _timeline(df: pd.DataFrame, bin_years: int) -> Dict[str, Any]:
         if totals.empty:
             return {"series": []}
 
-        top_n = 6
-        top_labels = list(totals.head(top_n).index)
         pivot = (
             stack_df.pivot_table(
                 index="bin_label",
@@ -469,28 +467,15 @@ def _timeline(df: pd.DataFrame, bin_years: int) -> Dict[str, Any]:
         pivot = pivot.reindex(labels, fill_value=0)
 
         series: List[Dict[str, Any]] = []
-        for cat in top_labels:
-            counts = pivot[cat].tolist() if cat in pivot.columns else [0] * len(labels)
-            total_count = int(sum(counts))
+        for cat, total_count in totals.items():
             if total_count <= 0:
                 continue
+            counts = pivot[cat].tolist() if cat in pivot.columns else [0] * len(labels)
             series.append({
                 "label": str(cat),
                 "counts": [int(v) for v in counts],
-                "total": total_count,
+                "total": int(total_count),
             })
-
-        other_cols = [c for c in pivot.columns if c not in top_labels]
-        if other_cols:
-            other_counts = pivot[other_cols].sum(axis=1).tolist()
-            other_total = int(sum(other_counts))
-            if other_total > 0:
-                series.append({
-                    "label": other_label,
-                    "counts": [int(v) for v in other_counts],
-                    "total": other_total,
-                    "is_other": True,
-                })
 
         return {
             "series": series,
@@ -504,8 +489,8 @@ def _timeline(df: pd.DataFrame, bin_years: int) -> Dict[str, Any]:
         "min_year": min_year,
         "max_year": max_year,
         "bins": bins,
-        "stack_topic": _build_stack(ADJUST_TOPIC_COL, "其他主题", "未分类"),
-        "stack_field": _build_stack(ADJUST_FIELD_COL, "其他领域", "未分类"),
+        "stack_topic": _build_stack(ADJUST_TOPIC_COL, "未分类"),
+        "stack_field": _build_stack(ADJUST_FIELD_COL, "未分类"),
     }
 
 
