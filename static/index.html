@@ -443,7 +443,7 @@
                 </select>
               </div>
             </div>
-            <div id="timeline_summary" class="text-xs text-slate-500">等待加载年份数据。</div>
+            <div id="timeline_summary" class="text-xs text-slate-500 hidden"></div>
             <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <div>
                 <h4 class="text-sm font-semibold text-slate-700 mb-2">发表数量趋势</h4>
@@ -866,7 +866,7 @@ if(TIMELINE_BIN_SELECT){
     if(SESSION_ID){
       refreshStats();
     }else{
-      clearTimelineCharts('等待加载年份数据。');
+      clearTimelineCharts('');
     }
   });
 }
@@ -1372,7 +1372,13 @@ function renderDeferredTreemaps(){
 function clearTimelineCharts(message){
   const summary=qs('timeline_summary');
   if(summary){
-    summary.textContent=message||'暂无年份数据';
+    if(message){
+      summary.textContent=message;
+      summary.classList.remove('hidden');
+    }else{
+      summary.textContent='';
+      summary.classList.add('hidden');
+    }
   }
   TIMELINE_CHART_IDS.forEach(id=>{
     const el=qs(id);
@@ -1409,6 +1415,7 @@ function renderTimelineCharts(timeline){
   if(summary){
     const rangeText=(minYear!==null && maxYear!==null)?`${minYear} - ${maxYear}`:'—';
     summary.textContent=`共 ${numberFormatter.format(total)} 篇，年份范围：${rangeText}（每 ${binSize} 年一组）`;
+    summary.classList.remove('hidden');
   }
   if(!window.Plotly){
     TIMELINE_CHART_IDS.forEach(id=>{
@@ -1540,7 +1547,7 @@ function resizeTimelineCharts(){
     try{ Plotly.Plots.resize(el); }catch(e){}
   });
 }
-clearTimelineCharts('等待加载年份数据。');
+clearTimelineCharts('');
 function resizeVisibleTreemaps(){
   if(!window.Plotly) return;
   Object.values(TREEMAP_PLOTS).forEach(container=>{
