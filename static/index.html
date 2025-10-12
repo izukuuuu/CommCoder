@@ -80,22 +80,46 @@
       <main class="max-w-7xl mx-auto w-full px-6 py-8 space-y-10">
         <section id="page-home" class="page-section space-y-10">
           <div class="home-hero rounded-3xl overflow-hidden shadow">
-            <div class="home-hero-content">
-              <div class="home-hero-text">
+            <div class="home-hero-flow">
+              <div class="home-hero-intro">
                 <p class="home-hero-eyebrow">CommCoder Studio</p>
-                <h2 class="home-hero-title">专业级人工编码启动中心</h2>
-                <p class="home-hero-subtitle">整理流程、载入历史会话或创建新的数据集，一站式启动精细化的分类与洞察。</p>
+                <h2 class="home-hero-title">编码协同流程总览</h2>
+                <p class="home-hero-subtitle">以下流程呈现从自动化产出的原始结果，到人工覆核与统计抽样验证的完整闭环。</p>
               </div>
-              <div class="home-hero-aside">
-                <div class="home-hero-card">
-                  <p class="home-hero-card-title">工作台能力</p>
-                  <p class="home-hero-card-desc">批量标注 · 智能建议 · 多维可视化</p>
+              <div class="flow-diagram" aria-label="编码流程图">
+                <div class="flow-horizontal">
+                  <div class="flow-step flow-step-strong">AI 自动编码</div>
+                  <div class="flow-arrow" aria-hidden="true"></div>
+                  <div class="flow-step">编码结果进入工作台</div>
                 </div>
-                <div class="home-hero-card">
-                  <p class="home-hero-card-title">上线准备</p>
-                  <p class="home-hero-card-desc">推荐使用桌面宽屏以获得最佳体验</p>
+                <div class="flow-branch">
+                  <div class="flow-branch-column">
+                    <div class="flow-branch-connector" aria-hidden="true"></div>
+                    <div class="flow-step">未识别主题人工分类</div>
+                  </div>
+                  <div class="flow-branch-column">
+                    <div class="flow-branch-connector" aria-hidden="true"></div>
+                    <div class="flow-step">K-Means 聚类</div>
+                    <div class="flow-arrow-vertical" aria-hidden="true"></div>
+                    <div class="flow-step">离群值识别</div>
+                    <div class="flow-arrow-vertical" aria-hidden="true"></div>
+                    <div class="flow-step">人工覆核调整</div>
+                  </div>
+                </div>
+                <div class="flow-merge">
+                  <div class="flow-merge-connector" aria-hidden="true"></div>
+                  <div class="flow-horizontal">
+                    <div class="flow-step">多通道结果整合</div>
+                    <div class="flow-arrow" aria-hidden="true"></div>
+                    <div class="flow-step flow-step-strong">抽样验证可靠性</div>
+                  </div>
                 </div>
               </div>
+            </div>
+            <div class="home-hero-abstract">
+              <h3 class="home-hero-abstract-title">方法论简介</h3>
+              <p>本工作台以自动化模型为前端引擎，借助语义聚类与人工干预协同推进，对主题空缺与离群样本实行双轨校准。</p>
+              <p>流程后段强调多源整合与质量抽检，旨在确保编码结果在统计意义上的稳定性与可复现性。</p>
             </div>
           </div>
 
