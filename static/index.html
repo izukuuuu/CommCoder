@@ -92,7 +92,25 @@
               </div>
               <div id="hero_flow_diagram" class="flow-diagram" aria-label="编码流程图">
                 <div class="flow-horizontal">
-                  <div class="flow-step flow-step-strong" data-i18n-key="flow.aiAuto">AI 自动编码</div>
+                  <div class="flow-step flow-step-strong flow-step-stack">
+                    <span class="flow-step-title" data-i18n-key="flow.aiAuto">AI 自动编码</span>
+                    <ol class="flow-step-list">
+                      <li>
+                        <span class="flow-step-badge" aria-hidden="true">1</span>
+                        <div>
+                          <p class="flow-step-list-title" data-i18n-key="flow.aiAutoStep1.title">Step 1 · GPT 生成结构化总结</p>
+                          <p class="flow-step-list-desc" data-i18n-key="flow.aiAutoStep1.desc">题目 + 摘要 → 输出包含研究主题、研究方法、核心发现、研究意义的四段式总结。</p>
+                        </div>
+                      </li>
+                      <li>
+                        <span class="flow-step-badge" aria-hidden="true">2</span>
+                        <div>
+                          <p class="flow-step-list-title" data-i18n-key="flow.aiAutoStep2.title">Step 2 · 总结驱动议题与领域归类</p>
+                          <p class="flow-step-list-desc" data-i18n-key="flow.aiAutoStep2.desc">依据结构化总结自动归纳研究主题（议题）与研究领域。</p>
+                        </div>
+                      </li>
+                    </ol>
+                  </div>
                   <div class="flow-arrow" aria-hidden="true"></div>
                   <div class="flow-step" data-i18n-key="flow.toWorkspace">编码结果进入工作台</div>
                 </div>
@@ -801,6 +819,10 @@ const I18N_STRINGS = {
     'hero.abstractParagraph1': '本工作台以自动化模型为前端引擎，借助语义聚类与人工干预协同推进，对主题空缺与离群样本实行双轨校准。',
     'hero.abstractParagraph2': '流程后段强调多源整合与质量抽检，旨在确保编码结果在统计意义上的稳定性与可复现性。',
     'flow.aiAuto': 'AI 自动编码',
+    'flow.aiAutoStep1.title': 'Step 1 · GPT 生成结构化总结',
+    'flow.aiAutoStep1.desc': '题目 + 摘要 → 输出包含研究主题、研究方法、核心发现、研究意义的四段式总结。',
+    'flow.aiAutoStep2.title': 'Step 2 · 总结驱动议题与领域归类',
+    'flow.aiAutoStep2.desc': '依据结构化总结自动归纳研究主题（议题）与研究领域。',
     'flow.toWorkspace': '编码结果进入工作台',
     'flow.manualClassify': '未识别主题人工分类',
     'flow.kmeans': 'K-Means 聚类',
@@ -817,6 +839,10 @@ const I18N_STRINGS = {
     'hero.abstractParagraph1': 'The workspace is powered by automated models up front, pairing semantic clustering with human intervention to jointly correct topic gaps and outlier samples.',
     'hero.abstractParagraph2': 'Later stages emphasise multi-source integration and quality sampling to secure statistical stability and reproducibility.',
     'flow.aiAuto': 'AI Auto Coding',
+    'flow.aiAutoStep1.title': 'Step 1 · GPT structured summary',
+    'flow.aiAutoStep1.desc': 'Title + abstract → four-part summary covering research topic, method, key findings, and significance.',
+    'flow.aiAutoStep2.title': 'Step 2 · Summary-led topic & field tagging',
+    'flow.aiAutoStep2.desc': 'Use the structured summary to derive the research topic and research field.',
     'flow.toWorkspace': 'Results enter the workspace',
     'flow.manualClassify': 'Manual classification for unidentified topics',
     'flow.kmeans': 'K-Means clustering',
