@@ -91,7 +91,7 @@
                 </button>
               </div>
               <div id="hero_flow_diagram" class="flow-diagram" aria-label="编码流程图">
-                <div class="flow-horizontal">
+                <div class="flow-column flow-column-left">
                   <div class="flow-step flow-step-strong flow-step-stack">
                     <span class="flow-step-title" data-i18n-key="flow.aiAuto">AI 自动编码</span>
                     <ol class="flow-step-list">
@@ -111,29 +111,36 @@
                       </li>
                     </ol>
                   </div>
-                  <div class="flow-arrow" aria-hidden="true"></div>
+                  <div class="flow-arrow-mobile" aria-hidden="true">
+                    <div class="flow-arrow-vertical"></div>
+                  </div>
+                </div>
+                <div class="flow-bridge" aria-hidden="true">
+                  <div class="flow-arrow"></div>
+                </div>
+                <div class="flow-column flow-column-right">
                   <div class="flow-step" data-i18n-key="flow.toWorkspace">编码结果进入工作台</div>
-                </div>
-                <div class="flow-branch">
-                  <div class="flow-branch-column">
-                    <div class="flow-branch-connector" aria-hidden="true"></div>
-                    <div class="flow-step" data-i18n-key="flow.manualClassify">未识别主题人工分类</div>
+                  <div class="flow-branch">
+                    <div class="flow-branch-column">
+                      <div class="flow-branch-connector" aria-hidden="true"></div>
+                      <div class="flow-step" data-i18n-key="flow.manualClassify">未识别主题人工分类</div>
+                    </div>
+                    <div class="flow-branch-column">
+                      <div class="flow-branch-connector" aria-hidden="true"></div>
+                      <div class="flow-step" data-i18n-key="flow.kmeans">K-Means 聚类</div>
+                      <div class="flow-arrow-vertical" aria-hidden="true"></div>
+                      <div class="flow-step" data-i18n-key="flow.outlier">离群值识别</div>
+                      <div class="flow-arrow-vertical" aria-hidden="true"></div>
+                      <div class="flow-step" data-i18n-key="flow.review">人工覆核调整</div>
+                    </div>
                   </div>
-                  <div class="flow-branch-column">
-                    <div class="flow-branch-connector" aria-hidden="true"></div>
-                    <div class="flow-step" data-i18n-key="flow.kmeans">K-Means 聚类</div>
-                    <div class="flow-arrow-vertical" aria-hidden="true"></div>
-                    <div class="flow-step" data-i18n-key="flow.outlier">离群值识别</div>
-                    <div class="flow-arrow-vertical" aria-hidden="true"></div>
-                    <div class="flow-step" data-i18n-key="flow.review">人工覆核调整</div>
-                  </div>
-                </div>
-                <div class="flow-merge">
-                  <div class="flow-merge-connector" aria-hidden="true"></div>
-                  <div class="flow-horizontal">
-                    <div class="flow-step" data-i18n-key="flow.integrate">多通道结果整合</div>
-                    <div class="flow-arrow" aria-hidden="true"></div>
-                    <div class="flow-step flow-step-strong" data-i18n-key="flow.validation">抽样验证可靠性</div>
+                  <div class="flow-merge">
+                    <div class="flow-merge-connector" aria-hidden="true"></div>
+                    <div class="flow-horizontal">
+                      <div class="flow-step" data-i18n-key="flow.integrate">多通道结果整合</div>
+                      <div class="flow-arrow" aria-hidden="true"></div>
+                      <div class="flow-step flow-step-strong" data-i18n-key="flow.validation">抽样验证可靠性</div>
+                    </div>
                   </div>
                 </div>
               </div>
