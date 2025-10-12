@@ -3,8 +3,11 @@
 .cell-outlier    { background-color:#FFDAD6; } /* 淡红：离群 */
 .chip{ padding:2px 8px; border-radius:9999px; background:#f1f5f9; }
 .chip:hover{ background:#e2e8f0; }
-.treemap-box{ position:relative; min-height:280px; height:100%; width:100%; max-width:100%; overflow:hidden; }
-@media (max-width:768px){ .treemap-box{ min-height:240px; } }
+.treemap-box{ position:relative; min-height:260px; height:100%; width:100%; max-width:100%; overflow:hidden; }
+@media (max-width:768px){ .treemap-box{ min-height:220px; } }
+.bar-chart-box{ position:relative; width:100%; max-width:100%; min-height:260px; border-radius:1rem; background:rgba(248,250,252,0.6);
+  border:1px solid rgba(148,163,184,0.28); padding:0.75rem; overflow:hidden; }
+@media (max-width:768px){ .bar-chart-box{ min-height:220px; } }
 .treemap-empty{ display:flex; align-items:center; justify-content:center; min-height:220px; font-size:0.875rem; color:#64748b; background:rgba(248,250,252,0.8); border:1px dashed rgba(148,163,184,0.45); border-radius:1rem; padding:1.25rem; text-align:center; }
 .timeline-chart-box{ position:relative; z-index:1; min-height:280px; width:100%; max-width:100%; background:rgba(248,250,252,0.4); border-radius:1rem; padding:0.75rem; overflow:hidden; }
 .timeline-chart-box .plot-container,
@@ -32,6 +35,15 @@
 .vis-tab-btn[aria-selected="true"]{ background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%); color:#fff; box-shadow:0 12px 24px -20px rgba(37,99,235,0.6); }
 .vis-tab-panel{ transition:opacity .15s ease; }
 .vis-tab-panel.hidden{ opacity:0; }
+.chart-type-toggle{ display:inline-flex; align-items:center; gap:0.35rem; padding:0.25rem; border-radius:9999px; background:rgba(148,163,184,0.18);
+  border:1px solid rgba(148,163,184,0.35); }
+.chart-type-btn{ position:relative; display:inline-flex; align-items:center; justify-content:center; padding:0.25rem 0.8rem; border-radius:9999px;
+  border:1px solid transparent; background:transparent; color:#475569; font-size:0.75rem; font-weight:600; transition:background-color .15s ease,
+  color .15s ease, box-shadow .15s ease; }
+.chart-type-btn:hover{ background:rgba(148,163,184,0.24); color:#1d4ed8; }
+.chart-type-btn:focus-visible{ outline:2px solid rgba(37,99,235,0.45); outline-offset:2px; }
+.chart-type-btn-active,
+.chart-type-btn[aria-pressed="true"]{ background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%); color:#fff; box-shadow:0 12px 26px -20px rgba(37,99,235,0.55); }
 :root{ --header-offset:0px; }
 dialog::backdrop { background: rgba(0,0,0,.25); }
 .btn,

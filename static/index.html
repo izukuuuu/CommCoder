@@ -411,41 +411,77 @@
             </div>
             <div id="vis_panel_orig" class="vis-tab-panel" data-vis-panel="orig">
               <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div>
-                  <div class="flex items-center justify-between">
+                <div class="space-y-4">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
                     <h4 class="text-sm font-semibold">研究主题（原）</h4>
-                    <button class="text-xs text-sky-700" id="btn_only_other_topic_orig">只看『其他议题』</button>
+                    <div class="flex items-center gap-2">
+                      <div class="chart-type-toggle" role="group" aria-label="图表展示方式" data-chart-toggle="topic_orig">
+                        <button type="button" class="chart-type-btn chart-type-btn-active" aria-pressed="true" data-chart-toggle-target="treemap">树状图</button>
+                        <button type="button" class="chart-type-btn" aria-pressed="false" data-chart-toggle-target="bar">条形图</button>
+                      </div>
+                      <button class="text-xs text-sky-700" id="btn_only_other_topic_orig">只看『其他议题』</button>
+                    </div>
                   </div>
-                  <div id="chips_topic_orig" class="flex flex-wrap gap-2 my-2"></div>
-                  <div id="treemap_topic_orig" class="treemap-box" data-treemap-key="chart_topic_orig"></div>
+                  <div id="chips_topic_orig" class="flex flex-wrap gap-2 mt-2"></div>
+                  <div class="space-y-4">
+                    <div id="treemap_topic_orig" class="treemap-box" data-category-chart="topic_orig" data-chart-type="treemap" data-treemap-key="chart_topic_orig"></div>
+                    <div id="barchart_topic_orig" class="bar-chart-box hidden" data-category-chart="topic_orig" data-chart-type="bar" data-bar-key="bar_topic_orig"></div>
+                  </div>
                 </div>
-                <div>
-                  <div class="flex items-center justify-between">
+                <div class="space-y-4">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
                     <h4 class="text-sm font-semibold">研究领域（原）</h4>
-                    <button class="text-xs text-sky-700" id="btn_only_other_field_orig">只看『其他领域』</button>
+                    <div class="flex items-center gap-2">
+                      <div class="chart-type-toggle" role="group" aria-label="图表展示方式" data-chart-toggle="field_orig">
+                        <button type="button" class="chart-type-btn chart-type-btn-active" aria-pressed="true" data-chart-toggle-target="treemap">树状图</button>
+                        <button type="button" class="chart-type-btn" aria-pressed="false" data-chart-toggle-target="bar">条形图</button>
+                      </div>
+                      <button class="text-xs text-sky-700" id="btn_only_other_field_orig">只看『其他领域』</button>
+                    </div>
                   </div>
-                  <div id="chips_field_orig" class="flex flex-wrap gap-2 my-2"></div>
-                  <div id="treemap_field_orig" class="treemap-box" data-treemap-key="chart_field_orig"></div>
+                  <div id="chips_field_orig" class="flex flex-wrap gap-2 mt-2"></div>
+                  <div class="space-y-4">
+                    <div id="treemap_field_orig" class="treemap-box" data-category-chart="field_orig" data-chart-type="treemap" data-treemap-key="chart_field_orig"></div>
+                    <div id="barchart_field_orig" class="bar-chart-box hidden" data-category-chart="field_orig" data-chart-type="bar" data-bar-key="bar_field_orig"></div>
+                  </div>
                 </div>
               </div>
             </div>
             <div id="vis_panel_adj" class="vis-tab-panel hidden" data-vis-panel="adj">
               <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div>
-                  <div class="flex items-center justify-between">
+                <div class="space-y-4">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
                     <h4 class="text-sm font-semibold">研究主题（调整后）</h4>
-                    <button class="text-xs text-sky-700" id="btn_only_other_topic_adj">只看『其他议题』</button>
+                    <div class="flex items-center gap-2">
+                      <div class="chart-type-toggle" role="group" aria-label="图表展示方式" data-chart-toggle="topic_adj">
+                        <button type="button" class="chart-type-btn chart-type-btn-active" aria-pressed="true" data-chart-toggle-target="treemap">树状图</button>
+                        <button type="button" class="chart-type-btn" aria-pressed="false" data-chart-toggle-target="bar">条形图</button>
+                      </div>
+                      <button class="text-xs text-sky-700" id="btn_only_other_topic_adj">只看『其他议题』</button>
+                    </div>
                   </div>
-                  <div id="chips_topic_adj" class="flex flex-wrap gap-2 my-2"></div>
-                  <div id="treemap_topic_adj" class="treemap-box" data-treemap-key="chart_topic_adj"></div>
+                  <div id="chips_topic_adj" class="flex flex-wrap gap-2 mt-2"></div>
+                  <div class="space-y-4">
+                    <div id="treemap_topic_adj" class="treemap-box" data-category-chart="topic_adj" data-chart-type="treemap" data-treemap-key="chart_topic_adj"></div>
+                    <div id="barchart_topic_adj" class="bar-chart-box hidden" data-category-chart="topic_adj" data-chart-type="bar" data-bar-key="bar_topic_adj"></div>
+                  </div>
                 </div>
-                <div>
-                  <div class="flex items-center justify-between">
+                <div class="space-y-4">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
                     <h4 class="text-sm font-semibold">研究领域（调整后）</h4>
-                    <button class="text-xs text-sky-700" id="btn_only_other_field_adj">只看『其他领域』</button>
+                    <div class="flex items-center gap-2">
+                      <div class="chart-type-toggle" role="group" aria-label="图表展示方式" data-chart-toggle="field_adj">
+                        <button type="button" class="chart-type-btn chart-type-btn-active" aria-pressed="true" data-chart-toggle-target="treemap">树状图</button>
+                        <button type="button" class="chart-type-btn" aria-pressed="false" data-chart-toggle-target="bar">条形图</button>
+                      </div>
+                      <button class="text-xs text-sky-700" id="btn_only_other_field_adj">只看『其他领域』</button>
+                    </div>
                   </div>
-                  <div id="chips_field_adj" class="flex flex-wrap gap-2 my-2"></div>
-                  <div id="treemap_field_adj" class="treemap-box" data-treemap-key="chart_field_adj"></div>
+                  <div id="chips_field_adj" class="flex flex-wrap gap-2 mt-2"></div>
+                  <div class="space-y-4">
+                    <div id="treemap_field_adj" class="treemap-box" data-category-chart="field_adj" data-chart-type="treemap" data-treemap-key="chart_field_adj"></div>
+                    <div id="barchart_field_adj" class="bar-chart-box hidden" data-category-chart="field_adj" data-chart-type="bar" data-bar-key="bar_field_adj"></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -593,6 +629,21 @@ const TREEMAP_COLORS=[
   '#14b8a6','#0d9488','#10b981','#22c55e','#84cc16','#facc15','#f59e0b','#f97316',
   '#fb7185','#f472b6','#ec4899','#a855f7','#8b5cf6','#6366f1','#4f46e5','#4338ca'
 ];
+const BAR_CHART_PLOTS={};
+const BAR_CHART_STATE={};
+const CATEGORY_DATA={};
+const CATEGORY_VIEW_STATE={
+  topic_orig:'treemap',
+  field_orig:'treemap',
+  topic_adj:'treemap',
+  field_adj:'treemap'
+};
+const CATEGORY_CHART_CONFIG={
+  topic_orig:{ treemapId:'treemap_topic_orig', treemapKey:'chart_topic_orig', barId:'barchart_topic_orig', barKey:'bar_topic_orig' },
+  field_orig:{ treemapId:'treemap_field_orig', treemapKey:'chart_field_orig', barId:'barchart_field_orig', barKey:'bar_field_orig' },
+  topic_adj:{ treemapId:'treemap_topic_adj', treemapKey:'chart_topic_adj', barId:'barchart_topic_adj', barKey:'bar_topic_adj' },
+  field_adj:{ treemapId:'treemap_field_adj', treemapKey:'chart_field_adj', barId:'barchart_field_adj', barKey:'bar_field_adj' }
+};
 let RANK_VIS_EXPANDED=false;
 const SCATTER_DEFAULT_HEIGHT=420;
 const SCATTER_STATE={
@@ -1259,7 +1310,16 @@ function cloneTreemapOptions(options){
   }
   return cloned;
 }
-function isTreemapHidden(el){
+function cloneStatList(raw){
+  if(!Array.isArray(raw)) return [];
+  return raw.map(item=>{
+    if(item && typeof item==='object'){
+      return { ...item };
+    }
+    return {};
+  });
+}
+function isChartHidden(el){
   if(!el) return true;
   if(typeof el.checkVisibility==='function'){
     try{
@@ -1282,15 +1342,17 @@ function renderTreemap(containerId,primaryRaw,key,options={},internal=false){
     delete TREEMAP_STATE[key];
     return;
   }
+  const optionClone=cloneTreemapOptions(options);
+  const primaryClone=cloneStatList(primaryRaw);
   if(!internal){
-    TREEMAP_STATE[key]={containerId, primaryRaw, options:cloneTreemapOptions(options)};
-    if(isTreemapHidden(container)){
+    TREEMAP_STATE[key]={containerId, primaryRaw:primaryClone, options:optionClone};
+    if(isChartHidden(container)){
       container.dataset.treemapDeferred='1';
       container.innerHTML='<div class="treemap-empty">切换标签以查看图表</div>';
       destroyTreemap(key);
       return;
     }
-  }else if(isTreemapHidden(container)){
+  }else if(isChartHidden(container)){
     return;
   }
   if(container.dataset.treemapDeferred){
@@ -1302,8 +1364,8 @@ function renderTreemap(containerId,primaryRaw,key,options={},internal=false){
     return;
   }
   container.innerHTML='';
-  const { entries } = buildBarChartEntries(primaryRaw, options.overlay);
-  const limit = Number.isFinite(options.limit)&&options.limit>0?Math.floor(options.limit):TREEMAP_CATEGORY_LIMIT;
+  const { entries } = buildBarChartEntries(primaryClone, optionClone.overlay);
+  const limit = Number.isFinite(optionClone.limit)&&optionClone.limit>0?Math.floor(optionClone.limit):TREEMAP_CATEGORY_LIMIT;
   let limitedEntries = limitBarEntries(entries, limit);
   const picked=new Set(limitedEntries.map(entry=>entry.label));
   let otherPrimary=0;
@@ -1322,9 +1384,9 @@ function renderTreemap(containerId,primaryRaw,key,options={},internal=false){
     container.innerHTML='<div class="treemap-empty">暂无数据</div>';
     return;
   }
-  const hasOverlay=Array.isArray(options.overlay)&&options.overlay.length>0;
-  const primaryList=normalizeStatItems(primaryRaw);
-  const overlayList=normalizeStatItems(options.overlay);
+  const hasOverlay=Array.isArray(optionClone.overlay)&&optionClone.overlay.length>0;
+  const primaryList=normalizeStatItems(primaryClone);
+  const overlayList=normalizeStatItems(optionClone.overlay);
   const primaryMap=new Map(primaryList.map(item=>[item.label,item]));
   const overlayMap=new Map(overlayList.map(item=>[item.label,item]));
   const primaryTotal=primaryList.reduce((sum,item)=>sum+safeNumber(item.count),0);
@@ -1335,7 +1397,7 @@ function renderTreemap(containerId,primaryRaw,key,options={},internal=false){
     container.innerHTML='<div class="treemap-empty">暂无数据</div>';
     return;
   }
-  const rootLabel=options.rootLabel||options.primaryLabel||'分类';
+  const rootLabel=optionClone.rootLabel||optionClone.primaryLabel||'分类';
   const labels=[rootLabel];
   const parents=[''];
   const values=[displayedTotal];
@@ -1361,9 +1423,9 @@ function renderTreemap(containerId,primaryRaw,key,options={},internal=false){
     const displayParts=[String(primaryValue)];
     if(primaryPercent) displayParts.push(primaryPercent);
     text.push(`${label}<br>${displayParts.join(' · ')}`);
-    const hoverLines=[`<b>${label}</b>`, `${options.primaryLabel||'数量'}：${primaryValue}${primaryPercent?`（${primaryPercent}）`:''}`];
+    const hoverLines=[`<b>${label}</b>`, `${optionClone.primaryLabel||'数量'}：${primaryValue}${primaryPercent?`（${primaryPercent}）`:''}`];
     if(hasOverlay && (overlayValue>0 || overlayPercent)){
-      hoverLines.push(`${options.overlayLabel||'对比'}：${overlayValue}${overlayPercent?`（${overlayPercent}）`:''}`);
+      hoverLines.push(`${optionClone.overlayLabel||'对比'}：${overlayValue}${overlayPercent?`（${overlayPercent}）`:''}`);
     }
     hovers.push(hoverLines.join('<br>'));
   });
@@ -1392,6 +1454,17 @@ function renderTreemap(containerId,primaryRaw,key,options={},internal=false){
     plot_bgcolor:'rgba(0,0,0,0)',
     uniformtext:{minsize:12,mode:'hide'}
   };
+  const width=container.clientWidth||container.offsetWidth||0;
+  const widthHeight=width?Math.round(width*0.55):0;
+  const countHeight=260+Math.max(0, Math.min(limitedEntries.length, limit)-6)*12;
+  let desiredHeight=Math.max(widthHeight, countHeight, 260);
+  desiredHeight=Math.min(desiredHeight, 520);
+  if(!Number.isFinite(desiredHeight) || desiredHeight<=0){
+    desiredHeight=320;
+  }
+  layout.height=desiredHeight;
+  container.style.minHeight=`${desiredHeight}px`;
+  container.style.height=`${desiredHeight}px`;
   TREEMAP_PLOTS[key]=container;
   const config={displayModeBar:false,responsive:true};
   try{
@@ -1420,7 +1493,7 @@ function renderDeferredTreemaps(){
   Object.entries(TREEMAP_STATE).forEach(([key,state])=>{
     const container=qs(state.containerId);
     if(!container) return;
-    if(isTreemapHidden(container)) return;
+    if(isChartHidden(container)) return;
     if(TREEMAP_PLOTS[key]===container){
       if(window.Plotly){
         try{ Plotly.Plots.resize(container); }catch(e){}
@@ -1429,6 +1502,271 @@ function renderDeferredTreemaps(){
     }
     renderTreemap(state.containerId, state.primaryRaw, key, state.options, true);
   });
+}
+
+function destroyBarChart(key){
+  const el=BAR_CHART_PLOTS[key];
+  if(el && window.Plotly){
+    try{ Plotly.purge(el); }catch(e){}
+  }
+  delete BAR_CHART_PLOTS[key];
+}
+function renderBarChart(containerId,primaryRaw,key,options={},internal=false){
+  const container=qs(containerId);
+  if(!container){
+    destroyBarChart(key);
+    delete BAR_CHART_STATE[key];
+    return;
+  }
+  const optionClone=cloneTreemapOptions(options);
+  const primaryClone=cloneStatList(primaryRaw);
+  if(!internal){
+    BAR_CHART_STATE[key]={containerId, primaryRaw:primaryClone, options:optionClone};
+    if(isChartHidden(container)){
+      container.dataset.barDeferred='1';
+      container.innerHTML='<div class="treemap-empty">切换标签以查看图表</div>';
+      destroyBarChart(key);
+      return;
+    }
+  }else if(isChartHidden(container)){
+    return;
+  }
+  if(container.dataset.barDeferred){
+    delete container.dataset.barDeferred;
+  }
+  if(!window.Plotly){
+    destroyBarChart(key);
+    container.innerHTML='<div class="treemap-empty">Plotly 未加载</div>';
+    return;
+  }
+  const { entries, primaryMap, overlayMap } = buildBarChartEntries(primaryClone, optionClone.overlay);
+  const limit=Number.isFinite(optionClone.limit)&&optionClone.limit>0?Math.floor(optionClone.limit):TREEMAP_CATEGORY_LIMIT;
+  let limitedEntries=limitBarEntries(entries, limit);
+  const picked=new Set(limitedEntries.map(entry=>entry.label));
+  let otherPrimary=0;
+  let otherOverlay=0;
+  entries.forEach(entry=>{
+    if(!picked.has(entry.label)){
+      otherPrimary+=safeNumber(entry.primary);
+      otherOverlay+=safeNumber(entry.overlay);
+    }
+  });
+  if(otherPrimary>0){
+    limitedEntries=[...limitedEntries,{label:'其他',primary:otherPrimary,overlay:otherOverlay,isOther:true,order:entries.length+1}];
+  }
+  if(!limitedEntries.length){
+    destroyBarChart(key);
+    container.innerHTML='<div class="treemap-empty">暂无数据</div>';
+    return;
+  }
+  const hasOverlay=Array.isArray(optionClone.overlay)&&optionClone.overlay.length>0;
+  const primaryList=normalizeStatItems(primaryClone);
+  const overlayList=normalizeStatItems(optionClone.overlay);
+  const primaryTotal=primaryList.reduce((sum,item)=>sum+safeNumber(item.count),0);
+  const overlayTotal=overlayList.reduce((sum,item)=>sum+safeNumber(item.count),0);
+  const sortedEntries=[...limitedEntries].sort((a,b)=>{
+    if(a.isOther && !b.isOther) return 1;
+    if(!a.isOther && b.isOther) return -1;
+    const diff=safeNumber(b.primary)-safeNumber(a.primary);
+    if(Math.abs(diff)>0.0001) return diff;
+    return a.order-b.order;
+  });
+  const yLabels=sortedEntries.map(entry=>entry.label);
+  const primaryValues=sortedEntries.map(entry=>safeNumber(entry.primary));
+  const overlayValues=sortedEntries.map(entry=>safeNumber(entry.overlay));
+  const colors=sortedEntries.map((entry,idx)=>entry.isOther?'rgba(148,163,184,0.45)':TREEMAP_COLORS[idx%TREEMAP_COLORS.length]);
+  const primaryPercents=sortedEntries.map(entry=>{
+    const label=entry.label;
+    const value=safeNumber(entry.primary);
+    const primaryPercentRaw=primaryMap.get(label)?.percent;
+    let percent=formatPercentText(primaryPercentRaw);
+    if(!percent && primaryTotal>0 && value>0){
+      percent=`${((value/primaryTotal)*100).toFixed(2)}%`;
+    }
+    return percent;
+  });
+  const overlayPercents=sortedEntries.map(entry=>{
+    const label=entry.label;
+    const value=safeNumber(entry.overlay);
+    const overlayPercentRaw=overlayMap.get(label)?.percent;
+    let percent=formatPercentText(overlayPercentRaw);
+    if(!percent && overlayTotal>0 && value>0){
+      percent=`${((value/overlayTotal)*100).toFixed(2)}%`;
+    }
+    return percent;
+  });
+  const hoverTexts=sortedEntries.map((entry,idx)=>{
+    const label=entry.label;
+    const primaryValue=primaryValues[idx];
+    const overlayValue=overlayValues[idx];
+    const lines=[`<b>${label}</b>`, `${optionClone.primaryLabel||'数量'}：${primaryValue}${primaryPercents[idx]?`（${primaryPercents[idx]}）`:''}`];
+    if(hasOverlay && (overlayValue>0 || overlayPercents[idx])){
+      lines.push(`${optionClone.overlayLabel||'对比'}：${overlayValue}${overlayPercents[idx]?`（${overlayPercents[idx]}）`:''}`);
+    }
+    return lines.join('<br>');
+  });
+  container.innerHTML='';
+  const width=container.clientWidth||container.offsetWidth||0;
+  const widthHeight=width?Math.round(width*0.55):0;
+  const barHeight=sortedEntries.length?sortedEntries.length*56+120:260;
+  let desiredHeight=Math.max(widthHeight, barHeight, 240);
+  desiredHeight=Math.min(desiredHeight, 720);
+  if(!Number.isFinite(desiredHeight) || desiredHeight<=0){ desiredHeight=320; }
+  container.style.minHeight=`${desiredHeight}px`;
+  container.style.height=`${desiredHeight}px`;
+  BAR_CHART_PLOTS[key]=container;
+  const primaryTrace={
+    type:'bar',
+    orientation:'h',
+    name:optionClone.primaryLabel||'数量',
+    y:yLabels,
+    x:primaryValues,
+    marker:{color:colors},
+    text:primaryValues.map(v=>numberFormatter.format(v)),
+    textposition:'auto',
+    textfont:{size:12,color:'#0f172a'},
+    cliponaxis:false,
+    hovertext:hoverTexts,
+    hovertemplate:'%{hovertext}<extra></extra>'
+  };
+  const traces=[primaryTrace];
+  if(hasOverlay){
+    const overlayHover=sortedEntries.map((entry,idx)=>{
+      const label=entry.label;
+      const overlayValue=overlayValues[idx];
+      const lines=[`<b>${label}</b>`, `${optionClone.overlayLabel||'对比'}：${overlayValue}${overlayPercents[idx]?`（${overlayPercents[idx]}）`:''}`];
+      if(primaryValues[idx]>0 || primaryPercents[idx]){
+        lines.push(`${optionClone.primaryLabel||'数量'}：${primaryValues[idx]}${primaryPercents[idx]?`（${primaryPercents[idx]}）`:''}`);
+      }
+      return lines.join('<br>');
+    });
+    traces.push({
+      type:'bar',
+      orientation:'h',
+      name:optionClone.overlayLabel||'对比',
+      y:yLabels,
+      x:overlayValues,
+      marker:{color:'rgba(148,163,184,0.55)'},
+      opacity:0.75,
+      hovertext:overlayHover,
+      hovertemplate:'%{hovertext}<extra></extra>',
+      cliponaxis:false
+    });
+  }
+  const longestLabelLength=yLabels.reduce((max,label)=>Math.max(max,String(label).length),0);
+  const leftMargin=Math.min(260, Math.max(120, Math.round(longestLabelLength*12)));
+  const layout={
+    margin:{l:leftMargin,r:36,t:24,b:36},
+    paper_bgcolor:'rgba(0,0,0,0)',
+    plot_bgcolor:'rgba(0,0,0,0)',
+    barmode:hasOverlay?'group':'relative',
+    bargap:hasOverlay?0.28:0.35,
+    height:desiredHeight,
+    yaxis:{autorange:'reversed', tickfont:{size:12,color:'#334155'}, ticklen:0},
+    xaxis:{tickfont:{size:12,color:'#334155'}, gridcolor:'rgba(148,163,184,0.25)', zeroline:false}
+  };
+  if(hasOverlay){
+    layout.legend={orientation:'h',x:0,y:1.12,yanchor:'bottom',font:{size:12,color:'#334155'}};
+  }
+  const config={displayModeBar:false,responsive:true};
+  try{
+    const plotPromise=Plotly.react(container,traces,layout,config);
+    const onError=err=>{
+      console.error('Bar 渲染失败',err);
+      container.innerHTML='<div class="treemap-empty">可视化渲染失败</div>';
+      destroyBarChart(key);
+    };
+    if(plotPromise && typeof plotPromise.then==='function'){
+      plotPromise.then(()=>{
+        if(window.Plotly){
+          try{ Plotly.Plots.resize(container); }catch(e){}
+        }
+      }).catch(onError);
+    }else if(window.Plotly){
+      try{ Plotly.Plots.resize(container); }catch(e){}
+    }
+  }catch(err){
+    console.error('Bar 渲染失败',err);
+    container.innerHTML='<div class="treemap-empty">可视化渲染失败</div>';
+    destroyBarChart(key);
+  }
+}
+function renderDeferredBarCharts(){
+  Object.entries(BAR_CHART_STATE).forEach(([key,state])=>{
+    const container=qs(state.containerId);
+    if(!container) return;
+    if(isChartHidden(container)) return;
+    if(BAR_CHART_PLOTS[key]===container){
+      if(window.Plotly){
+        try{ Plotly.Plots.resize(container); }catch(e){}
+      }
+      return;
+    }
+    renderBarChart(state.containerId, state.primaryRaw, key, state.options, true);
+  });
+}
+
+function getCategoryView(category){
+  return CATEGORY_VIEW_STATE[category]||'treemap';
+}
+function syncCategoryToggle(category){
+  const view=getCategoryView(category);
+  const wrapper=document.querySelector(`[data-chart-toggle="${category}"]`);
+  if(!wrapper) return;
+  wrapper.querySelectorAll('[data-chart-toggle-target]').forEach(btn=>{
+    const target=btn.dataset.chartToggleTarget;
+    const active=target===view;
+    btn.classList.toggle('chart-type-btn-active', active);
+    btn.setAttribute('aria-pressed', active?'true':'false');
+  });
+}
+function renderActiveCategoryChart(category){
+  const config=CATEGORY_CHART_CONFIG[category];
+  if(!config) return;
+  const view=getCategoryView(category);
+  syncCategoryToggle(category);
+  const treemapEl=qs(config.treemapId);
+  const barEl=qs(config.barId);
+  const showTreemap=view==='treemap';
+  const showBar=view==='bar';
+  if(treemapEl){
+    if(showTreemap){ treemapEl.classList.remove('hidden'); }
+    else{ treemapEl.classList.add('hidden'); }
+  }
+  if(barEl){
+    if(showBar){ barEl.classList.remove('hidden'); }
+    else{ barEl.classList.add('hidden'); }
+  }
+  const dataset=CATEGORY_DATA[category];
+  if(!dataset){
+    if(showTreemap && treemapEl){
+      destroyTreemap(config.treemapKey);
+      treemapEl.innerHTML='<div class="treemap-empty">暂无数据</div>';
+    }
+    if(showBar && barEl){
+      destroyBarChart(config.barKey);
+      barEl.innerHTML='<div class="treemap-empty">暂无数据</div>';
+    }
+    return;
+  }
+  const { primaryRaw, options }=dataset;
+  if(showTreemap){
+    destroyBarChart(config.barKey);
+    renderTreemap(config.treemapId, primaryRaw, config.treemapKey, options);
+  }else if(showBar){
+    destroyTreemap(config.treemapKey);
+    renderBarChart(config.barId, primaryRaw, config.barKey, options);
+  }
+}
+function setCategoryData(category, primaryRaw, options={}){
+  CATEGORY_DATA[category]={ primaryRaw:cloneStatList(primaryRaw), options:cloneTreemapOptions(options) };
+  renderActiveCategoryChart(category);
+}
+function setCategoryChartView(category, view){
+  const normalized=view==='bar'?'bar':'treemap';
+  if(CATEGORY_VIEW_STATE[category]===normalized) return;
+  CATEGORY_VIEW_STATE[category]=normalized;
+  renderActiveCategoryChart(category);
 }
 
 function clearTimelineCharts(message){
@@ -1704,12 +2042,21 @@ function resizeVisibleTreemaps(){
   if(!window.Plotly) return;
   Object.values(TREEMAP_PLOTS).forEach(container=>{
     if(!container) return;
-    if(isTreemapHidden(container)) return;
+    if(isChartHidden(container)) return;
+    try{ Plotly.Plots.resize(container); }catch(e){}
+  });
+}
+function resizeVisibleBarCharts(){
+  if(!window.Plotly) return;
+  Object.values(BAR_CHART_PLOTS).forEach(container=>{
+    if(!container) return;
+    if(isChartHidden(container)) return;
     try{ Plotly.Plots.resize(container); }catch(e){}
   });
 }
 window.addEventListener('resize',()=>{
   resizeVisibleTreemaps();
+  resizeVisibleBarCharts();
   scheduleScatterResize();
   resizeTimelineCharts();
 });
@@ -1722,10 +2069,10 @@ async function refreshStats(){
   renderChips("chips_field_orig", d.field_orig, "field_orig");
   renderChips("chips_topic_adj", d.topic_adj, "topic_adj", { overlay:d.topic_orig, primaryLabel:'调整后', overlayLabel:'原始' });
   renderChips("chips_field_adj", d.field_adj, "field_adj", { overlay:d.field_orig, primaryLabel:'调整后', overlayLabel:'原始' });
-  renderTreemap("treemap_topic_orig", d.topic_orig, "chart_topic_orig", { primaryLabel:'原始分类', rootLabel:'研究主题（原）', limit:24 });
-  renderTreemap("treemap_field_orig", d.field_orig, "chart_field_orig", { primaryLabel:'原始分类', rootLabel:'研究领域（原）', limit:24 });
-  renderTreemap("treemap_topic_adj", d.topic_adj, "chart_topic_adj", { overlay:d.topic_orig, primaryLabel:'调整后', overlayLabel:'原始', rootLabel:'研究主题（调整）', limit:24 });
-  renderTreemap("treemap_field_adj", d.field_adj, "chart_field_adj", { overlay:d.field_orig, primaryLabel:'调整后', overlayLabel:'原始', rootLabel:'研究领域（调整）', limit:24 });
+  setCategoryData('topic_orig', d.topic_orig, { primaryLabel:'原始分类', rootLabel:'研究主题（原）', limit:24 });
+  setCategoryData('field_orig', d.field_orig, { primaryLabel:'原始分类', rootLabel:'研究领域（原）', limit:24 });
+  setCategoryData('topic_adj', d.topic_adj, { overlay:d.topic_orig, primaryLabel:'调整后', overlayLabel:'原始', rootLabel:'研究主题（调整）', limit:24 });
+  setCategoryData('field_adj', d.field_adj, { overlay:d.field_orig, primaryLabel:'调整后', overlayLabel:'原始', rootLabel:'研究领域（调整）', limit:24 });
   qs('total_msg').textContent=`行数：${d.total}`;
   renderTimelineCharts(d.timeline);
 
@@ -1828,9 +2175,15 @@ function setVisualTab(tab){
         try{ Plotly.Plots.resize(div); }catch(e){}
       }
     });
+    activePanel.querySelectorAll('[data-bar-key]').forEach(div=>{
+      if(window.Plotly && !isChartHidden(div)){
+        try{ Plotly.Plots.resize(div); }catch(e){}
+      }
+    });
     resizeTimelineCharts();
   }
   renderDeferredTreemaps();
+  renderDeferredBarCharts();
   document.querySelectorAll('[data-vis-tab]').forEach(btn=>{
     const active = btn.dataset?.visTab===target;
     btn.classList.toggle('vis-tab-btn-active', active);
@@ -2621,6 +2974,18 @@ function bindEvents(){
   const tabAdj=qs('btn_vis_tab_adj'); if(tabAdj) tabAdj.onclick=()=>setVisualTab('adj');
   setRankVisExpanded(false);
   setVisualTab('orig');
+  document.querySelectorAll('[data-chart-toggle]').forEach(wrapper=>{
+    const category=wrapper?.dataset?.chartToggle;
+    if(!category) return;
+    wrapper.querySelectorAll('[data-chart-toggle-target]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const target=btn.dataset?.chartToggleTarget;
+        if(!target) return;
+        setCategoryChartView(category, target);
+      });
+    });
+  });
+  Object.keys(CATEGORY_VIEW_STATE).forEach(category=>syncCategoryToggle(category));
   qs('rank_algo').addEventListener('change', handleAlgoChange);
   handleAlgoChange();
 
