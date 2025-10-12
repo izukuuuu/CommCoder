@@ -1955,8 +1955,18 @@ function renderJournalChart(dim, index, entry){
   };
   const longestLabel=labels.reduce((max,label)=>Math.max(max,String(label||'').length),0);
   const height=Math.max(220, labels.length*46+80);
+  const rect=typeof container.getBoundingClientRect==='function'?container.getBoundingClientRect():null;
+  const containerWidth=rect && Number.isFinite(rect.width) ? rect.width : (container.clientWidth||0);
+  const baseLeftMargin=Math.max(140,longestLabel*13);
+  let leftMargin=baseLeftMargin;
+  if(containerWidth>0){
+    const maxAllowed=Math.max(220, containerWidth-120);
+    leftMargin=Math.min(baseLeftMargin, maxAllowed);
+  }else{
+    leftMargin=Math.min(baseLeftMargin, 320);
+  }
   const layout={
-    margin:{ l:Math.min(240,Math.max(120,longestLabel*12)), r:24, t:24, b:32 },
+    margin:{ l:leftMargin, r:28, t:24, b:36 },
     height,
     paper_bgcolor:'rgba(0,0,0,0)',
     plot_bgcolor:'rgba(0,0,0,0)',
