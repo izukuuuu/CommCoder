@@ -603,57 +603,39 @@
             <div class="topic-viz-panel" data-topicviz-panel="topic">
               <div class="topic-viz-message" data-topicviz-message="topic">请先上传或载入会话以加载语义可视化。</div>
               <div class="topic-viz-layout">
-                <div class="topic-viz-sidebar">
-                  <div class="topic-viz-sidebar-header">
-                    <h4 class="topic-viz-sidebar-title">分类列表</h4>
-                    <p class="topic-viz-sidebar-hint">点击查看对应的高频关键词</p>
+                <section class="topic-viz-card" role="region" aria-labelledby="topic_scatter_heading">
+                  <div class="topic-viz-card-header">
+                    <h4 id="topic_scatter_heading" class="topic-viz-card-title">语义二维映射</h4>
+                    <div class="topic-viz-hint" data-topicviz-scatter-hint="topic"></div>
                   </div>
-                  <div class="topic-viz-list" data-topicviz-list="topic"></div>
-                </div>
-                <div class="topic-viz-content">
-                  <div class="topic-viz-card">
-                    <div class="topic-viz-card-header">
-                      <h4 class="topic-viz-card-title">高频关键词</h4>
-                      <div class="topic-viz-hint" data-topicviz-keyword-hint="topic"></div>
-                    </div>
-                    <div id="topic_viz_words_topic" class="topic-viz-chart" data-topicviz-chart="words" data-topicviz-dim="topic"></div>
+                  <div id="topic_viz_scatter_topic" class="topic-viz-scatter" data-topicviz-chart="scatter" data-topicviz-dim="topic"></div>
+                </section>
+                <section class="topic-viz-card" role="region" aria-labelledby="topic_words_heading">
+                  <div class="topic-viz-card-header">
+                    <h4 id="topic_words_heading" class="topic-viz-card-title">高频关键词</h4>
+                    <div class="topic-viz-hint" data-topicviz-keyword-hint="topic"></div>
                   </div>
-                  <div class="topic-viz-card">
-                    <div class="topic-viz-card-header">
-                      <h4 class="topic-viz-card-title">语义二维映射</h4>
-                      <div class="topic-viz-hint" data-topicviz-scatter-hint="topic"></div>
-                    </div>
-                    <div id="topic_viz_scatter_topic" class="topic-viz-scatter" data-topicviz-chart="scatter" data-topicviz-dim="topic"></div>
-                  </div>
-                </div>
+                  <div id="topic_viz_words_topic" class="topic-viz-keywords" data-topicviz-chart="words" data-topicviz-dim="topic"></div>
+                </section>
               </div>
             </div>
             <div class="topic-viz-panel hidden" data-topicviz-panel="field">
               <div class="topic-viz-message" data-topicviz-message="field">请先上传或载入会话以加载语义可视化。</div>
               <div class="topic-viz-layout">
-                <div class="topic-viz-sidebar">
-                  <div class="topic-viz-sidebar-header">
-                    <h4 class="topic-viz-sidebar-title">分类列表</h4>
-                    <p class="topic-viz-sidebar-hint">点击查看对应的高频关键词</p>
+                <section class="topic-viz-card" role="region" aria-labelledby="field_scatter_heading">
+                  <div class="topic-viz-card-header">
+                    <h4 id="field_scatter_heading" class="topic-viz-card-title">语义二维映射</h4>
+                    <div class="topic-viz-hint" data-topicviz-scatter-hint="field"></div>
                   </div>
-                  <div class="topic-viz-list" data-topicviz-list="field"></div>
-                </div>
-                <div class="topic-viz-content">
-                  <div class="topic-viz-card">
-                    <div class="topic-viz-card-header">
-                      <h4 class="topic-viz-card-title">高频关键词</h4>
-                      <div class="topic-viz-hint" data-topicviz-keyword-hint="field"></div>
-                    </div>
-                    <div id="topic_viz_words_field" class="topic-viz-chart" data-topicviz-chart="words" data-topicviz-dim="field"></div>
+                  <div id="topic_viz_scatter_field" class="topic-viz-scatter" data-topicviz-chart="scatter" data-topicviz-dim="field"></div>
+                </section>
+                <section class="topic-viz-card" role="region" aria-labelledby="field_words_heading">
+                  <div class="topic-viz-card-header">
+                    <h4 id="field_words_heading" class="topic-viz-card-title">高频关键词</h4>
+                    <div class="topic-viz-hint" data-topicviz-keyword-hint="field"></div>
                   </div>
-                  <div class="topic-viz-card">
-                    <div class="topic-viz-card-header">
-                      <h4 class="topic-viz-card-title">语义二维映射</h4>
-                      <div class="topic-viz-hint" data-topicviz-scatter-hint="field"></div>
-                    </div>
-                    <div id="topic_viz_scatter_field" class="topic-viz-scatter" data-topicviz-chart="scatter" data-topicviz-dim="field"></div>
-                  </div>
-                </div>
+                  <div id="topic_viz_words_field" class="topic-viz-keywords" data-topicviz-chart="words" data-topicviz-dim="field"></div>
+                </section>
               </div>
             </div>
           </div>
@@ -797,7 +779,6 @@ const TOPIC_VIZ_LABELS={ topic:'研究主题（调整后）', field:'研究领�
 const TOPIC_VIZ_COLORS=['#2563eb','#1d4ed8','#0ea5e9','#10b981','#f97316','#f43f5e'];
 const TOPIC_VIZ_CONFIG={
   topic:{
-    listSelector:'[data-topicviz-list="topic"]',
     messageSelector:'[data-topicviz-message="topic"]',
     keywordHintSelector:'[data-topicviz-keyword-hint="topic"]',
     scatterHintSelector:'[data-topicviz-scatter-hint="topic"]',
@@ -805,7 +786,6 @@ const TOPIC_VIZ_CONFIG={
     scatterId:'topic_viz_scatter_topic'
   },
   field:{
-    listSelector:'[data-topicviz-list="field"]',
     messageSelector:'[data-topicviz-message="field"]',
     keywordHintSelector:'[data-topicviz-keyword-hint="field"]',
     scatterHintSelector:'[data-topicviz-scatter-hint="field"]',
@@ -817,8 +797,7 @@ const TOPIC_VIZ_STATE={
   active:'topic',
   fetchedSession:'',
   loading:false,
-  data:{ topic:null, field:null },
-  selected:{ topic:null, field:null }
+  data:{ topic:null, field:null }
 };
 
 /* ===================== 统计与图表工具 ===================== */
@@ -2566,87 +2545,76 @@ function resetTopicVizState(){
   TOPIC_VIZ_STATE.fetchedSession='';
   TOPIC_VIZ_STATE.loading=false;
   TOPIC_VIZ_STATE.data={ topic:null, field:null };
-  TOPIC_VIZ_STATE.selected={ topic:null, field:null };
   TOPIC_VIZ_DIMENSIONS.forEach(dim=>{
     clearTopicVizCharts(dim);
-    const cfg=getTopicVizConfig(dim);
-    if(cfg){
-      const listEl=document.querySelector(cfg.listSelector);
-      if(listEl){ listEl.innerHTML=''; }
-    }
     const message = SESSION_ID ? '语义可视化数据加载中…' : '请先上传或载入会话以加载语义可视化。';
     setTopicVizMessage(dim, message);
   });
 }
 
-function updateTopicVizListActive(dim){
+function renderTopicVizKeywords(dim){
   const cfg = getTopicVizConfig(dim);
-  const list = document.querySelector(cfg.listSelector);
-  if(!list) return;
-  const selected = TOPIC_VIZ_STATE.selected[dim] || '';
-  list.querySelectorAll('.topic-viz-item').forEach(btn=>{
-    const label = btn.dataset.label || '';
-    const isActive = label === selected;
-    btn.classList.toggle('topic-viz-item-active', isActive);
-    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-  });
-}
-
-function renderTopicVizKeywords(dim, category){
-  const cfg = getTopicVizConfig(dim);
-  const chartEl = getTopicVizChartEl(dim, 'words');
-  if(!chartEl) return;
+  const container = getTopicVizChartEl(dim, 'words');
+  if(!container) return;
   const hintEl = cfg ? document.querySelector(cfg.keywordHintSelector) : null;
-  if(!window.Plotly){
-    chartEl.innerHTML='<div class="topic-viz-empty">Plotly 未加载</div>';
+  container.innerHTML='';
+  const data = TOPIC_VIZ_STATE.data[dim];
+  const categories = Array.isArray(data?.categories) ? data.categories : [];
+  if(!categories.length){
+    container.innerHTML='<div class="topic-viz-empty">暂无可展示的分类关键词。</div>';
     if(hintEl){ hintEl.textContent=''; }
     return;
   }
-  if(!category || !Array.isArray(category.top_words) || !category.top_words.length){
-    try{ Plotly.purge(chartEl); }catch(e){}
-    chartEl.innerHTML='<div class="topic-viz-empty">该分类暂未提取出关键词。</div>';
-    if(hintEl){ hintEl.textContent=''; }
-    return;
-  }
-  const items = category.top_words.slice(0, 12);
-  const labels = items.map(item=>item?.token||'未命名');
-  const counts = items.map(item=>safeNumber(item?.count||0));
-  const weights = items.map(item=>safeNumber(item?.weight||0));
-  const yLabels = labels.slice().reverse();
-  const xValues = counts.slice().reverse();
-  const percentTexts = weights.slice().reverse().map(w=>{
-    if(!Number.isFinite(w) || w<=0) return '';
-    return `${(w*100).toFixed(1)}%`;
+  const sorted = categories.slice().sort((a,b)=>safeNumber(b?.count||0)-safeNumber(a?.count||0));
+  const limit = Math.min(sorted.length, 12);
+  const topCategories = sorted.slice(0, limit);
+  const grid=document.createElement('div');
+  grid.className='topic-viz-keywords-grid';
+  let totalDocs=0;
+  topCategories.forEach(cat=>{
+    const docCount = safeNumber(cat?.count||0);
+    totalDocs += docCount;
+    const card=document.createElement('article');
+    card.className='topic-viz-keyword-card';
+    const header=document.createElement('div');
+    header.className='topic-viz-keyword-header';
+    const title=document.createElement('h5');
+    title.className='topic-viz-keyword-title';
+    title.textContent=cat?.label||'未命名';
+    const meta=document.createElement('div');
+    meta.className='topic-viz-keyword-meta';
+    meta.textContent=`文献 ${docCount}`;
+    header.append(title, meta);
+    const wordList=document.createElement('div');
+    wordList.className='topic-viz-keyword-list';
+    const words = Array.isArray(cat?.top_words) ? cat.top_words.slice(0,6) : [];
+    if(words.length){
+      words.forEach(word=>{
+        const chip=document.createElement('span');
+        chip.className='topic-viz-keyword-chip';
+        const token = (word?.token||'').trim()||'未命名';
+        const weight = safeNumber(word?.weight||0);
+        chip.innerHTML=`<strong>${escapeHtml(token)}</strong>${weight>0?`<span>${(weight*100).toFixed(1)}%</span>`:''}`;
+        wordList.appendChild(chip);
+      });
+    }else{
+      const empty=document.createElement('div');
+      empty.className='topic-viz-keyword-meta';
+      empty.textContent='暂无关键词';
+      wordList.appendChild(empty);
+    }
+    card.append(header, wordList);
+    grid.appendChild(card);
   });
-  const totalTokens = safeNumber(category.total_tokens||0);
-  const totalDocs = safeNumber(category.count||0);
+  container.appendChild(grid);
   if(hintEl){
-    const tokensText = totalTokens>0 ? `词频总计 ${totalTokens}` : '词频不足';
-    hintEl.textContent = `文献 ${totalDocs} 篇 · ${tokensText}`;
-  }
-  const layout={
-    margin:{l:110,r:24,t:30,b:40},
-    height:Math.max(320, yLabels.length*28 + 160),
-    paper_bgcolor:'rgba(255,255,255,0)',
-    plot_bgcolor:'rgba(255,255,255,0)',
-    xaxis:{title:'出现次数', rangemode:'tozero'},
-    yaxis:{automargin:true},
-    font:{family:'"Inter",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', color:'#0f172a'}
-  };
-  const trace={
-    type:'bar',
-    orientation:'h',
-    x:xValues,
-    y:yLabels,
-    text:percentTexts,
-    textposition:'outside',
-    marker:{color:'#2563eb', opacity:0.9},
-    hovertemplate:'<b>%{y}</b><br>词频：%{x}<br>占比：%{text}<extra></extra>'
-  };
-  try{
-    Plotly.react(chartEl, [trace], layout, {displaylogo:false, responsive:false, modeBarButtonsToRemove:['autoScale2d','select2d','lasso2d']});
-  }catch(e){
-    chartEl.innerHTML='<div class="topic-viz-empty">关键词图表渲染失败</div>';
+    const totalText = totalDocs>0 ? `覆盖文献 ${totalDocs}` : '';
+    const parts=[`展示前 ${topCategories.length} 个分类`];
+    if(categories.length>topCategories.length){
+      parts.push(`共 ${categories.length} 类`);
+    }
+    if(totalText) parts.push(totalText);
+    hintEl.textContent=parts.join(' · ');
   }
 }
 
@@ -2739,52 +2707,9 @@ function renderTopicVizScatter(dim){
   }
 }
 
-function renderTopicVizList(dim){
-  const cfg = getTopicVizConfig(dim);
-  const listEl = document.querySelector(cfg.listSelector);
-  if(!listEl) return;
-  listEl.innerHTML='';
-  const data = TOPIC_VIZ_STATE.data[dim];
-  const categories = Array.isArray(data?.categories) ? data.categories : [];
-  if(!categories.length){
-    listEl.innerHTML='<div class="topic-viz-empty">暂无分类数据。</div>';
-    TOPIC_VIZ_STATE.selected[dim]=null;
-    clearTopicVizCharts(dim);
-    return;
-  }
-  categories.forEach(cat=>{
-    const btn=document.createElement('button');
-    btn.type='button';
-    btn.className='topic-viz-item';
-    btn.dataset.topicvizItem=dim;
-    btn.dataset.label=cat.label||'';
-    btn.innerHTML=`<span class="truncate flex-1 text-left">${escapeHtml(cat.label||'未分类')}</span><span class="topic-viz-item-count">${safeNumber(cat.count||0)}</span>`;
-    btn.addEventListener('click',()=>selectTopicVizCategory(dim, cat.label));
-    listEl.appendChild(btn);
-  });
-  const desired = TOPIC_VIZ_STATE.selected[dim] && categories.some(cat=>cat.label===TOPIC_VIZ_STATE.selected[dim])
-    ? TOPIC_VIZ_STATE.selected[dim]
-    : categories[0].label;
-  selectTopicVizCategory(dim, desired);
-}
-
-function selectTopicVizCategory(dim, label){
-  const data = TOPIC_VIZ_STATE.data[dim];
-  const categories = Array.isArray(data?.categories) ? data.categories : [];
-  if(!categories.length){
-    TOPIC_VIZ_STATE.selected[dim]=null;
-    clearTopicVizCharts(dim);
-    return;
-  }
-  const target = categories.find(cat=>cat.label===label) || categories[0];
-  TOPIC_VIZ_STATE.selected[dim] = target ? target.label : null;
-  updateTopicVizListActive(dim);
-  renderTopicVizKeywords(dim, target || null);
-}
-
 function renderTopicVizPanel(dim){
-  renderTopicVizList(dim);
   renderTopicVizScatter(dim);
+  renderTopicVizKeywords(dim);
 }
 
 async function fetchTopicVisuals(options={}){
