@@ -259,6 +259,34 @@
                         <span>生成文件</span>
                       </button>
                     </article>
+                    <article class="home-action-card" data-action="export-batch">
+                      <div class="home-action-head">
+                        <div class="home-action-icon bg-amber-100 text-amber-600">
+                          <svg class="w-6 h-6" data-heroicon="clipboard-document-list" aria-hidden="true"></svg>
+                        </div>
+                        <div>
+                          <h4 class="home-action-title">按调整分类批量导出</h4>
+                          <p class="home-action-desc">根据调整后的议题或领域拆分多个 Excel，集中写入服务器目录。</p>
+                        </div>
+                      </div>
+                      <button id="btn_export_batch" class="action-btn home-action-btn bg-amber-500 text-white hover:bg-amber-400 shadow-sm" title="按调整后的分类批量导出多个 Excel 文件">
+                        <span>生成批次</span>
+                      </button>
+                    </article>
+                    <article class="home-action-card" data-action="export-topic-year">
+                      <div class="home-action-head">
+                        <div class="home-action-icon bg-cyan-100 text-cyan-600">
+                          <svg class="w-6 h-6" data-heroicon="chart-pie" aria-hidden="true"></svg>
+                        </div>
+                        <div>
+                          <h4 class="home-action-title">议题年份分段导出</h4>
+                          <p class="home-action-desc">按每个议题的年份区间（默认10年）切割生成子 Excel。</p>
+                        </div>
+                      </div>
+                      <button id="btn_export_topic_year" class="action-btn home-action-btn bg-cyan-500 text-white hover:bg-cyan-400 shadow-sm" title="为每个议题按年份区间拆分 Excel 文件">
+                        <span>生成子表</span>
+                      </button>
+                    </article>
                     <article class="home-action-card" data-action="download-export">
                       <div class="home-action-head">
                         <div class="home-action-icon bg-slate-200 text-slate-700">
@@ -1151,6 +1179,8 @@ function renderSessionMeta(meta){
   const details = [];
   if(meta.updated_text){ details.push(`最近保存：${meta.updated_text}`); }
   if(meta.last_export_time){ details.push(`最近导出：${meta.last_export_time}`); }
+  if(meta.last_split_export_time){ details.push(`批量导出：${meta.last_split_export_time}`); }
+  if(meta.last_topic_year_export_time){ details.push(`议题年份导出：${meta.last_topic_year_export_time}`); }
   if(!details.length){ details.push('尚无保存或导出记录'); }
   secondary.textContent = details.join(' · ');
   if(meta.last_export_path){
@@ -1244,6 +1274,8 @@ const HOME_ACTION_CONFIG = [
   { action: 'save-session', btnId: 'btn_save_session', requiresSession: true },
   { action: 'load-session', btnId: 'btn_load_session', requiresSession: false },
   { action: 'export-excel', btnId: 'btn_save_excel', requiresSession: true },
+  { action: 'export-batch', btnId: 'btn_export_batch', requiresSession: true },
+  { action: 'export-topic-year', btnId: 'btn_export_topic_year', requiresSession: true },
   { action: 'download-export', btnId: 'btn_download_last', requiresSession: true, requiresExport: true }
 ];
 let ACTIVE_PAGE = 'page-home';
@@ -4057,6 +4089,64 @@ async function saveExcelServer(){
   await refreshSessionMeta();
   alert("已保存到服务器：\n"+(j.saved_path||""));
 }
+
+async function exportBatchExcel(){
+  if(!SESSION_ID){ alert("请先上传/载入会话"); return; }
+  const input = prompt("选择导出维度：输入 topic（按调整后议题）、field（按调整后领域）或 both（两者）","both");
+  if(input===null){ return; }
+  const normalized = input.trim().toLowerCase();
+  let targets;
+  if(!normalized || normalized === "both"){
+    targets = ["topic","field"];
+  }else if(normalized === "topic" || normalized === "field"){
+    targets = [normalized];
+  }else{
+    alert("输入无效，请输入 topic / field / both");
+    return;
+  }
+  const payload = { session_id: SESSION_ID, targets };
+  const r = await fetch("/export_excel_split",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  if(!r.ok){ alert("批量导出失败："+await r.text()); return; }
+  const j = await r.json();
+  const lines = [];
+  lines.push(`批量导出完成，共生成 ${j.total_files||0} 个文件`);
+  if(j.root_dir){ lines.push(`存储目录：${j.root_dir}`); }
+  if(j.summary){
+    if(j.summary.topic){ lines.push(`· 按议题：${j.summary.topic.groups||0} 个分组，${j.summary.topic.rows||0} 篇`); }
+    if(j.summary.field){ lines.push(`· 按领域：${j.summary.field.groups||0} 个分组，${j.summary.field.rows||0} 篇`); }
+  }
+  if(Array.isArray(j.files) && j.files.length){
+    const preview = j.files.slice(0,5).map(f=>`${f.label||''}（${f.count||0}）`).join('，');
+    if(preview){ lines.push(`示例：${preview}${j.files.length>5?' 等':''}`); }
+  }
+  alert(lines.join('\n'));
+  await refreshSessionMeta();
+}
+
+async function exportTopicYearExcel(){
+  if(!SESSION_ID){ alert("请先上传/载入会话"); return; }
+  const input = prompt("设置年份区间跨度（单位：年，默认10）","10");
+  if(input===null){ return; }
+  let span = parseInt(input.trim(),10);
+  if(!Number.isFinite(span) || span<=0){ span = 10; }
+  const payload = { session_id: SESSION_ID, year_span: span };
+  const r = await fetch("/export_topic_year",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  if(!r.ok){ alert("导出失败："+await r.text()); return; }
+  const j = await r.json();
+  const lines = [];
+  lines.push(`议题年份分段导出完成，共生成 ${j.total_files||0} 个文件`);
+  if(j.root_dir){ lines.push(`存储目录：${j.root_dir}`); }
+  if(j.summary){
+    lines.push(`覆盖议题：${j.summary.topics||0} 个`);
+    lines.push(`时间跨度：每 ${j.summary.span||span} 年一段，共 ${j.summary.buckets||0} 个区间`);
+  }
+  if(Array.isArray(j.files) && j.files.length){
+    const preview = j.files.slice(0,5).map(f=>`${f.topic||''}-${f.bucket||''}（${f.count||0}）`).join('，');
+    if(preview){ lines.push(`示例：${preview}${j.files.length>5?' 等':''}`); }
+  }
+  alert(lines.join('\n'));
+  await refreshSessionMeta();
+}
 async function downloadLast(){
   if(!LAST_EXPORT_URL){
     // 尝试取会话 info 的 last_export
@@ -4081,6 +4171,8 @@ function bindEvents(){
   qs('btn_save_session').onclick=saveSession;
   qs('btn_load_session').onclick=openLoadDialog;
   qs('btn_save_excel').onclick=saveExcelServer;
+  const btnExportBatch=qs('btn_export_batch'); if(btnExportBatch) btnExportBatch.onclick=exportBatchExcel;
+  const btnTopicYear=qs('btn_export_topic_year'); if(btnTopicYear) btnTopicYear.onclick=exportTopicYearExcel;
   qs('btn_download_last').onclick=downloadLast;
   const btnSaveAll=qs('btn_save_all'); if(btnSaveAll) btnSaveAll.onclick=saveAllChanges;
   const autoToggle=qs('auto_save_enable'); if(autoToggle) autoToggle.addEventListener('change', applyAutoSaveSettings);
