@@ -308,21 +308,38 @@ def _category_scatter(texts: List[str], labels: List[str], counts: List[int]) ->
     n = len(labels)
     if n == 0:
         return {"points": [], "cluster_count": 0, "explained_variance": 0.0}
-    vectorizer_name = "tfidf"
+
+    vectorizer_name = ""
     reduction_method = "pca"
-    try:
-        vectorizer = TfidfVectorizer(
-            tokenizer=_tokenize_text,
-            lowercase=True,
-            token_pattern=None,
-            max_features=2000,
-        )
-        matrix = vectorizer.fit_transform(texts)
-        arr = matrix.toarray()
-    except Exception:
-        arr = np.zeros((n, 1), dtype=float)
+    arr: Optional[np.ndarray] = None
+
+    if n:
+        try:
+            arr = embed_local(texts, None)
+            if arr.shape[0] == n:
+                vectorizer_name = "sbert"
+            else:
+                arr = None
+        except Exception:
+            arr = None
+
+    if arr is None:
+        vectorizer_name = "tfidf"
+        try:
+            vectorizer = TfidfVectorizer(
+                tokenizer=_tokenize_text,
+                lowercase=True,
+                token_pattern=None,
+                max_features=2000,
+            )
+            matrix = vectorizer.fit_transform(texts)
+            arr = matrix.toarray()
+        except Exception:
+            arr = np.zeros((n, 1), dtype=float)
+
     if arr.shape[0] != n:
         arr = np.zeros((n, max(1, arr.shape[1] if arr.ndim == 2 else 1)), dtype=float)
+
     coords = np.zeros((n, 2), dtype=float)
     explained = 0.0
     if n == 1:
@@ -339,19 +356,43 @@ def _category_scatter(texts: List[str], labels: List[str], counts: List[int]) ->
                 coords = np.zeros((n, 2), dtype=float)
         except Exception:
             coords = np.zeros((n, 2), dtype=float)
-    cluster_labels = np.zeros(n, dtype=int)
+
+    cluster_labels = np.full(n, -1, dtype=int)
     cluster_count = 0
     cluster_algo: Optional[str] = None
-    if n >= 3:
+
+    if n >= 2 and hdbscan is not None:
         try:
-            cluster_count = min(6, n)
-            km = KMeans(n_clusters=cluster_count, n_init=10, random_state=42)
-            cluster_labels = km.fit_predict(arr).astype(int)
-            cluster_algo = "kmeans"
+            min_cluster_size = max(2, int(math.sqrt(n)))
+            clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, metric="euclidean")
+            raw_labels = clusterer.fit_predict(arr)
+            probs = getattr(clusterer, "probabilities_", None)
+
+            valid_labels = sorted({int(lbl) for lbl in raw_labels.tolist() if lbl >= 0})
+            label_map = {lbl: idx for idx, lbl in enumerate(valid_labels)}
+            has_noise = bool(any(int(l) < 0 for l in raw_labels.tolist()))
+
+            for i, lbl in enumerate(raw_labels):
+                if lbl >= 0:
+                    cluster_labels[i] = label_map[int(lbl)]
+                else:
+                    cluster_labels[i] = len(valid_labels)
+
+            cluster_count = len(valid_labels)
+            if has_noise and valid_labels:
+                cluster_count += 1
+            if not valid_labels:
+                cluster_labels[:] = 0
+                cluster_count = 1 if n > 0 else 0
+            cluster_algo = "hdbscan"
+
+            if probs is not None and probs.shape[0] == n:
+                explained = float(max(explained, 1.0 - float(np.mean(probs))))
         except Exception:
             cluster_labels = np.zeros(n, dtype=int)
             cluster_count = 0
             cluster_algo = None
+
     points = []
     for i in range(n):
         points.append(
@@ -363,14 +404,17 @@ def _category_scatter(texts: List[str], labels: List[str], counts: List[int]) ->
                 "cluster": int(cluster_labels[i]) if cluster_count else 0,
             }
         )
-    if hasattr(cluster_labels, "tolist"):
-        unique_clusters = len(set(cluster_labels.tolist())) if cluster_count else (1 if n else 0)
+
+    if cluster_count <= 0:
+        effective_clusters = 1 if n else 0
+        unique_clusters = effective_clusters
     else:
-        unique_clusters = len(set(cluster_labels)) if cluster_count else (1 if n else 0)
-    effective_clusters = int(cluster_count) if cluster_count else (1 if n else 0)
+        unique_clusters = cluster_count
+        effective_clusters = cluster_count
+
     return {
         "points": points,
-        "cluster_count": effective_clusters,
+        "cluster_count": int(effective_clusters),
         "unique_clusters": int(unique_clusters),
         "explained_variance": round(explained, 4),
         "cluster_algorithm": cluster_algo or "",
