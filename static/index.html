@@ -582,9 +582,15 @@
               <div>
                 <div class="flex items-center justify-between gap-3 mb-2 timeline-controls">
                   <h4 class="text-sm font-semibold text-slate-700">发表数量趋势</h4>
-                  <button type="button" id="btn_expand_timeline_line" class="timeline-expand-btn">新标签全屏</button>
+                  <div class="flex items-center gap-2">
+                    <button type="button" id="btn_download_timeline_png" class="timeline-expand-btn" disabled>下载 PNG</button>
+                    <button type="button" id="btn_download_timeline_svg" class="timeline-expand-btn" disabled>下载 SVG</button>
+                  </div>
                 </div>
-                <div id="timeline_line_chart" class="timeline-chart-box"></div>
+                <div id="timeline_line_chart" class="timeline-chart-box">
+                  <div id="timeline_line_placeholder" class="treemap-empty hidden"></div>
+                  <img id="timeline_line_image" class="timeline-line-image hidden" alt="Timeline line chart" loading="lazy" />
+                </div>
               </div>
               <div>
                 <div class="flex flex-wrap items-center justify-between gap-3 mb-2 timeline-controls">
@@ -860,12 +866,18 @@ const TIMELINE_CONFIG={
 const TIMELINE_STACK_DIMENSIONS=['topic_adj','field_adj'];
 const TIMELINE_STACK_LABELS={ topic_adj:'研究主题（调整后）', field_adj:'研究领域（调整后）' };
 const TIMELINE_STACK_COLORS=['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
-const TIMELINE_CHART_IDS=['timeline_line_chart','timeline_area_chart'];
+const TIMELINE_PLOTLY_IDS=['timeline_area_chart'];
 let TIMELINE_BIN_SIZE=5;
 let TIMELINE_DATA=null;
 let TIMELINE_STACK_DIM='topic_adj';
-let TIMELINE_LINE_FIGURE=null;
 let TIMELINE_STACK_FIGURE=null;
+const TIMELINE_LINE_IMAGE=document.getElementById('timeline_line_image');
+const TIMELINE_LINE_PLACEHOLDER=document.getElementById('timeline_line_placeholder');
+const TIMELINE_LINE_DOWNLOAD_BUTTONS={
+  png:document.getElementById('btn_download_timeline_png'),
+  svg:document.getElementById('btn_download_timeline_svg')
+};
+const TIMELINE_LINE_DOWNLOAD_URLS={ png:'', svg:'' };
 let AUTO_SAVE_TIMER=null;
 let AUTO_SAVE_ENABLED=false;
 const TOPIC_VIZ_DIMENSIONS=['topic','field'];
@@ -1334,12 +1346,6 @@ TIMELINE_STACK_TOGGLES.forEach(btn=>{
 });
 updateTimelineStackToggle();
 
-const TIMELINE_LINE_EXPAND_BTN = document.getElementById('btn_expand_timeline_line');
-if(TIMELINE_LINE_EXPAND_BTN){
-  TIMELINE_LINE_EXPAND_BTN.addEventListener('click',()=>{
-    openTimelineFigureFullScreen(TIMELINE_LINE_FIGURE, '发表数量趋势');
-  });
-}
 const TIMELINE_STACK_EXPAND_BTN = document.getElementById('btn_expand_timeline_stack');
 if(TIMELINE_STACK_EXPAND_BTN){
   TIMELINE_STACK_EXPAND_BTN.addEventListener('click',()=>{
@@ -1347,6 +1353,21 @@ if(TIMELINE_STACK_EXPAND_BTN){
     openTimelineFigureFullScreen(TIMELINE_STACK_FIGURE, label);
   });
 }
+Object.entries(TIMELINE_LINE_DOWNLOAD_BUTTONS).forEach(([format, btn])=>{
+  if(!btn) return;
+  btn.addEventListener('click',()=>{
+    if(btn.disabled) return;
+    const url = TIMELINE_LINE_DOWNLOAD_URLS[format] || '';
+    if(!url) return;
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    const binLabel = Number.isFinite(TIMELINE_BIN_SIZE) ? `${TIMELINE_BIN_SIZE}` : 'timeline';
+    anchor.download = `timeline_${binLabel}yr.${format}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+  });
+});
 
 function pingHomeLock(){
   if(!HOME_LOCK_WRAP) return;
@@ -2322,7 +2343,6 @@ function setCategoryChartView(category, view){
 }
 
 function clearTimelineCharts(message){
-  TIMELINE_LINE_FIGURE=null;
   TIMELINE_STACK_FIGURE=null;
   const summary=qs('timeline_summary');
   if(summary){
@@ -2334,7 +2354,27 @@ function clearTimelineCharts(message){
       summary.classList.add('hidden');
     }
   }
-  TIMELINE_CHART_IDS.forEach(id=>{
+  if(TIMELINE_LINE_IMAGE){
+    TIMELINE_LINE_IMAGE.classList.add('hidden');
+    TIMELINE_LINE_IMAGE.removeAttribute('src');
+  }
+  if(TIMELINE_LINE_PLACEHOLDER){
+    const shouldShowMessage = message===undefined || (message!==null && String(message).trim()!=='');
+    if(shouldShowMessage){
+      TIMELINE_LINE_PLACEHOLDER.textContent = message===undefined ? '暂无数据' : String(message);
+      TIMELINE_LINE_PLACEHOLDER.classList.remove('hidden');
+    }else{
+      TIMELINE_LINE_PLACEHOLDER.textContent='';
+      TIMELINE_LINE_PLACEHOLDER.classList.add('hidden');
+    }
+  }
+  Object.values(TIMELINE_LINE_DOWNLOAD_BUTTONS).forEach(btn=>{
+    if(!btn) return;
+    btn.disabled=true;
+  });
+  TIMELINE_LINE_DOWNLOAD_URLS.png='';
+  TIMELINE_LINE_DOWNLOAD_URLS.svg='';
+  TIMELINE_PLOTLY_IDS.forEach(id=>{
     const el=qs(id);
     if(!el) return;
     if(window.Plotly){
@@ -2363,7 +2403,6 @@ function renderTimelineCharts(timeline){
   TIMELINE_DATA=timeline||null;
   const summary=qs('timeline_summary');
   const select=qs('timeline_bin_select');
-  TIMELINE_LINE_FIGURE=null;
   TIMELINE_STACK_FIGURE=null;
   if(!timeline || !Array.isArray(timeline.bins) || !timeline.bins.length){
     if(select && TIMELINE_BIN_SIZE){
@@ -2388,8 +2427,40 @@ function renderTimelineCharts(timeline){
     summary.textContent=`共 ${numberFormatter.format(total)} 篇，年份范围：${rangeText}（每 ${binSize} 年一组）`;
     summary.classList.remove('hidden');
   }
+
+  let baseUrl='';
+  if(SESSION_ID){
+    baseUrl=`/timeline_chart?session_id=${encodeURIComponent(SESSION_ID)}&bin_years=${encodeURIComponent(binSize)}`;
+  }
+  if(TIMELINE_LINE_PLACEHOLDER){
+    if(baseUrl){
+      TIMELINE_LINE_PLACEHOLDER.classList.add('hidden');
+    }else{
+      TIMELINE_LINE_PLACEHOLDER.textContent='暂无法生成图表';
+      TIMELINE_LINE_PLACEHOLDER.classList.remove('hidden');
+    }
+  }
+  if(TIMELINE_LINE_IMAGE){
+    if(baseUrl){
+      const displayUrl=`${baseUrl}&format=png&_=${Date.now()}`;
+      TIMELINE_LINE_IMAGE.src=displayUrl;
+      TIMELINE_LINE_IMAGE.alt=`Timeline of publication counts (bin size ${binSize} years)`;
+      TIMELINE_LINE_IMAGE.classList.remove('hidden');
+    }else{
+      TIMELINE_LINE_IMAGE.classList.add('hidden');
+      TIMELINE_LINE_IMAGE.removeAttribute('src');
+    }
+  }
+  TIMELINE_LINE_DOWNLOAD_URLS.png=baseUrl?`${baseUrl}&format=png&download=true`:'';
+  TIMELINE_LINE_DOWNLOAD_URLS.svg=baseUrl?`${baseUrl}&format=svg&download=true`:'';
+  const hasDownloads=!!baseUrl;
+  Object.values(TIMELINE_LINE_DOWNLOAD_BUTTONS).forEach(btn=>{
+    if(!btn) return;
+    btn.disabled=!hasDownloads;
+  });
+
   if(!window.Plotly){
-    TIMELINE_CHART_IDS.forEach(id=>{
+    TIMELINE_PLOTLY_IDS.forEach(id=>{
       const el=qs(id);
       if(!el) return;
       el.innerHTML='<div class="treemap-empty">Plotly 未加载</div>';
@@ -2397,41 +2468,6 @@ function renderTimelineCharts(timeline){
     return;
   }
 
-  const labels=timeline.bins.map(bin=>bin.label||`${bin.start}-${bin.end}`);
-  const counts=timeline.bins.map(bin=>Number(bin.count)||0);
-
-  const lineEl=qs('timeline_line_chart');
-  if(lineEl){
-    lineEl.innerHTML='';
-    const lineTrace={
-      x:labels,
-      y:counts,
-      type:'scatter',
-      mode:'lines+markers',
-      line:{shape:'spline', color:'#2563eb', width:3, smoothing:0.6},
-      marker:{size:8, color:'#1d4ed8', line:{color:'#ffffff', width:1}},
-      hovertemplate:'<b>%{x}</b><br>篇数：%{y}<extra></extra>',
-    };
-    const lineLayout={
-      margin:{l:56,r:20,t:40,b:56},
-      height:320,
-      paper_bgcolor:'rgba(255,255,255,0)',
-      plot_bgcolor:'rgba(255,255,255,0)',
-      xaxis:{title:'年份区间', tickangle:-30},
-      yaxis:{title:'篇数', rangemode:'tozero', zerolinecolor:'rgba(148,163,184,0.45)'},
-      hovermode:'x unified',
-      showlegend:false,
-      font:{family:'"Inter",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', color:'#0f172a'},
-    };
-    const lineData=[lineTrace];
-    const storedData=cloneDeep(lineData);
-    const storedLayout=cloneDeep(lineLayout);
-    TIMELINE_LINE_FIGURE={ data: storedData, layout: storedLayout };
-    try{ Plotly.react(lineEl, cloneDeep(lineData), cloneDeep(lineLayout), {...TIMELINE_CONFIG}); }catch(e){
-      lineEl.innerHTML='<div class="treemap-empty">可视化渲染失败</div>';
-      TIMELINE_LINE_FIGURE=null;
-    }
-  }
   updateTimelineStackToggle();
   renderTimelineStackChart(timeline);
   resizeTimelineCharts();
@@ -2582,7 +2618,7 @@ function openTimelineFigureFullScreen(figure, fallbackTitle){
 
 function resizeTimelineCharts(){
   if(!window.Plotly) return;
-  TIMELINE_CHART_IDS.forEach(id=>{
+  TIMELINE_PLOTLY_IDS.forEach(id=>{
     const el=qs(id);
     if(!el) return;
     if(!el.querySelector('.plotly')) return;

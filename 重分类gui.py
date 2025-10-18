@@ -15,7 +15,7 @@ from typing import Dict, Any, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 import requests
-from fastapi import FastAPI, UploadFile, File, Query
+from fastapi import FastAPI, UploadFile, File, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
@@ -30,6 +30,10 @@ except Exception:  # pragma: no cover - 可选依赖
     hdbscan = None
 from dotenv import load_dotenv, set_key
 import uvicorn
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 # ============== 可选：sentence-transformers ==============
 _ST_MODEL = None
@@ -48,6 +52,11 @@ except Exception:
 load_dotenv(dotenv_path=".env")
 
 # ================== 常量与目录 ==================
+plt.rcParams["font.family"] = ["Times New Roman", "Times", "serif"]
+plt.rcParams["axes.labelcolor"] = "#1f2937"
+plt.rcParams["xtick.color"] = "#1f2937"
+plt.rcParams["ytick.color"] = "#1f2937"
+
 APP_VERSION = "4.0.0"
 SESS_DIR    = os.getenv("SESS_DIR", "sessions")
 OUTPUT_DIR  = os.getenv("OUTPUT_DIR", "Output")
@@ -884,6 +893,71 @@ def _timeline(df: pd.DataFrame, bin_years: int) -> Dict[str, Any]:
     }
 
 
+def _render_timeline_line_figure(labels: List[str], counts: List[int]):
+    if not labels:
+        fig, ax = plt.subplots(figsize=(4.5, 3.5))
+        fig.patch.set_facecolor("white")
+        ax.axis("off")
+        ax.text(
+            0.5,
+            0.5,
+            "No timeline data",
+            ha="center",
+            va="center",
+            fontsize=14,
+            color="#1f2937",
+            transform=ax.transAxes,
+        )
+        return fig
+
+    fig_width = min(8.0, max(4.0, len(labels) * 0.6))
+    fig_height = min(8.0, max(3.0, fig_width * 0.6))
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+
+    positions = list(range(len(labels)))
+    primary_line_color = "#2563eb"
+    marker_face_color = "#1d4ed8"
+
+    ax.plot(
+        positions,
+        counts,
+        color=primary_line_color,
+        linewidth=2.5,
+        marker="o",
+        markersize=6,
+        markerfacecolor=marker_face_color,
+        markeredgewidth=0.9,
+        markeredgecolor="#ffffff",
+    )
+
+    ax.set_xticks(positions)
+    ax.set_xticklabels(labels, rotation=35, ha="right")
+    ax.set_xlabel("Year Interval", fontsize=12)
+    ax.set_ylabel("Count", fontsize=12)
+
+    max_count = max(counts) if counts else 0
+    upper = max_count * 1.1 if max_count > 0 else 1
+    ax.set_ylim(0, upper)
+    ax.margins(x=0.02)
+    ax.set_axisbelow(True)
+    ax.grid(axis="y", color="#dbeafe", linewidth=0.8, linestyle="--", alpha=0.7)
+
+    for spine_name, spine in ax.spines.items():
+        if spine_name in ("left", "bottom"):
+            spine.set_visible(True)
+            spine.set_color("#1f2937")
+            spine.set_linewidth(1.1)
+        else:
+            spine.set_visible(False)
+
+    ax.tick_params(axis="x", labelsize=11, direction="out", length=4, width=0.8)
+    ax.tick_params(axis="y", labelsize=11, direction="out", length=4, width=0.8)
+
+    return fig
+
+
 @app.get("/stats")
 def stats(session_id: str = Query(...), bin_years: int = Query(5, ge=1, le=50)):
     if session_id not in DATASTORE:
@@ -922,6 +996,54 @@ def stats(session_id: str = Query(...), bin_years: int = Query(5, ge=1, le=50)):
         "journal_topic_adj": journal_topic,
         "journal_field_adj": journal_field,
     })
+
+
+@app.get("/timeline_chart")
+def timeline_chart(
+    session_id: str = Query(...),
+    bin_years: int = Query(5, ge=1, le=50),
+    format: str = Query("png"),
+    download: bool = Query(False),
+):
+    fmt = format.lower().strip()
+    if fmt not in {"png", "svg"}:
+        return PlainTextResponse("format must be png or svg", status_code=400)
+
+    if session_id not in DATASTORE:
+        try:
+            with _get_lock(session_id):
+                DATASTORE[session_id] = load_session_from_disk(session_id)
+                _touch(session_id)
+                _evict_if_needed()
+        except Exception:
+            return PlainTextResponse("无效 session_id", status_code=400)
+
+    df = DATASTORE[session_id]
+    timeline = _timeline(df, bin_years)
+    bins = timeline.get("bins") or []
+    labels = [str(item.get("label", "")) for item in bins]
+    counts = [int(item.get("count", 0)) for item in bins]
+
+    fig = _render_timeline_line_figure(labels, counts)
+    buffer = io.BytesIO()
+
+    if fmt == "png":
+        fig.savefig(buffer, format="png", dpi=300, bbox_inches="tight", facecolor="white")
+        media_type = "image/png"
+        extension = "png"
+    else:
+        fig.savefig(buffer, format="svg", bbox_inches="tight", facecolor="white")
+        media_type = "image/svg+xml"
+        extension = "svg"
+
+    plt.close(fig)
+    buffer.seek(0)
+
+    filename = f"timeline_{bin_years}yr.{extension}"
+    disposition = "attachment" if download else "inline"
+    headers = {"Content-Disposition": f"{disposition}; filename={filename}"}
+
+    return Response(buffer.getvalue(), media_type=media_type, headers=headers)
 
 
 @app.get("/topic_visuals")

@@ -6,4 +6,5 @@ uvicorn[standard]
 scikit-learn
 python-dotenv
 hdbscan
+matplotlib
 sentence-transformers
