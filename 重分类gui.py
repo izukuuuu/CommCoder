@@ -6,6 +6,7 @@
   python app.py
   打开 http://127.0.0.1:8000
 """
+import base64
 import io, os, gc, re, json, uuid, time, math, traceback
 from collections import Counter, defaultdict
 from datetime import datetime
@@ -23,6 +24,7 @@ from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import PCA
 from sklearn.feature_extraction.text import TfidfVectorizer
+from wordcloud import WordCloud
 
 try:
     import hdbscan  # type: ignore
@@ -82,6 +84,42 @@ STOPWORDS = set([
     "关注", "问题", "关系", "影响", "发展", "中国", "美国", "社会", "文章", "作者", "指出"
 ])
 
+WORDCLOUD_FONT_ENV = os.getenv("WORDCLOUD_FONT_PATH", "").strip()
+WORDCLOUD_FONT_CANDIDATES = [
+    WORDCLOUD_FONT_ENV or "",
+    "C:/Windows/Fonts/simsunb.ttf",
+    "C:/Windows/Fonts/simsun.ttc",
+    "C:/Windows/Fonts/simfang.ttf",
+    "C:/Windows/Fonts/simkai.ttf",
+    "C:/Windows/Fonts/STZHONGS.TTF",
+    "C:/Windows/Fonts/timesbd.ttf",
+    "C:/Windows/Fonts/msyhbd.ttc",
+    "C:/Windows/Fonts/msyh.ttc",
+    "C:/Windows/Fonts/simhei.ttf",
+    "/System/Library/Fonts/STHeiti Light.ttc",
+    "/System/Library/Fonts/Songti.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSerifCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+]
+
+
+def _resolve_wordcloud_font() -> Optional[str]:
+    """尝试选择一款偏粗的衬线字体，优先使用 Windows 自带字体。"""
+
+    for path in WORDCLOUD_FONT_CANDIDATES:
+        if not path:
+            continue
+        if os.path.exists(path):
+            return path
+    return None
+
+
+WORDCLOUD_FONT_PATH = _resolve_wordcloud_font()
+WORDCLOUD_WIDTH = int(os.getenv("WORDCLOUD_WIDTH", "1600"))
+WORDCLOUD_HEIGHT = int(os.getenv("WORDCLOUD_HEIGHT", "900"))
+WORDCLOUD_MAX_WORDS = int(os.getenv("WORDCLOUD_MAX_WORDS", "120"))
+
 def _get_lock(sid: str) -> Lock:
     with SESSION_LOCKS_LOCK:
         if sid not in SESSION_LOCKS:
@@ -110,6 +148,25 @@ def _evict_if_needed():
         gc.collect()
     except Exception:
         pass
+
+def _ensure_session_loaded(session_id: str) -> pd.DataFrame:
+    """返回指定 session 对应的 DataFrame，如有需要则从磁盘加载。"""
+
+    if not session_id:
+        raise ValueError("session_id is required")
+    if session_id not in DATASTORE:
+        try:
+            with _get_lock(session_id):
+                DATASTORE[session_id] = load_session_from_disk(session_id)
+                _touch(session_id)
+                _evict_if_needed()
+        except Exception as exc:
+            raise ValueError("invalid session_id") from exc
+    else:
+        _touch(session_id)
+        _evict_if_needed()
+    return DATASTORE[session_id]
+
 
 # ================== 参考列表 ==================
 TOPIC_LIST = [
@@ -254,7 +311,7 @@ def _category_keywords(
     df: pd.DataFrame,
     column: str,
     fallback_label: str,
-    top_n: int = 12,
+    top_n: int = 80,
 ) -> Tuple[List[Dict[str, Any]], List[str], List[int], List[str]]:
     if column not in df.columns or df.empty:
         return [], [], [], []
@@ -388,6 +445,71 @@ def _topic_visual_payload(df: pd.DataFrame) -> Dict[str, Any]:
             "categories": field_categories,
             "scatter": field_scatter,
         },
+    }
+
+
+def _get_topic_visual_data(session_id: str) -> Dict[str, Any]:
+    df = _ensure_session_loaded(session_id)
+    cache = TOPIC_VIZ_CACHE.get(session_id)
+    payload: Dict[str, Any] = {}
+    if cache:
+        payload = cache.get("data", {}) or {}
+    if not payload:
+        payload = _topic_visual_payload(df)
+        cache = {"data": payload, "updated_at": time.time()}
+        TOPIC_VIZ_CACHE[session_id] = cache
+    else:
+        cache["updated_at"] = time.time()
+    return payload
+
+
+def _slugify_filename(text: str) -> str:
+    base = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]+", "_", text).strip("_")
+    return base or "wordcloud"
+
+
+def _generate_word_cloud_assets(words: List[Dict[str, Any]]) -> Dict[str, Any]:
+    frequencies = {}
+    for item in words:
+        token = str(item.get("token", "")).strip()
+        count = int(item.get("count", 0))
+        if not token or count <= 0:
+            continue
+        frequencies[token] = count
+        if len(frequencies) >= WORDCLOUD_MAX_WORDS:
+            break
+    if not frequencies:
+        raise ValueError("no frequencies")
+    wc = WordCloud(
+        width=WORDCLOUD_WIDTH,
+        height=WORDCLOUD_HEIGHT,
+        background_color="white",
+        font_path=WORDCLOUD_FONT_PATH,
+        prefer_horizontal=0.95,
+        random_state=42,
+        max_words=WORDCLOUD_MAX_WORDS,
+        collocations=False,
+        margin=2,
+    )
+    wc.generate_from_frequencies(frequencies)
+
+    png_buffer = io.BytesIO()
+    image = wc.to_image()
+    image.save(png_buffer, format="PNG", dpi=(300, 300))
+    png_data = base64.b64encode(png_buffer.getvalue()).decode("ascii")
+
+    try:
+        svg_text = wc.to_svg(embed_font=bool(WORDCLOUD_FONT_PATH))
+    except Exception:
+        svg_text = wc.to_svg(embed_font=False)
+    svg_data = base64.b64encode(svg_text.encode("utf-8")).decode("ascii")
+
+    return {
+        "png_data_url": f"data:image/png;base64,{png_data}",
+        "svg_data_url": f"data:image/svg+xml;base64,{svg_data}",
+        "width": wc.width,
+        "height": wc.height,
+        "words_used": len(frequencies),
     }
 
 
@@ -882,28 +1004,69 @@ def stats(session_id: str = Query(...), bin_years: int = Query(5, ge=1, le=50)):
 
 @app.get("/topic_visuals")
 def topic_visuals(session_id: str = Query(...)):
-    if session_id not in DATASTORE:
-        try:
-            with _get_lock(session_id):
-                DATASTORE[session_id] = load_session_from_disk(session_id)
-                _touch(session_id)
-                _evict_if_needed()
-        except Exception:
-            return PlainTextResponse("无效 session_id", status_code=400)
-    df = DATASTORE[session_id]
-    cache = TOPIC_VIZ_CACHE.get(session_id)
-    if not cache:
-        payload = _topic_visual_payload(df)
-        cache = {"data": payload, "updated_at": time.time()}
-        TOPIC_VIZ_CACHE[session_id] = cache
-    else:
-        payload = cache.get("data", {})
-        if not payload:
-            payload = _topic_visual_payload(df)
-            cache = {"data": payload, "updated_at": time.time()}
-            TOPIC_VIZ_CACHE[session_id] = cache
-    _touch(session_id)
+    try:
+        payload = _get_topic_visual_data(session_id)
+    except ValueError:
+        return PlainTextResponse("无效 session_id", status_code=400)
     return JSONResponse({"ok": True, **(payload or {})})
+
+@app.get("/word_cloud_assets")
+def word_cloud_assets(
+    session_id: str = Query(...),
+    dimension: str = Query("topic"),
+    label: Optional[str] = Query(None),
+):
+    try:
+        payload = _get_topic_visual_data(session_id)
+    except ValueError:
+        return PlainTextResponse("无效 session_id", status_code=400)
+
+    dim_key = (dimension or "").strip().lower()
+    dim_map = {"topic": "topic_adj", "field": "field_adj"}
+    if dim_key not in dim_map:
+        return PlainTextResponse("dimension 必须为 topic 或 field", status_code=400)
+
+    dim_payload = payload.get(dim_map[dim_key], {}) or {}
+    categories = dim_payload.get("categories") or []
+    if not categories:
+        return JSONResponse({"ok": False, "message": "暂无词云数据"})
+
+    target = None
+    if label:
+        label_str = str(label)
+        for cat in categories:
+            if str(cat.get("label", "")) == label_str:
+                target = cat
+                break
+    if not target:
+        target = categories[0]
+
+    words = target.get("top_words") or []
+    try:
+        assets = _generate_word_cloud_assets(words)
+    except ValueError:
+        return JSONResponse({"ok": False, "message": "暂无词频数据"})
+    except Exception:
+        traceback.print_exc()
+        return JSONResponse({"ok": False, "message": "词云生成失败"})
+
+    category_label = str(target.get("label") or "未分类")
+    slug = _slugify_filename(category_label)
+    png_filename = f"{dim_key}_wordcloud_{slug}.png"
+    svg_filename = f"{dim_key}_wordcloud_{slug}.svg"
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "category": category_label,
+            "dimension": dim_key,
+            "document_count": int(target.get("count", 0) or 0),
+            "total_tokens": int(target.get("total_tokens", 0) or 0),
+            "png_filename": png_filename,
+            "svg_filename": svg_filename,
+            **assets,
+        }
+    )
 
 @app.get("/data")
 def get_data(

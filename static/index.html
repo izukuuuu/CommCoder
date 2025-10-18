@@ -6,8 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2/dist/echarts-wordcloud.min.js"></script>
   <link rel="stylesheet" href="/static/style.css"/>
 </head>
 <body class="bg-slate-100">
@@ -792,7 +790,16 @@
       <button id="btn_close_word_cloud" class="btn btn-sm btn-ghost text-slate-600" type="button">✕</button>
     </div>
     <div class="word-cloud-dialog-body">
-      <div id="word_cloud_chart" class="word-cloud-chart" role="img" aria-label="词云图"></div>
+      <div id="word_cloud_chart" class="word-cloud-chart">
+        <div id="word_cloud_image_wrapper" class="word-cloud-image-wrapper" aria-live="polite">
+          <img id="word_cloud_image" class="word-cloud-image hidden" alt="词云图预览" decoding="async" loading="lazy"/>
+          <div id="word_cloud_image_message" class="word-cloud-image-message word-cloud-empty">请选择分类以生成词云。</div>
+        </div>
+        <div class="word-cloud-downloads">
+          <a id="word_cloud_download_png" class="word-cloud-download-btn word-cloud-download-btn-disabled" href="#" download>下载 PNG（300 DPI）</a>
+          <a id="word_cloud_download_svg" class="word-cloud-download-btn word-cloud-download-btn-disabled" href="#" download>下载 SVG</a>
+        </div>
+      </div>
       <div>
         <h4 class="word-cloud-table-title">词频明细</h4>
         <div id="word_cloud_table" class="word-cloud-table"></div>
@@ -898,13 +905,16 @@ const TOPIC_VIZ_STATE={
 };
 const WORD_CLOUD_DIMENSIONS=['topic','field'];
 const WORD_CLOUD_LABELS={ topic:'研究主题（调整后）', field:'研究领域（调整后）' };
-const WORD_CLOUD_COLORS=['#2563eb','#1d4ed8','#0ea5e9','#14b8a6','#10b981','#22c55e','#f59e0b','#f97316','#f43f5e','#a855f7','#6366f1'];
 const WORD_CLOUD_CONFIG={
   topic:{ listId:'word_cloud_topic_list', messageId:'word_cloud_topic_message', label:WORD_CLOUD_LABELS.topic },
   field:{ listId:'word_cloud_field_list', messageId:'word_cloud_field_message', label:WORD_CLOUD_LABELS.field }
 };
-let WORD_CLOUD_CHART_INSTANCE=null;
-let WORD_CLOUD_RESIZE_HANDLER=null;
+const WORD_CLOUD_IMAGE_ID='word_cloud_image';
+const WORD_CLOUD_IMAGE_MESSAGE_ID='word_cloud_image_message';
+const WORD_CLOUD_DOWNLOAD_PNG_ID='word_cloud_download_png';
+const WORD_CLOUD_DOWNLOAD_SVG_ID='word_cloud_download_svg';
+const WORD_CLOUD_DEFAULT_HINT='请选择分类以生成词云。';
+let WORD_CLOUD_REQUEST_TOKEN=0;
 
 /* ===================== 统计与图表工具 ===================== */
 function safeNumber(value){
@@ -2644,7 +2654,8 @@ function clearWordCloudList(dim){
 }
 
 function resetWordCloudSection(){
-  disposeWordCloudChart();
+  const message = SESSION_ID ? '词云数据加载中…' : WORD_CLOUD_DEFAULT_HINT;
+  resetWordCloudVisual(message);
   WORD_CLOUD_DIMENSIONS.forEach(dim=>{
     clearWordCloudList(dim);
     const message = SESSION_ID ? '词云数据加载中…' : '请先上传或载入会话以加载词云数据。';
@@ -2685,15 +2696,45 @@ function clearTopicVizCharts(dim){
   }
 }
 
-function disposeWordCloudChart(){
-  if(WORD_CLOUD_RESIZE_HANDLER){
-    window.removeEventListener('resize', WORD_CLOUD_RESIZE_HANDLER);
-    WORD_CLOUD_RESIZE_HANDLER=null;
+function disableWordCloudDownload(el){
+  if(!el) return;
+  el.href='#';
+  el.setAttribute('aria-disabled','true');
+  el.classList.add('word-cloud-download-btn-disabled');
+  el.removeAttribute('download');
+}
+
+function enableWordCloudDownload(el, url, filename){
+  if(!el) return;
+  if(!url){
+    disableWordCloudDownload(el);
+    return;
   }
-  if(WORD_CLOUD_CHART_INSTANCE){
-    try{ WORD_CLOUD_CHART_INSTANCE.dispose(); }catch(e){}
-    WORD_CLOUD_CHART_INSTANCE=null;
+  el.href=url;
+  if(filename){
+    el.setAttribute('download', filename);
   }
+  el.removeAttribute('aria-disabled');
+  el.classList.remove('word-cloud-download-btn-disabled');
+}
+
+function resetWordCloudVisual(message){
+  const imgEl=qs(WORD_CLOUD_IMAGE_ID);
+  const msgEl=qs(WORD_CLOUD_IMAGE_MESSAGE_ID);
+  const pngBtn=qs(WORD_CLOUD_DOWNLOAD_PNG_ID);
+  const svgBtn=qs(WORD_CLOUD_DOWNLOAD_SVG_ID);
+  if(imgEl){
+    imgEl.src='';
+    imgEl.classList.add('hidden');
+    imgEl.alt='词云图预览';
+  }
+  if(msgEl){
+    const text=message || WORD_CLOUD_DEFAULT_HINT;
+    msgEl.textContent=text;
+    msgEl.classList.remove('hidden');
+  }
+  disableWordCloudDownload(pngBtn);
+  disableWordCloudDownload(svgBtn);
 }
 
 function resetTopicVizState(){
@@ -2977,79 +3018,87 @@ function getWordCloudEntries(category){
     .slice(0,50);
 }
 
-function renderWordCloudChart(category){
-  const chartEl=document.getElementById('word_cloud_chart');
-  if(!chartEl) return;
-  disposeWordCloudChart();
-  chartEl.innerHTML='';
+async function renderWordCloudVisual(dim, category){
+  const imgEl=qs(WORD_CLOUD_IMAGE_ID);
+  const msgEl=qs(WORD_CLOUD_IMAGE_MESSAGE_ID);
+  const pngBtn=qs(WORD_CLOUD_DOWNLOAD_PNG_ID);
+  const svgBtn=qs(WORD_CLOUD_DOWNLOAD_SVG_ID);
+  resetWordCloudVisual('词云图生成中…');
+  const requestToken=++WORD_CLOUD_REQUEST_TOKEN;
+  if(!SESSION_ID){
+    if(msgEl){ msgEl.textContent='请先上传或载入会话以加载词云数据。'; }
+    return;
+  }
+  if(!category){
+    if(msgEl){ msgEl.textContent='暂无可展示的分类数据。'; }
+    return;
+  }
   const entries=getWordCloudEntries(category);
-  if(!window.echarts || typeof window.echarts.init!=='function'){
-    chartEl.innerHTML='<div class="word-cloud-empty">ECharts 未加载，无法绘制词云。</div>';
-    return;
-  }
   if(!entries.length){
-    chartEl.innerHTML='<div class="word-cloud-empty">该分类暂未提取出可视化所需的词频数据。</div>';
+    if(msgEl){ msgEl.textContent='该分类暂未提取出可视化所需的词频数据。'; }
     return;
   }
-  WORD_CLOUD_CHART_INSTANCE=echarts.init(chartEl);
-  const colorPalette=[...WORD_CLOUD_COLORS];
-  let colorIdx=0;
-  const option={
-    tooltip:{
-      backgroundColor:'rgba(15,23,42,0.92)',
-      borderWidth:0,
-      textStyle:{color:'#f8fafc',fontSize:12},
-      formatter:params=>{
-        const item=params.data||{};
-        const lines=[`<strong>${escapeHtml(item.name||'')}</strong>`];
-        lines.push(`词频：${safeNumber(item.count||0)}`);
-        if(Number.isFinite(item.weight) && item.weight>0){
-          lines.push(`占比：${(item.weight*100).toFixed(1)}%`);
-        }
-        return lines.join('<br>');
-      }
-    },
-    series:[{
-      type:'wordCloud',
-      gridSize:8,
-      sizeRange:[14,64],
-      rotationRange:[-45,45],
-      rotationStep:15,
-      shape:'circle',
-      width:'100%',
-      height:'100%',
-      textStyle:{
-        fontFamily:'"Inter","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif',
-        color:()=>{
-          if(!colorPalette.length){
-            return `hsl(${Math.floor(Math.random()*360)},70%,55%)`;
-          }
-          const color=colorPalette[colorIdx % colorPalette.length];
-          colorIdx+=1;
-          return color;
-        }
-      },
-      emphasis:{
-        focus:'self',
-        textStyle:{shadowBlur:14,shadowColor:'rgba(15,23,42,0.45)',fontWeight:'bold'}
-      },
-      data:entries.map(item=>({ ...item }))
-    }]
-  };
+  if(msgEl){
+    msgEl.textContent='词云图生成中…';
+    msgEl.classList.remove('hidden');
+  }
+  const params=new URLSearchParams();
+  params.set('session_id', SESSION_ID);
+  params.set('dimension', dim);
+  if(category?.label){ params.set('label', category.label); }
+  params.set('t', Date.now().toString());
+  let data=null;
   try{
-    WORD_CLOUD_CHART_INSTANCE.setOption(option);
+    const resp=await fetch(`/word_cloud_assets?${params.toString()}`,{cache:'no-store'});
+    if(!resp.ok){
+      const errText=await resp.text();
+      const message=errText?`词云生成失败：${errText}`:'词云生成失败。';
+      if(requestToken===WORD_CLOUD_REQUEST_TOKEN && msgEl){ msgEl.textContent=message; }
+      return;
+    }
+    data=await resp.json();
   }catch(err){
-    console.error('词云渲染失败', err);
-    chartEl.innerHTML='<div class="word-cloud-empty">词云渲染失败，请稍后重试。</div>';
-    disposeWordCloudChart();
+    console.error('词云生成接口异常', err);
+    if(requestToken===WORD_CLOUD_REQUEST_TOKEN && msgEl){ msgEl.textContent='词云生成失败，请稍后重试。'; }
     return;
   }
-  WORD_CLOUD_RESIZE_HANDLER=()=>{
-    if(WORD_CLOUD_CHART_INSTANCE){
-      try{ WORD_CLOUD_CHART_INSTANCE.resize(); }catch(e){}
+  if(requestToken!==WORD_CLOUD_REQUEST_TOKEN){
+    return;
+  }
+  if(!data || data.ok!==true){
+    const fallback=(data && data.message)?data.message:'暂无词频数据。';
+    if(msgEl){ msgEl.textContent=fallback; }
+    return;
+  }
+  const pngUrl=(data.png_data_url||'').toString();
+  const svgUrl=(data.svg_data_url||'').toString();
+  if(!pngUrl){
+    if(msgEl){ msgEl.textContent='词云生成失败，请稍后重试。'; msgEl.classList.remove('hidden'); }
+    return;
+  }
+  if(imgEl && pngUrl){
+    imgEl.src=pngUrl;
+    imgEl.alt=`${category.label||'词云'} 词云图`;
+    imgEl.classList.remove('hidden');
+  }
+  if(msgEl){
+    msgEl.textContent='';
+    msgEl.classList.add('hidden');
+  }
+  enableWordCloudDownload(pngBtn, pngUrl, data.png_filename||'wordcloud.png');
+  enableWordCloudDownload(svgBtn, svgUrl, data.svg_filename||'wordcloud.svg');
+  const metaEl=qs('word_cloud_dialog_meta');
+  if(metaEl){
+    const baseMeta=metaEl.dataset?.baseMeta || metaEl.dataset?.basemeta || metaEl.textContent || '';
+    const wordsUsedRaw=Number(data.words_used);
+    if(Number.isFinite(wordsUsedRaw) && wordsUsedRaw>0){
+      const metaParts=baseMeta ? [baseMeta] : [];
+      metaParts.push(`词条 ${wordsUsedRaw}`);
+      metaEl.textContent=metaParts.join(' · ');
+    }else if(baseMeta){
+      metaEl.textContent=baseMeta;
     }
-  };
-  window.addEventListener('resize', WORD_CLOUD_RESIZE_HANDLER);
+  }
 }
 
 function renderWordCloudTable(category){
@@ -3093,9 +3142,11 @@ function openWordCloudDialog(dim, label){
     const totalTokens=safeNumber(target?.total_tokens||0);
     const parts=[`文献 ${docCount} 篇`];
     if(totalTokens>0){ parts.push(`词频 ${totalTokens}`); }
-    metaEl.textContent=parts.join(' · ');
+    const baseMeta=parts.join(' · ');
+    metaEl.textContent=baseMeta;
+    metaEl.dataset.baseMeta=baseMeta;
   }
-  renderWordCloudChart(target||null);
+  renderWordCloudVisual(dim, target||null);
   renderWordCloudTable(target||null);
   if(typeof dialog.showModal==='function'){
     dialog.showModal();
@@ -3107,7 +3158,7 @@ function openWordCloudDialog(dim, label){
 function closeWordCloudDialog(){
   const dialog=document.getElementById('dlg_word_cloud');
   if(!dialog) return;
-  disposeWordCloudChart();
+  resetWordCloudVisual();
   if(typeof dialog.close==='function'){
     dialog.close();
   }else{
@@ -4228,7 +4279,7 @@ function bindEvents(){
   if(btnCloseWordCloud){ btnCloseWordCloud.addEventListener('click', closeWordCloudDialog); }
   const dlgWordCloud=document.getElementById('dlg_word_cloud');
   if(dlgWordCloud){
-    dlgWordCloud.addEventListener('close', ()=>disposeWordCloudChart());
+    dlgWordCloud.addEventListener('close', ()=>resetWordCloudVisual());
     dlgWordCloud.addEventListener('cancel', e=>{ e.preventDefault(); closeWordCloudDialog(); });
   }
 
