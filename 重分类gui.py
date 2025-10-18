@@ -7,7 +7,7 @@
   打开 http://127.0.0.1:8000
 """
 import base64
-import io, os, gc, re, json, uuid, time, math, traceback
+import io, os, gc, re, json, uuid, time, math, traceback, hashlib, random
 from collections import Counter, defaultdict
 from datetime import datetime
 from threading import Lock
@@ -16,7 +16,7 @@ from typing import Dict, Any, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 import requests
-from fastapi import FastAPI, UploadFile, File, Query
+from fastapi import FastAPI, UploadFile, File, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
@@ -32,6 +32,10 @@ except Exception:  # pragma: no cover - 可选依赖
     hdbscan = None
 from dotenv import load_dotenv, set_key
 import uvicorn
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 # ============== 可选：sentence-transformers ==============
 _ST_MODEL = None
@@ -50,10 +54,17 @@ except Exception:
 load_dotenv(dotenv_path=".env")
 
 # ================== 常量与目录 ==================
+plt.rcParams["font.family"] = ["Times New Roman", "Times", "serif"]
+plt.rcParams["axes.labelcolor"] = "#1f2937"
+plt.rcParams["xtick.color"] = "#1f2937"
+plt.rcParams["ytick.color"] = "#1f2937"
+
 APP_VERSION = "4.0.0"
 SESS_DIR    = os.getenv("SESS_DIR", "sessions")
 OUTPUT_DIR  = os.getenv("OUTPUT_DIR", "Output")
 STATIC_DIR  = "static"
+SAMPLING_DIR_NAME = "sampling_audits"
+SAMPLING_DEFAULT_RATE = float(os.getenv("SAMPLING_DEFAULT_RATE", "0.03"))
 
 # 限制常驻内存中的 DataFrame 会话数量，LRU 超限自动卸载（磁盘已持久化，不丢）
 MAX_MEMORY_SESSIONS = int(os.getenv("MAX_MEMORY_SESSIONS", "3"))
@@ -356,21 +367,38 @@ def _category_scatter(texts: List[str], labels: List[str], counts: List[int]) ->
     n = len(labels)
     if n == 0:
         return {"points": [], "cluster_count": 0, "explained_variance": 0.0}
-    vectorizer_name = "tfidf"
+
+    vectorizer_name = ""
     reduction_method = "pca"
-    try:
-        vectorizer = TfidfVectorizer(
-            tokenizer=_tokenize_text,
-            lowercase=True,
-            token_pattern=None,
-            max_features=2000,
-        )
-        matrix = vectorizer.fit_transform(texts)
-        arr = matrix.toarray()
-    except Exception:
-        arr = np.zeros((n, 1), dtype=float)
+    arr: Optional[np.ndarray] = None
+
+    if n:
+        try:
+            arr = embed_local(texts, None)
+            if arr.shape[0] == n:
+                vectorizer_name = "sbert"
+            else:
+                arr = None
+        except Exception:
+            arr = None
+
+    if arr is None:
+        vectorizer_name = "tfidf"
+        try:
+            vectorizer = TfidfVectorizer(
+                tokenizer=_tokenize_text,
+                lowercase=True,
+                token_pattern=None,
+                max_features=2000,
+            )
+            matrix = vectorizer.fit_transform(texts)
+            arr = matrix.toarray()
+        except Exception:
+            arr = np.zeros((n, 1), dtype=float)
+
     if arr.shape[0] != n:
         arr = np.zeros((n, max(1, arr.shape[1] if arr.ndim == 2 else 1)), dtype=float)
+
     coords = np.zeros((n, 2), dtype=float)
     explained = 0.0
     if n == 1:
@@ -387,19 +415,43 @@ def _category_scatter(texts: List[str], labels: List[str], counts: List[int]) ->
                 coords = np.zeros((n, 2), dtype=float)
         except Exception:
             coords = np.zeros((n, 2), dtype=float)
-    cluster_labels = np.zeros(n, dtype=int)
+
+    cluster_labels = np.full(n, -1, dtype=int)
     cluster_count = 0
     cluster_algo: Optional[str] = None
-    if n >= 3:
+
+    if n >= 2 and hdbscan is not None:
         try:
-            cluster_count = min(6, n)
-            km = KMeans(n_clusters=cluster_count, n_init=10, random_state=42)
-            cluster_labels = km.fit_predict(arr).astype(int)
-            cluster_algo = "kmeans"
+            min_cluster_size = max(2, int(math.sqrt(n)))
+            clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, metric="euclidean")
+            raw_labels = clusterer.fit_predict(arr)
+            probs = getattr(clusterer, "probabilities_", None)
+
+            valid_labels = sorted({int(lbl) for lbl in raw_labels.tolist() if lbl >= 0})
+            label_map = {lbl: idx for idx, lbl in enumerate(valid_labels)}
+            has_noise = bool(any(int(l) < 0 for l in raw_labels.tolist()))
+
+            for i, lbl in enumerate(raw_labels):
+                if lbl >= 0:
+                    cluster_labels[i] = label_map[int(lbl)]
+                else:
+                    cluster_labels[i] = len(valid_labels)
+
+            cluster_count = len(valid_labels)
+            if has_noise and valid_labels:
+                cluster_count += 1
+            if not valid_labels:
+                cluster_labels[:] = 0
+                cluster_count = 1 if n > 0 else 0
+            cluster_algo = "hdbscan"
+
+            if probs is not None and probs.shape[0] == n:
+                explained = float(max(explained, 1.0 - float(np.mean(probs))))
         except Exception:
             cluster_labels = np.zeros(n, dtype=int)
             cluster_count = 0
             cluster_algo = None
+
     points = []
     for i in range(n):
         points.append(
@@ -411,14 +463,17 @@ def _category_scatter(texts: List[str], labels: List[str], counts: List[int]) ->
                 "cluster": int(cluster_labels[i]) if cluster_count else 0,
             }
         )
-    if hasattr(cluster_labels, "tolist"):
-        unique_clusters = len(set(cluster_labels.tolist())) if cluster_count else (1 if n else 0)
+
+    if cluster_count <= 0:
+        effective_clusters = 1 if n else 0
+        unique_clusters = effective_clusters
     else:
-        unique_clusters = len(set(cluster_labels)) if cluster_count else (1 if n else 0)
-    effective_clusters = int(cluster_count) if cluster_count else (1 if n else 0)
+        unique_clusters = cluster_count
+        effective_clusters = cluster_count
+
     return {
         "points": points,
-        "cluster_count": effective_clusters,
+        "cluster_count": int(effective_clusters),
         "unique_clusters": int(unique_clusters),
         "explained_variance": round(explained, 4),
         "cluster_algorithm": cluster_algo or "",
@@ -715,6 +770,154 @@ def list_sessions() -> List[Dict[str,Any]]:
     out.sort(key=_key, reverse=True)
     return out
 
+def _sampling_dir(sid: str) -> str:
+    d = os.path.join(_session_dir(sid), SAMPLING_DIR_NAME)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+def _sampling_slug(inspector: str) -> str:
+    base = re.sub(r"[^A-Za-z0-9]+", "-", inspector.strip()).strip("-")
+    if not base:
+        base = "inspector"
+    digest = hashlib.md5(inspector.strip().encode("utf-8")).hexdigest()[:8]
+    return f"{base}-{digest}"
+
+def _sampling_path(sid: str, slug: str) -> str:
+    return os.path.join(_sampling_dir(sid), f"{slug}.json")
+
+def _read_sampling_audit(sid: str, slug: str) -> Optional[Dict[str, Any]]:
+    path = _sampling_path(sid, slug)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+def _write_sampling_audit(sid: str, slug: str, data: Dict[str, Any]):
+    path = _sampling_path(sid, slug)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+def _sampling_item_status(item: Dict[str, Any]) -> str:
+    topic = (item.get("selected_topic") or "").strip()
+    field = (item.get("selected_field") or "").strip()
+    if topic and field:
+        return "completed"
+    if topic or field:
+        return "partial"
+    return "pending"
+
+def _sampling_summary(audit: Dict[str, Any]) -> Dict[str, Any]:
+    items = audit.get("items") or []
+    total = len(items)
+    completed = 0
+    partial = 0
+    for item in items:
+        status = _sampling_item_status(item)
+        if status == "completed":
+            completed += 1
+        elif status == "partial":
+            partial += 1
+    pending = max(0, total - completed - partial)
+    progress = (completed / total) if total else 0.0
+    status = "pending"
+    if total and completed == total:
+        status = "completed"
+    elif completed or partial:
+        status = "in_progress"
+    return {
+        "inspector": audit.get("inspector", ""),
+        "inspector_id": audit.get("inspector_id", ""),
+        "sample_rate": audit.get("sample_rate", 0.0),
+        "sample_rate_percent": round(float(audit.get("sample_rate", 0.0)) * 100.0, 2),
+        "sample_size": total,
+        "total_rows": int(audit.get("total_rows", 0) or 0),
+        "completed": completed,
+        "in_progress": partial,
+        "pending": pending,
+        "progress": progress,
+        "progress_percent": round(progress * 100.0, 2),
+        "created_at": audit.get("created_at", ""),
+        "updated_at": audit.get("updated_at", ""),
+        "status": status,
+        "seed": audit.get("random_seed"),
+    }
+
+def _sampling_item_payload(item: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "item_id": item.get("item_id", ""),
+        "row_id": item.get("row_id", ""),
+        "row_number": int(item.get("row_number", 0) or 0),
+        "sample_order": int(item.get("sample_order", 0) or 0),
+        "article_title": item.get("article_title", ""),
+        "abstract": item.get("abstract", ""),
+        "structured_summary": item.get("structured_summary", ""),
+        "ai_topic": item.get("ai_topic", ""),
+        "ai_field": item.get("ai_field", ""),
+        "orig_topic": item.get("orig_topic", ""),
+        "orig_field": item.get("orig_field", ""),
+        "selected_topic": item.get("selected_topic", ""),
+        "selected_field": item.get("selected_field", ""),
+        "checked_at": item.get("checked_at"),
+        "status": _sampling_item_status(item),
+    }
+
+def _sampling_make_item(row: pd.Series, row_idx: Any, sample_order: int, dataset_position: int) -> Dict[str, Any]:
+    return {
+        "item_id": str(uuid.uuid4()),
+        "row_id": "" if pd.isna(row_idx) else str(row_idx),
+        "row_number": int(dataset_position),
+        "sample_order": int(sample_order),
+        "article_title": safe_get(row, "Article Title"),
+        "abstract": safe_get(row, "Abstract"),
+        "structured_summary": safe_get(row, "结构化总结"),
+        "ai_topic": safe_get(row, ADJUST_TOPIC_COL),
+        "ai_field": safe_get(row, ADJUST_FIELD_COL),
+        "orig_topic": safe_get(row, "研究主题（议题）分类"),
+        "orig_field": safe_get(row, "研究领域分类"),
+        "selected_topic": "",
+        "selected_field": "",
+        "checked_at": None,
+    }
+
+def _sampling_normalize_rate(raw: Any) -> float:
+    try:
+        rate = float(raw)
+    except Exception:
+        return SAMPLING_DEFAULT_RATE
+    if rate <= 0:
+        return SAMPLING_DEFAULT_RATE
+    if rate > 1:
+        rate = rate / 100.0
+    if rate <= 0:
+        rate = SAMPLING_DEFAULT_RATE
+    return min(max(rate, 0.001), 1.0)
+
+def _list_sampling_audits(sid: str) -> List[Dict[str, Any]]:
+    directory = os.path.join(_session_dir(sid), SAMPLING_DIR_NAME)
+    if not os.path.exists(directory):
+        return []
+    audits: List[Dict[str, Any]] = []
+    for name in os.listdir(directory):
+        if not name.endswith(".json"):
+            continue
+        slug = name[:-5]
+        data = _read_sampling_audit(sid, slug)
+        if not data:
+            continue
+        summary = _sampling_summary(data)
+        summary["inspector_id"] = data.get("inspector_id", slug)
+        summary["_updated_ts"] = float(data.get("updated_ts", 0.0) or 0.0)
+        audits.append(summary)
+    audits.sort(key=lambda x: x.get("_updated_ts", 0.0), reverse=True)
+    for a in audits:
+        a.pop("_updated_ts", None)
+    return audits
+
 def safe_filename(name:str) -> str:
     name = re.sub(r"[\\/:*?\"<>|]+", "_", name)
     name = name.strip()
@@ -799,7 +1002,8 @@ def frontend_config():
         "field_list": FIELD_LIST,
         "adj_topic_key": ADJUST_TOPIC_COL,
         "adj_field_key": ADJUST_FIELD_COL,
-        "app_version": APP_VERSION
+        "app_version": APP_VERSION,
+        "sampling_default_rate": SAMPLING_DEFAULT_RATE,
     })
 
 # ================== 上传 / 统计 / 分页 ==================
@@ -962,6 +1166,71 @@ def _timeline(df: pd.DataFrame, bin_years: int) -> Dict[str, Any]:
     }
 
 
+def _render_timeline_line_figure(labels: List[str], counts: List[int]):
+    if not labels:
+        fig, ax = plt.subplots(figsize=(4.5, 3.5))
+        fig.patch.set_facecolor("white")
+        ax.axis("off")
+        ax.text(
+            0.5,
+            0.5,
+            "No timeline data",
+            ha="center",
+            va="center",
+            fontsize=14,
+            color="#1f2937",
+            transform=ax.transAxes,
+        )
+        return fig
+
+    fig_width = min(8.0, max(4.0, len(labels) * 0.6))
+    fig_height = min(8.0, max(3.0, fig_width * 0.6))
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+
+    positions = list(range(len(labels)))
+    primary_line_color = "#2563eb"
+    marker_face_color = "#1d4ed8"
+
+    ax.plot(
+        positions,
+        counts,
+        color=primary_line_color,
+        linewidth=2.5,
+        marker="o",
+        markersize=6,
+        markerfacecolor=marker_face_color,
+        markeredgewidth=0.9,
+        markeredgecolor="#ffffff",
+    )
+
+    ax.set_xticks(positions)
+    ax.set_xticklabels(labels, rotation=35, ha="right")
+    ax.set_xlabel("Year Interval", fontsize=12)
+    ax.set_ylabel("Count", fontsize=12)
+
+    max_count = max(counts) if counts else 0
+    upper = max_count * 1.1 if max_count > 0 else 1
+    ax.set_ylim(0, upper)
+    ax.margins(x=0.02)
+    ax.set_axisbelow(True)
+    ax.grid(axis="y", color="#dbeafe", linewidth=0.8, linestyle="--", alpha=0.7)
+
+    for spine_name, spine in ax.spines.items():
+        if spine_name in ("left", "bottom"):
+            spine.set_visible(True)
+            spine.set_color("#1f2937")
+            spine.set_linewidth(1.1)
+        else:
+            spine.set_visible(False)
+
+    ax.tick_params(axis="x", labelsize=11, direction="out", length=4, width=0.8)
+    ax.tick_params(axis="y", labelsize=11, direction="out", length=4, width=0.8)
+
+    return fig
+
+
 @app.get("/stats")
 def stats(session_id: str = Query(...), bin_years: int = Query(5, ge=1, le=50)):
     if session_id not in DATASTORE:
@@ -1000,6 +1269,54 @@ def stats(session_id: str = Query(...), bin_years: int = Query(5, ge=1, le=50)):
         "journal_topic_adj": journal_topic,
         "journal_field_adj": journal_field,
     })
+
+
+@app.get("/timeline_chart")
+def timeline_chart(
+    session_id: str = Query(...),
+    bin_years: int = Query(5, ge=1, le=50),
+    format: str = Query("png"),
+    download: bool = Query(False),
+):
+    fmt = format.lower().strip()
+    if fmt not in {"png", "svg"}:
+        return PlainTextResponse("format must be png or svg", status_code=400)
+
+    if session_id not in DATASTORE:
+        try:
+            with _get_lock(session_id):
+                DATASTORE[session_id] = load_session_from_disk(session_id)
+                _touch(session_id)
+                _evict_if_needed()
+        except Exception:
+            return PlainTextResponse("无效 session_id", status_code=400)
+
+    df = DATASTORE[session_id]
+    timeline = _timeline(df, bin_years)
+    bins = timeline.get("bins") or []
+    labels = [str(item.get("label", "")) for item in bins]
+    counts = [int(item.get("count", 0)) for item in bins]
+
+    fig = _render_timeline_line_figure(labels, counts)
+    buffer = io.BytesIO()
+
+    if fmt == "png":
+        fig.savefig(buffer, format="png", dpi=300, bbox_inches="tight", facecolor="white")
+        media_type = "image/png"
+        extension = "png"
+    else:
+        fig.savefig(buffer, format="svg", bbox_inches="tight", facecolor="white")
+        media_type = "image/svg+xml"
+        extension = "svg"
+
+    plt.close(fig)
+    buffer.seek(0)
+
+    filename = f"timeline_{bin_years}yr.{extension}"
+    disposition = "attachment" if download else "inline"
+    headers = {"Content-Disposition": f"{disposition}; filename={filename}"}
+
+    return Response(buffer.getvalue(), media_type=media_type, headers=headers)
 
 
 @app.get("/topic_visuals")
@@ -1770,6 +2087,175 @@ def export_topic_year(payload: Dict[str,Any]):
         })
     except Exception as e:
         return PlainTextResponse(f"议题年份切片导出失败：{e}", 500)
+
+@app.get("/sampling/list")
+def sampling_list(session_id: str = Query("")):
+    sid = (session_id or "").strip()
+    if not sid:
+        return JSONResponse({"audits": []})
+    try:
+        audits = _list_sampling_audits(sid)
+        return JSONResponse({"audits": audits})
+    except Exception as e:
+        return PlainTextResponse(f"拉取抽样列表失败：{e}", status_code=400)
+
+@app.post("/sampling/generate")
+def sampling_generate(payload: Dict[str, Any]):
+    try:
+        sid = (payload.get("session_id") or "").strip()
+        inspector = (payload.get("inspector") or "").strip()
+        if not sid:
+            return PlainTextResponse("缺少 session_id", 400)
+        if not inspector:
+            return PlainTextResponse("请填写分类核对员姓名", 400)
+
+        force_raw = payload.get("force")
+        if isinstance(force_raw, bool):
+            force = force_raw
+        elif isinstance(force_raw, (int, float)):
+            force = bool(force_raw)
+        elif isinstance(force_raw, str):
+            force = force_raw.strip().lower() in ("1", "true", "yes", "on")
+        else:
+            force = False
+
+        rate = _sampling_normalize_rate(payload.get("sample_rate", SAMPLING_DEFAULT_RATE))
+        try:
+            sample_size = int(payload.get("sample_size", 0) or 0)
+        except Exception:
+            sample_size = 0
+
+        slug = _sampling_slug(inspector)
+        existing = _read_sampling_audit(sid, slug)
+        if existing and not force:
+            summary = _sampling_summary(existing)
+            summary["inspector_id"] = existing.get("inspector_id", slug)
+            return JSONResponse({"status": "exists", "audit": summary})
+
+        with _get_lock(sid):
+            if sid not in DATASTORE:
+                DATASTORE[sid] = load_session_from_disk(sid)
+                _touch(sid)
+                _evict_if_needed()
+            df = DATASTORE[sid]
+            total_rows = int(df.shape[0])
+            if total_rows <= 0:
+                return PlainTextResponse("当前会话无数据", 400)
+            if sample_size <= 0:
+                sample_size = max(1, math.ceil(total_rows * rate))
+            sample_size = min(sample_size, total_rows)
+            if sample_size <= 0:
+                sample_size = 1
+
+            seed = int(time.time())
+            rng = random.Random(seed)
+            positions = sorted(rng.sample(range(total_rows), sample_size))
+            items: List[Dict[str, Any]] = []
+            for order, pos in enumerate(positions, start=1):
+                row = df.iloc[pos]
+                row_label = df.index[pos]
+                items.append(_sampling_make_item(row, row_label, order, pos + 1))
+
+            now_ts = time.time()
+            now_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            audit = {
+                "session_id": sid,
+                "inspector": inspector,
+                "inspector_id": slug,
+                "sample_rate": float(rate),
+                "sample_size": int(sample_size),
+                "total_rows": total_rows,
+                "random_seed": seed,
+                "created_at": now_text,
+                "created_ts": now_ts,
+                "updated_at": now_text,
+                "updated_ts": now_ts,
+                "items": items,
+            }
+            _write_sampling_audit(sid, slug, audit)
+            _touch(sid)
+
+        summary = _sampling_summary(audit)
+        summary["inspector_id"] = slug
+        return JSONResponse({"status": "created", "audit": summary})
+    except Exception as e:
+        return PlainTextResponse(f"生成抽样失败：{e}", status_code=400)
+
+@app.get("/sampling/data")
+def sampling_data(session_id: str = Query(""), inspector_id: str = Query("")):
+    sid = (session_id or "").strip()
+    slug = (inspector_id or "").strip()
+    if not sid or not slug:
+        return PlainTextResponse("缺少必要参数", 400)
+    audit = _read_sampling_audit(sid, slug)
+    if not audit:
+        return PlainTextResponse("未找到抽样任务", 404)
+    items_raw = audit.get("items") or []
+    items_payload: List[Dict[str, Any]] = []
+    for idx, raw in enumerate(items_raw, start=1):
+        item_data = dict(raw)
+        if not item_data.get("sample_order"):
+            item_data["sample_order"] = idx
+        if not item_data.get("row_number"):
+            try:
+                item_data["row_number"] = int(item_data.get("row_id", 0) or 0)
+            except Exception:
+                item_data["row_number"] = idx
+        items_payload.append(_sampling_item_payload(item_data))
+    summary = _sampling_summary(audit)
+    summary["inspector_id"] = audit.get("inspector_id", slug)
+    return JSONResponse({"audit": summary, "items": items_payload})
+
+@app.post("/sampling/save")
+def sampling_save(payload: Dict[str, Any]):
+    try:
+        sid = (payload.get("session_id") or "").strip()
+        slug = (payload.get("inspector_id") or "").strip()
+        item_id = (payload.get("item_id") or "").strip()
+        if not sid or not slug or not item_id:
+            return PlainTextResponse("缺少必要参数", 400)
+
+        topic = str(payload.get("topic_choice", "") or "").strip()
+        field = str(payload.get("field_choice", "") or "").strip()
+        if topic and topic not in TOPIC_LIST:
+            return PlainTextResponse("议题选择不在参考列表中", 400)
+        if field and field not in FIELD_LIST:
+            return PlainTextResponse("领域选择不在参考列表中", 400)
+
+        with _get_lock(sid):
+            audit = _read_sampling_audit(sid, slug)
+            if not audit:
+                return PlainTextResponse("抽样任务不存在", 404)
+            items = audit.get("items") or []
+            target = None
+            for item in items:
+                if item.get("item_id") == item_id:
+                    target = item
+                    break
+            if target is None:
+                return PlainTextResponse("样本不存在", 404)
+
+            target["selected_topic"] = topic
+            target["selected_field"] = field
+            if topic or field:
+                target["checked_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                target["checked_at"] = None
+
+            now_ts = time.time()
+            audit["items"] = items
+            audit["updated_ts"] = now_ts
+            audit["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            _write_sampling_audit(sid, slug, audit)
+            if sid in DATASTORE:
+                _touch(sid)
+
+        summary = _sampling_summary(audit)
+        summary["inspector_id"] = audit.get("inspector_id", slug)
+        item_payload = _sampling_item_payload(target)
+        return JSONResponse({"ok": True, "item": item_payload, "summary": summary})
+    except Exception as e:
+        return PlainTextResponse(f"保存失败：{e}", status_code=400)
 
 @app.get("/file")
 def file_serve(path: str = Query(...)):

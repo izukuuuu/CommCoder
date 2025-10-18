@@ -7,3 +7,5 @@ scikit-learn
 python-dotenv
 hdbscan
 wordcloud
+matplotlib
+sentence-transformers

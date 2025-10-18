@@ -39,6 +39,7 @@
             <option value="page-home">主页</option>
             <option value="page-coding" data-requires-session="true">编码工作台</option>
             <option value="page-visual" data-requires-session="true">数据可视化</option>
+            <option value="page-sampling" data-requires-session="true">抽样检测</option>
             <option value="page-settings">OpenAI API 设置</option>
           </select>
         </div>
@@ -66,6 +67,10 @@
           <button class="nav-link" data-target="page-visual" data-requires-session="true" title="数据可视化" aria-label="数据可视化">
             <svg class="nav-icon w-5 h-5" data-heroicon="chart-pie" aria-hidden="true"></svg>
             <span class="nav-label">数据可视化</span>
+          </button>
+          <button class="nav-link" data-target="page-sampling" data-requires-session="true" title="抽样检测" aria-label="抽样检测">
+            <svg class="nav-icon w-5 h-5" data-heroicon="clipboard-document-list" aria-hidden="true"></svg>
+            <span class="nav-label">抽样检测</span>
           </button>
         </nav>
         <div class="sidebar-footer px-2 pt-4 pb-6 border-t border-slate-200">
@@ -264,7 +269,7 @@
                         </div>
                         <div>
                           <h4 class="home-action-title">按调整分类批量导出</h4>
-                          <p class="home-action-desc">根据调整后的议题或领域拆分多个 Excel，集中写入服务器目录。</p>
+                          <p class="home-action-desc">可选择按调整后的议题、领域或两者拆分多个 Excel，集中写入服务器目录。</p>
                         </div>
                       </div>
                       <button id="btn_export_batch" class="action-btn home-action-btn bg-amber-500 text-white hover:bg-amber-400 shadow-sm" title="按调整后的分类批量导出多个 Excel 文件">
@@ -580,9 +585,15 @@
               <div>
                 <div class="flex items-center justify-between gap-3 mb-2 timeline-controls">
                   <h4 class="text-sm font-semibold text-slate-700">发表数量趋势</h4>
-                  <button type="button" id="btn_expand_timeline_line" class="timeline-expand-btn">新标签全屏</button>
+                  <div class="flex items-center gap-2">
+                    <button type="button" id="btn_download_timeline_png" class="timeline-expand-btn" disabled>下载 PNG</button>
+                    <button type="button" id="btn_download_timeline_svg" class="timeline-expand-btn" disabled>下载 SVG</button>
+                  </div>
                 </div>
-                <div id="timeline_line_chart" class="timeline-chart-box"></div>
+                <div id="timeline_line_chart" class="timeline-chart-box">
+                  <div id="timeline_line_placeholder" class="treemap-empty hidden"></div>
+                  <img id="timeline_line_image" class="timeline-line-image hidden" alt="Timeline line chart" loading="lazy" />
+                </div>
               </div>
               <div>
                 <div class="flex flex-wrap items-center justify-between gap-3 mb-2 timeline-controls">
@@ -715,6 +726,64 @@
           </div>
         </section>
 
+        <section id="page-sampling" class="page-section hidden space-y-8">
+          <div class="bg-white rounded-2xl shadow p-6 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-lg font-semibold text-slate-900">抽样检测工作台</h2>
+                <p class="text-sm text-slate-500">系统按比例随机抽样，核对员以盲选方式复核议题与领域分类结果。</p>
+              </div>
+              <div class="text-xs text-slate-500" id="sampling_header_hint">默认抽样比例：3%</div>
+            </div>
+            <p class="text-xs text-slate-400">提示：样本列表中不会直接显示 AI 分类，请通过右侧提示按钮按需查看。</p>
+          </div>
+
+          <div class="sampling-layout">
+            <div class="sampling-sidebar space-y-6">
+              <section class="bg-white rounded-2xl shadow p-5 space-y-4">
+                <div class="space-y-2">
+                  <h3 class="text-base font-semibold text-slate-900">新建抽样任务</h3>
+                  <p class="text-sm text-slate-500">填写分类核对员姓名，系统将按比例自动抽取待核对样本。</p>
+                </div>
+                <div class="space-y-3">
+                  <div>
+                    <label class="block text-sm text-slate-600 mb-1" for="sampling_inspector_input">分类核对员</label>
+                    <input id="sampling_inspector_input" class="sampling-input" placeholder="如：张三">
+                  </div>
+                  <div>
+                    <label class="block text-sm text-slate-600 mb-1" for="sampling_rate_input">抽样比例（%）</label>
+                    <div class="flex items-center gap-3">
+                      <input id="sampling_rate_input" type="number" min="0.1" max="100" step="0.1" class="sampling-input w-28" value="3">
+                      <span class="text-xs text-slate-500">向上取整，至少抽取 1 条</span>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <input id="sampling_force_toggle" type="checkbox" class="sampling-checkbox">
+                    <label for="sampling_force_toggle" class="text-sm text-slate-600">覆盖同名核对员的现有抽样</label>
+                  </div>
+                </div>
+                <div class="flex flex-col gap-2">
+                  <button id="btn_sampling_generate" class="btn bg-slate-800 text-white hover:bg-slate-700" type="button">生成抽样样本</button>
+                  <p id="sampling_create_hint" class="text-xs text-slate-500"></p>
+                </div>
+              </section>
+              <section class="bg-white rounded-2xl shadow p-5 space-y-4">
+                <div class="flex items-center justify-between">
+                  <h3 class="text-base font-semibold text-slate-900">抽样任务列表</h3>
+                  <button id="btn_sampling_refresh" class="btn btn-sm btn-ghost text-slate-600" type="button">刷新</button>
+                </div>
+                <div id="sampling_list_zone" class="sampling-list-zone"></div>
+              </section>
+            </div>
+            <div class="sampling-main">
+              <section class="bg-white rounded-2xl shadow p-6 space-y-4 h-full">
+                <div id="sampling_detail_zone" class="sampling-detail-empty">请在左侧选择分类核对员以查看抽样详情。</div>
+                <div id="sampling_items_zone"></div>
+              </section>
+            </div>
+          </div>
+        </section>
+
         <section id="page-settings" class="page-section hidden space-y-8">
           <div class="bg-white rounded-2xl shadow p-6 space-y-3">
             <div class="flex flex-wrap items-center justify-between gap-3">
@@ -780,6 +849,30 @@
     <button class="btn bg-slate-700 text-white hover:bg-slate-600" onclick="qs('dlg_sessions').close()">关闭</button>
   </div>
 </dialog>
+<dialog id="dlg_export_batch" class="rounded-xl p-0 w-[440px] max-w-[95vw]">
+  <div class="p-4 border-b flex items-center justify-between">
+    <h3 class="font-semibold text-slate-900">按调整分类批量导出</h3>
+    <button id="btn_export_batch_close" class="btn btn-sm btn-ghost text-slate-600" type="button">✕</button>
+  </div>
+  <div class="p-5 space-y-4 text-sm text-slate-700">
+    <p class="leading-relaxed">请选择要导出的维度，系统会分别为所选分类生成 Excel 子表。默认会同时导出调整后的议题与领域。</p>
+    <div class="space-y-3">
+      <label class="flex items-center gap-2">
+        <input id="chk_export_topic" class="h-4 w-4 rounded border-slate-300 text-slate-800" type="checkbox" name="batch_export_target" value="topic" checked>
+        <span class="font-medium text-slate-800">按调整后议题分表</span>
+      </label>
+      <label class="flex items-center gap-2">
+        <input id="chk_export_field" class="h-4 w-4 rounded border-slate-300 text-slate-800" type="checkbox" name="batch_export_target" value="field" checked>
+        <span class="font-medium text-slate-800">按调整后领域分表</span>
+      </label>
+    </div>
+    <p id="batch_export_error" class="text-xs text-rose-500 hidden">请至少选择一个导出维度。</p>
+  </div>
+  <div class="p-4 border-t flex items-center justify-end gap-2">
+    <button id="btn_export_batch_cancel" class="btn btn-ghost text-slate-600" type="button">取消</button>
+    <button id="btn_export_batch_confirm" class="btn bg-slate-800 text-white hover:bg-slate-700" type="button">生成</button>
+  </div>
+</dialog>
 <dialog id="dlg_word_cloud" class="word-cloud-dialog">
   <div class="word-cloud-dialog-card">
     <div class="word-cloud-dialog-header">
@@ -817,6 +910,8 @@ let SESSION_ID=""; let SESSION_META=null; let CURRENT_FILTER={target:"",value:""
 let ACTIVE_COL="topic"; // "topic"|"field"
 const PAGER = { page:1, size:50, total:0, pages:1 };
 let LAST_EXPORT_URL=""; // 可选下载地址
+let SAMPLING_DEFAULT_RATE = 0.03;
+const SAMPLING_STATE = { list: [], loading: false, activeId: '', data: new Map() };
 const TREEMAP_PLOTS={};
 const TREEMAP_STATE={};
 const TREEMAP_CATEGORY_LIMIT=24;
@@ -867,12 +962,18 @@ const TIMELINE_CONFIG={
 const TIMELINE_STACK_DIMENSIONS=['topic_adj','field_adj'];
 const TIMELINE_STACK_LABELS={ topic_adj:'研究主题（调整后）', field_adj:'研究领域（调整后）' };
 const TIMELINE_STACK_COLORS=['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
-const TIMELINE_CHART_IDS=['timeline_line_chart','timeline_area_chart'];
+const TIMELINE_PLOTLY_IDS=['timeline_area_chart'];
 let TIMELINE_BIN_SIZE=5;
 let TIMELINE_DATA=null;
 let TIMELINE_STACK_DIM='topic_adj';
-let TIMELINE_LINE_FIGURE=null;
 let TIMELINE_STACK_FIGURE=null;
+const TIMELINE_LINE_IMAGE=document.getElementById('timeline_line_image');
+const TIMELINE_LINE_PLACEHOLDER=document.getElementById('timeline_line_placeholder');
+const TIMELINE_LINE_DOWNLOAD_BUTTONS={
+  png:document.getElementById('btn_download_timeline_png'),
+  svg:document.getElementById('btn_download_timeline_svg')
+};
+const TIMELINE_LINE_DOWNLOAD_URLS={ png:'', svg:'' };
 let AUTO_SAVE_TIMER=null;
 let AUTO_SAVE_ENABLED=false;
 const TOPIC_VIZ_DIMENSIONS=['topic','field'];
@@ -1027,6 +1128,7 @@ const SORT_VALUE_RANK_DESC='rank_desc';
 const qs = id=>document.getElementById(id);
 const escapeHtml = s=>String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
 const escapeAttr = s=>escapeHtml(s).replaceAll('"','&quot;');
+const formatMultiline = text=>escapeHtml(text||"").replace(/\n/g,'<br>');
 const LANGUAGE_TOGGLE = document.getElementById('lang_toggle');
 const LANGUAGE_TOGGLE_LABEL = document.getElementById('lang_toggle_label');
 const SUPPORTED_LANGS = ['zh','en'];
@@ -1176,6 +1278,7 @@ function renderSessionMeta(meta){
   summary.dataset.state = meta ? 'active' : 'empty';
   summary.classList.toggle('opacity-60', !meta);
   if(!meta){
+    resetSamplingState();
     primary.textContent = '暂无会话';
     secondary.textContent = '请上传或载入数据集';
     LAST_EXPORT_URL = '';
@@ -1279,7 +1382,7 @@ const MOBILE_PAGE_SELECT = document.getElementById('mobile_page_select');
 const HOME_LOCK_WRAP = document.getElementById('home_lock_hint_wrapper');
 const HOME_LOCK_HINT = document.getElementById('home_lock_hint');
 const HOME_LOCK_ICON = document.getElementById('home_lock_icon');
-const SESSION_REQUIRED_PAGES = new Set(['page-coding','page-visual']);
+const SESSION_REQUIRED_PAGES = new Set(['page-coding','page-visual','page-sampling']);
 const HOME_ACTION_CONFIG = [
   { action: 'save-session', btnId: 'btn_save_session', requiresSession: true },
   { action: 'load-session', btnId: 'btn_load_session', requiresSession: false },
@@ -1344,12 +1447,6 @@ TIMELINE_STACK_TOGGLES.forEach(btn=>{
 });
 updateTimelineStackToggle();
 
-const TIMELINE_LINE_EXPAND_BTN = document.getElementById('btn_expand_timeline_line');
-if(TIMELINE_LINE_EXPAND_BTN){
-  TIMELINE_LINE_EXPAND_BTN.addEventListener('click',()=>{
-    openTimelineFigureFullScreen(TIMELINE_LINE_FIGURE, '发表数量趋势');
-  });
-}
 const TIMELINE_STACK_EXPAND_BTN = document.getElementById('btn_expand_timeline_stack');
 if(TIMELINE_STACK_EXPAND_BTN){
   TIMELINE_STACK_EXPAND_BTN.addEventListener('click',()=>{
@@ -1357,6 +1454,21 @@ if(TIMELINE_STACK_EXPAND_BTN){
     openTimelineFigureFullScreen(TIMELINE_STACK_FIGURE, label);
   });
 }
+Object.entries(TIMELINE_LINE_DOWNLOAD_BUTTONS).forEach(([format, btn])=>{
+  if(!btn) return;
+  btn.addEventListener('click',()=>{
+    if(btn.disabled) return;
+    const url = TIMELINE_LINE_DOWNLOAD_URLS[format] || '';
+    if(!url) return;
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    const binLabel = Number.isFinite(TIMELINE_BIN_SIZE) ? `${TIMELINE_BIN_SIZE}` : 'timeline';
+    anchor.download = `timeline_${binLabel}yr.${format}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+  });
+});
 
 function pingHomeLock(){
   if(!HOME_LOCK_WRAP) return;
@@ -1424,6 +1536,10 @@ function updateWorkspaceAccess(){
     }
   }
   refreshHomeActions();
+  const samplingControls=[qs('btn_sampling_generate'),qs('btn_sampling_refresh')];
+  samplingControls.forEach(btn=>{ if(btn){ btn.disabled=!hasSession; }});
+  const samplingInputs=[qs('sampling_inspector_input'),qs('sampling_rate_input'),qs('sampling_force_toggle')];
+  samplingInputs.forEach(input=>{ if(input){ input.disabled=!hasSession; }});
 }
 
 function refreshHomeActions(){
@@ -1482,6 +1598,54 @@ if(MOBILE_PAGE_SELECT){
 activatePage('page-home', {force:true});
 updateWorkspaceAccess();
 
+const samplingRateInput = qs('sampling_rate_input');
+if(samplingRateInput){
+  samplingRateInput.addEventListener('input', ()=>{ samplingRateInput.dataset.userTouched='1'; });
+}
+const samplingGenerateBtn = qs('btn_sampling_generate');
+if(samplingGenerateBtn){
+  samplingGenerateBtn.addEventListener('click', createSamplingAudit);
+}
+const samplingRefreshBtn = qs('btn_sampling_refresh');
+if(samplingRefreshBtn){
+  samplingRefreshBtn.addEventListener('click', ()=>{ loadSamplingList(); });
+}
+const samplingListZone = qs('sampling_list_zone');
+if(samplingListZone){
+  samplingListZone.addEventListener('click', e=>{
+    const btn = e.target.closest('[data-sampling-id]');
+    if(!btn) return;
+    const targetId = btn.dataset.samplingId;
+    if(targetId){ openSamplingAudit(targetId); }
+  });
+}
+const samplingItemsZone = qs('sampling_items_zone');
+if(samplingItemsZone){
+  samplingItemsZone.addEventListener('change', e=>{
+    const select = e.target;
+    if(select && select.tagName === 'SELECT' && select.classList.contains('sampling-select')){
+      const itemId = select.dataset.itemId;
+      if(itemId){ saveSamplingSelection(itemId); }
+    }
+  });
+  samplingItemsZone.addEventListener('click', e=>{
+    const tipBtn = e.target.closest('.sampling-tip-btn');
+    if(!tipBtn) return;
+    const targetId = tipBtn.dataset.aiTarget;
+    if(!targetId) return;
+    const hint = document.getElementById(targetId);
+    if(!hint) return;
+    const expanded = tipBtn.getAttribute('aria-expanded') === 'true';
+    if(expanded){
+      hint.classList.add('hidden');
+      tipBtn.setAttribute('aria-expanded','false');
+    }else{
+      hint.classList.remove('hidden');
+      tipBtn.setAttribute('aria-expanded','true');
+    }
+  });
+}
+
 /* ---- 默认兜底表 ---- */
 const DEF_TOPICS = ["健康议题","经济议题","政治议题","环境议题","传播模式与行为","媒介制度与平台治理","科技议题","文化议题","宗教议题","其他议题"];
 const DEF_FIELDS = ["政治传播","健康传播","大众传播","新闻学","跨文化传播","人际传播","科学传播","法律与政策","公共关系","组织传播","媒介效果","传播心理学","传播伦理","传播理论","广告学","传播研究方法","媒介史","媒介技术","言语传播","教育传播","计算传播","网络与新媒体","其他领域"];
@@ -1494,12 +1658,19 @@ async function fetchFrontendConfig(){
     ADJ_FIELD_COL=j.adj_field_key||"研究领域分类_调整";
     TOPIC_LIST=Array.isArray(j.topic_list)&&j.topic_list.length?j.topic_list:[...DEF_TOPICS];
     FIELD_LIST=Array.isArray(j.field_list)&&j.field_list.length?j.field_list:[...DEF_FIELDS];
+    if(typeof j.sampling_default_rate==='number' && Number.isFinite(j.sampling_default_rate)){
+      SAMPLING_DEFAULT_RATE = Number(j.sampling_default_rate);
+    }else{
+      SAMPLING_DEFAULT_RATE = 0.03;
+    }
     qs('app_ver').textContent="v"+(j.app_version||"");
   }catch(e){
     ADJ_TOPIC_COL="研究主题（议题）分类_调整";
     ADJ_FIELD_COL="研究领域分类_调整";
     TOPIC_LIST=[...DEF_TOPICS]; FIELD_LIST=[...DEF_FIELDS];
+    SAMPLING_DEFAULT_RATE = 0.03;
   }
+  updateSamplingDefaultRateHint();
   setBlacklistSelections(TOPIC_BLACKLIST, FIELD_BLACKLIST);
 }
 async function fetchEnvDefaults(){
@@ -1533,6 +1704,352 @@ function setBlacklistSelections(topicList=[], fieldList=[]){
   FIELD_BLACKLIST = Array.isArray(fieldList)?fieldList.filter(it=>FIELD_LIST.includes(it)):[];
   renderBlacklistOptions(TOPIC_BLACKLIST, FIELD_BLACKLIST);
 }
+
+
+/* ===================== 抽样检测 ===================== */
+function samplingPercentDisplay(value){
+  const num = Number(value);
+  if(!Number.isFinite(num)) return '0%';
+  const normalized = Math.max(0, Math.min(100, num));
+  const decimals = normalized % 1 === 0 ? 0 : (normalized >= 10 ? 1 : 2);
+  return normalized.toFixed(decimals).replace(/\.0+$/,'') + '%';
+}
+function samplingStatusLabel(status){
+  switch(status){
+    case 'completed': return '已完成';
+    case 'in_progress': return '进行中';
+    default: return '未开始';
+  }
+}
+function samplingStatusClass(status){
+  if(status==='completed') return 'sampling-status-completed';
+  if(status==='in_progress') return 'sampling-status-progress';
+  return 'sampling-status-pending';
+}
+function updateSamplingDefaultRateHint(){
+  const hint = qs('sampling_header_hint');
+  const percentText = samplingPercentDisplay((SAMPLING_DEFAULT_RATE||0)*100);
+  if(hint){ hint.textContent = `默认抽样比例：${percentText}`; }
+  const input = qs('sampling_rate_input');
+  if(input && input.dataset.userTouched!=='1'){
+    input.value = percentText.replace('%','');
+  }
+}
+function resetSamplingState(){
+  SAMPLING_STATE.list = [];
+  SAMPLING_STATE.loading = false;
+  SAMPLING_STATE.activeId = '';
+  SAMPLING_STATE.data = new Map();
+  renderSamplingList();
+  renderSamplingDetail();
+}
+function renderSamplingList(){
+  const wrap = qs('sampling_list_zone');
+  if(!wrap) return;
+  if(!SESSION_ID){
+    wrap.innerHTML = '<div class="sampling-empty">请先上传或载入会话</div>';
+    return;
+  }
+  if(SAMPLING_STATE.loading){
+    wrap.innerHTML = '<div class="sampling-empty">加载中…</div>';
+    return;
+  }
+  const audits = Array.isArray(SAMPLING_STATE.list)?SAMPLING_STATE.list:[];
+  if(!audits.length){
+    wrap.innerHTML = '<div class="sampling-empty">暂无抽样任务</div>';
+    return;
+  }
+  wrap.innerHTML = audits.map(a=>{
+    const inspectorName = escapeHtml(a.inspector||'未命名核对员');
+    const status = a.status||'pending';
+    const statusClass = samplingStatusClass(status);
+    const statusLabel = samplingStatusLabel(status);
+    const progress = Number.isFinite(Number(a.progress_percent))?Number(a.progress_percent):((Number(a.progress)||0)*100);
+    const clamped = Math.max(0, Math.min(100, progress||0));
+    const progressText = samplingPercentDisplay(clamped);
+    const completed = Number(a.completed)||0;
+    const total = Number(a.sample_size)||0;
+    const updated = escapeHtml(a.updated_at||'—');
+    const active = SAMPLING_STATE.activeId === a.inspector_id;
+    return `<button type="button" class="sampling-list-item ${active?'sampling-list-item-active':''}" data-sampling-id="${escapeAttr(a.inspector_id||'')}">
+      <div class="sampling-list-title">
+        <span class="sampling-list-name">${inspectorName}</span>
+        <span class="sampling-list-status ${statusClass}">${statusLabel}</span>
+      </div>
+      <div class="sampling-list-meta">样本 ${completed}/${total} · 进度 ${progressText}</div>
+      <div class="sampling-progress"><div class="sampling-progress-bar" style="width:${clamped}%"></div></div>
+      <div class="sampling-list-updated">更新：${updated}</div>
+    </button>`;
+  }).join('');
+}
+function renderSamplingDetail(data=null){
+  const detail = qs('sampling_detail_zone');
+  const itemsZone = qs('sampling_items_zone');
+  if(!detail || !itemsZone){ return; }
+  detail.classList.toggle('sampling-detail-empty', !data);
+  if(!data){
+    detail.innerHTML = '请在左侧选择分类核对员以查看抽样详情。';
+    itemsZone.innerHTML = '';
+    return;
+  }
+  const audit = data.audit||{};
+  const items = Array.isArray(data.items)?data.items:[];
+  const inspectorName = escapeHtml(audit.inspector||'未命名核对员');
+  const sampleSize = Number(audit.sample_size)||items.length||0;
+  const totalRows = Number(audit.total_rows)||0;
+  const progress = Number.isFinite(Number(audit.progress_percent))?Number(audit.progress_percent):((Number(audit.progress)||0)*100);
+  const clamped = Math.max(0, Math.min(100, progress||0));
+  const progressText = samplingPercentDisplay(clamped);
+  const completed = Number(audit.completed)||0;
+  const inProgress = Number(audit.in_progress)||0;
+  const pending = Number(audit.pending)||0;
+  const ratePercent = samplingPercentDisplay((Number(audit.sample_rate)||SAMPLING_DEFAULT_RATE)*100);
+  const updated = escapeHtml(audit.updated_at||'—');
+  detail.innerHTML = `<div class="sampling-detail-header">
+      <div>
+        <h3 class="sampling-detail-title">${inspectorName}</h3>
+        <p class="sampling-detail-meta">样本 ${sampleSize} / 总 ${totalRows}（${ratePercent}）</p>
+      </div>
+      <div class="sampling-detail-progress">
+        <div class="sampling-progress"><div class="sampling-progress-bar" style="width:${clamped}%"></div></div>
+        <div class="sampling-detail-progress-text">已完成 ${completed} · 进行中 ${inProgress} · 待处理 ${pending}</div>
+      </div>
+    </div>
+    <div class="sampling-detail-updated">最近更新：${updated}</div>`;
+  if(!items.length){
+    itemsZone.innerHTML = '<div class="sampling-empty">暂无抽样样本</div>';
+    return;
+  }
+  itemsZone.innerHTML = items.map(renderSamplingItem).join('');
+}
+function renderSamplingItem(item){
+  const itemId = item.item_id||'';
+  const order = Number(item.sample_order)||0;
+  const rowNumber = Number(item.row_number)||0;
+  const headerParts = [];
+  if(order) headerParts.push(`样本 ${order}`);
+  if(rowNumber) headerParts.push(`原始行 ${rowNumber}`);
+  const headerMeta = headerParts.join(' · ');
+  const title = item.article_title?escapeHtml(item.article_title):'未提供标题';
+  const summaryHtml = item.structured_summary?formatMultiline(item.structured_summary):'<span class="sampling-empty-text">暂无结构化总结</span>';
+  const abstractHtml = item.abstract?`<details class="sampling-item-abstract"><summary>展开摘要</summary><div>${formatMultiline(item.abstract)}</div></details>`:'';
+  const status = item.status||'pending';
+  const statusLabel = samplingStatusLabel(status);
+  const statusClass = samplingStatusClass(status);
+  const aiTopic = item.ai_topic?escapeHtml(item.ai_topic):'—';
+  const aiField = item.ai_field?escapeHtml(item.ai_field):'—';
+  const origTopic = item.orig_topic?escapeHtml(item.orig_topic):'—';
+  const origField = item.orig_field?escapeHtml(item.orig_field):'—';
+  const topicSelect = renderSamplingSelect(TOPIC_LIST, item.selected_topic||'', itemId, 'topic');
+  const fieldSelect = renderSamplingSelect(FIELD_LIST, item.selected_field||'', itemId, 'field');
+  const checkedText = item.checked_at?`最近保存：${escapeHtml(item.checked_at)}`:'';
+  return `<article class="sampling-item" data-sampling-item="${escapeAttr(itemId)}">
+    <div class="sampling-item-header">
+      <div>
+        ${headerMeta?`<p class="sampling-item-meta">${headerMeta}</p>`:''}
+        <h4 class="sampling-item-title">${title}</h4>
+      </div>
+      <span class="sampling-item-status ${statusClass}">${statusLabel}</span>
+    </div>
+    <div class="sampling-item-body">
+      <div class="sampling-item-summary">${summaryHtml}${abstractHtml}</div>
+      <div class="sampling-item-controls">
+        <div class="sampling-field-group">
+          <label class="sampling-field-label">议题判定</label>
+          <select class="sampling-select" data-kind="topic" data-item-id="${escapeAttr(itemId)}">${topicSelect}</select>
+        </div>
+        <div class="sampling-field-group">
+          <label class="sampling-field-label">领域判定</label>
+          <select class="sampling-select" data-kind="field" data-item-id="${escapeAttr(itemId)}">${fieldSelect}</select>
+        </div>
+        <div class="sampling-tip-group">
+          <button type="button" class="sampling-tip-btn" data-ai-target="ai-${escapeAttr(itemId)}" aria-expanded="false" title="查看 AI 分类提示">?</button>
+          <div id="ai-${escapeAttr(itemId)}" class="sampling-ai-hint hidden">
+            <p>AI 议题：${aiTopic}</p>
+            <p>AI 领域：${aiField}</p>
+            <p class="sampling-ai-sub">原始议题：${origTopic}</p>
+            <p class="sampling-ai-sub">原始领域：${origField}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sampling-item-footer">
+      <span class="sampling-status-message" data-role="status">${checkedText}</span>
+    </div>
+  </article>`;
+}
+function renderSamplingSelect(list, value, itemId, kind){
+  const options=['<option value="">请选择</option>'];
+  if(Array.isArray(list)){
+    list.forEach(name=>{
+      const selected = name===value?' selected':'';
+      options.push(`<option value="${escapeAttr(name)}"${selected}>${escapeHtml(name)}</option>`);
+    });
+  }
+  return options.join('');
+}
+function updateSamplingSummaryList(summary){
+  if(!summary || !summary.inspector_id) return;
+  const idx = SAMPLING_STATE.list.findIndex(item=>item.inspector_id===summary.inspector_id);
+  if(idx>=0){
+    SAMPLING_STATE.list[idx] = { ...SAMPLING_STATE.list[idx], ...summary };
+  }else{
+    SAMPLING_STATE.list.push(summary);
+  }
+  renderSamplingList();
+}
+async function loadSamplingList(){
+  if(!SESSION_ID){
+    resetSamplingState();
+    return;
+  }
+  SAMPLING_STATE.loading = true;
+  renderSamplingList();
+  try{
+    const resp = await fetch(`/sampling/list?session_id=${encodeURIComponent(SESSION_ID)}`, {cache:'no-store'});
+    if(!resp.ok){
+      throw new Error(await resp.text()||resp.statusText||'加载失败');
+    }
+    const data = await resp.json();
+    SAMPLING_STATE.list = Array.isArray(data.audits)?data.audits:[];
+  }catch(e){
+    const wrap = qs('sampling_list_zone');
+    if(wrap){
+      wrap.innerHTML = `<div class="sampling-empty">加载失败：${escapeHtml(e.message||'未知错误')}</div>`;
+    }
+    SAMPLING_STATE.list = [];
+  }finally{
+    SAMPLING_STATE.loading = false;
+  }
+  renderSamplingList();
+  if(!SAMPLING_STATE.list.some(item=>item.inspector_id===SAMPLING_STATE.activeId)){
+    SAMPLING_STATE.activeId='';
+  }
+  if(SAMPLING_STATE.activeId){
+    const cached = SAMPLING_STATE.data.get(SAMPLING_STATE.activeId);
+    if(cached){
+      renderSamplingDetail(cached);
+    }else{
+      openSamplingAudit(SAMPLING_STATE.activeId, {force:true});
+    }
+  }else if(SAMPLING_STATE.list.length){
+    openSamplingAudit(SAMPLING_STATE.list[0].inspector_id);
+  }else{
+    renderSamplingDetail();
+  }
+}
+async function openSamplingAudit(inspectorId, options={}){
+  if(!SESSION_ID || !inspectorId) return;
+  const force = options.force===true;
+  SAMPLING_STATE.activeId = inspectorId;
+  renderSamplingList();
+  if(!force && SAMPLING_STATE.data.has(inspectorId)){
+    renderSamplingDetail(SAMPLING_STATE.data.get(inspectorId));
+    return;
+  }
+  const detail = qs('sampling_detail_zone');
+  const itemsZone = qs('sampling_items_zone');
+  if(detail){
+    detail.classList.remove('sampling-detail-empty');
+    detail.innerHTML = '<div class="sampling-detail-loading">正在加载样本…</div>';
+  }
+  if(itemsZone){ itemsZone.innerHTML = ''; }
+  try{
+    const resp = await fetch(`/sampling/data?session_id=${encodeURIComponent(SESSION_ID)}&inspector_id=${encodeURIComponent(inspectorId)}`, {cache:'no-store'});
+    if(!resp.ok){
+      const msg = await resp.text();
+      if(detail){ detail.innerHTML = `<div class="sampling-detail-error">加载失败：${escapeHtml(msg||resp.statusText||'未知错误')}</div>`; }
+      return;
+    }
+    const data = await resp.json();
+    const structured = { audit:data.audit||{}, items:Array.isArray(data.items)?data.items:[] };
+    SAMPLING_STATE.data.set(inspectorId, structured);
+    renderSamplingDetail(structured);
+  }catch(e){
+    if(detail){ detail.innerHTML = `<div class="sampling-detail-error">加载失败：${escapeHtml(e.message||'未知错误')}</div>`; }
+  }
+}
+async function createSamplingAudit(){
+  if(!SESSION_ID){
+    showToast('请先上传或载入会话', 'warning');
+    return;
+  }
+  const inspectorInput = qs('sampling_inspector_input');
+  const rateInput = qs('sampling_rate_input');
+  const forceToggle = qs('sampling_force_toggle');
+  const hint = qs('sampling_create_hint');
+  const btn = qs('btn_sampling_generate');
+  const inspector = inspectorInput?.value.trim();
+  if(!inspector){
+    showToast('请填写分类核对员姓名', 'warning');
+    inspectorInput?.focus();
+    return;
+  }
+  let rateValue = Number(rateInput?.value);
+  if(!Number.isFinite(rateValue) || rateValue<=0){
+    rateValue = (SAMPLING_DEFAULT_RATE||0.03)*100;
+  }
+  const rateDecimal = Math.max(0.001, Math.min(1, rateValue/100));
+  if(btn){ btn.disabled=true; btn.textContent='生成中…'; }
+  if(hint){ hint.textContent=''; }
+  try{
+    const resp = await fetch('/sampling/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:SESSION_ID, inspector, sample_rate:rateDecimal, force:!!forceToggle?.checked})});
+    if(!resp.ok){
+      const msg = await resp.text();
+      throw new Error(msg||resp.statusText||'生成失败');
+    }
+    const data = await resp.json();
+    const status = data.status||'created';
+    const audit = data.audit||{};
+    if(hint){ hint.textContent = status==='created'?'抽样样本已生成。':'该核对员已存在抽样任务，已加载历史样本。'; }
+    await loadSamplingList();
+    if(audit.inspector_id){
+      openSamplingAudit(audit.inspector_id, {force:true});
+    }
+    showToast(status==='created'?'抽样样本已生成':'已加载现有抽样任务', status==='created'?'success':'info');
+  }catch(e){
+    if(hint){ hint.textContent = `生成失败：${e.message}`; }
+    showToast(`生成抽样失败：${e.message||e}`, 'error');
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='生成抽样样本'; }
+  }
+}
+async function saveSamplingSelection(itemId){
+  if(!SESSION_ID || !SAMPLING_STATE.activeId) return;
+  const itemEl = document.querySelector(`[data-sampling-item="${CSS.escape(itemId)}"]`);
+  if(!itemEl) return;
+  const topicValue = itemEl.querySelector('select[data-kind="topic"]')?.value||'';
+  const fieldValue = itemEl.querySelector('select[data-kind="field"]')?.value||'';
+  const statusEl = itemEl.querySelector('[data-role="status"]');
+  if(statusEl){ statusEl.textContent='保存中…'; statusEl.dataset.state='saving'; }
+  try{
+    const resp = await fetch('/sampling/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:SESSION_ID, inspector_id:SAMPLING_STATE.activeId, item_id:itemId, topic_choice:topicValue, field_choice:fieldValue})});
+    if(!resp.ok){
+      const msg = await resp.text();
+      throw new Error(msg||resp.statusText||'保存失败');
+    }
+    const data = await resp.json();
+    if(data.summary){ updateSamplingSummaryList(data.summary); }
+    if(data.item){
+      const dataset = SAMPLING_STATE.data.get(SAMPLING_STATE.activeId);
+      if(dataset){
+        const idx = dataset.items.findIndex(it=>it.item_id===data.item.item_id);
+        if(idx>=0){ dataset.items[idx]=data.item; }
+        if(data.summary){ dataset.audit=data.summary; }
+        SAMPLING_STATE.data.set(SAMPLING_STATE.activeId, dataset);
+        renderSamplingDetail(dataset);
+      }
+      if(statusEl){
+        statusEl.textContent = data.item.checked_at?`最近保存：${escapeHtml(data.item.checked_at)}`:'已清空选择';
+        statusEl.dataset.state = data.item.checked_at?'saved':'empty';
+      }
+    }
+  }catch(e){
+    if(statusEl){ statusEl.textContent = `保存失败：${e.message||e}`; statusEl.dataset.state='error'; }
+    showToast(`抽样保存失败：${e.message||e}`, 'error');
+  }
+}
+
 function collectBlacklistSelections(){
   const topicSet=new Set();
   document.querySelectorAll('#topic_blacklist_options input[data-kind="topic"]:checked').forEach(el=>{
@@ -1594,6 +2111,7 @@ function uploadFile(){
         refreshHomeActions();
         clearScatterPlot('等待计算后展示。');
         resetTopicVizState();
+        resetSamplingState();
         await refreshSessionMeta();
         await refreshStats();
         populateFilterOptions();
@@ -1604,6 +2122,7 @@ function uploadFile(){
         setSortAvailability(false);
         syncSortSelect();
         await loadPage();
+        await loadSamplingList();
     }else{ msg.textContent="上传失败："+xhr.responseText; alert("上传失败："+xhr.responseText); } } };
   xhr.send(form);
 }
@@ -2332,7 +2851,6 @@ function setCategoryChartView(category, view){
 }
 
 function clearTimelineCharts(message){
-  TIMELINE_LINE_FIGURE=null;
   TIMELINE_STACK_FIGURE=null;
   const summary=qs('timeline_summary');
   if(summary){
@@ -2344,7 +2862,27 @@ function clearTimelineCharts(message){
       summary.classList.add('hidden');
     }
   }
-  TIMELINE_CHART_IDS.forEach(id=>{
+  if(TIMELINE_LINE_IMAGE){
+    TIMELINE_LINE_IMAGE.classList.add('hidden');
+    TIMELINE_LINE_IMAGE.removeAttribute('src');
+  }
+  if(TIMELINE_LINE_PLACEHOLDER){
+    const shouldShowMessage = message===undefined || (message!==null && String(message).trim()!=='');
+    if(shouldShowMessage){
+      TIMELINE_LINE_PLACEHOLDER.textContent = message===undefined ? '暂无数据' : String(message);
+      TIMELINE_LINE_PLACEHOLDER.classList.remove('hidden');
+    }else{
+      TIMELINE_LINE_PLACEHOLDER.textContent='';
+      TIMELINE_LINE_PLACEHOLDER.classList.add('hidden');
+    }
+  }
+  Object.values(TIMELINE_LINE_DOWNLOAD_BUTTONS).forEach(btn=>{
+    if(!btn) return;
+    btn.disabled=true;
+  });
+  TIMELINE_LINE_DOWNLOAD_URLS.png='';
+  TIMELINE_LINE_DOWNLOAD_URLS.svg='';
+  TIMELINE_PLOTLY_IDS.forEach(id=>{
     const el=qs(id);
     if(!el) return;
     if(window.Plotly){
@@ -2373,7 +2911,6 @@ function renderTimelineCharts(timeline){
   TIMELINE_DATA=timeline||null;
   const summary=qs('timeline_summary');
   const select=qs('timeline_bin_select');
-  TIMELINE_LINE_FIGURE=null;
   TIMELINE_STACK_FIGURE=null;
   if(!timeline || !Array.isArray(timeline.bins) || !timeline.bins.length){
     if(select && TIMELINE_BIN_SIZE){
@@ -2398,8 +2935,40 @@ function renderTimelineCharts(timeline){
     summary.textContent=`共 ${numberFormatter.format(total)} 篇，年份范围：${rangeText}（每 ${binSize} 年一组）`;
     summary.classList.remove('hidden');
   }
+
+  let baseUrl='';
+  if(SESSION_ID){
+    baseUrl=`/timeline_chart?session_id=${encodeURIComponent(SESSION_ID)}&bin_years=${encodeURIComponent(binSize)}`;
+  }
+  if(TIMELINE_LINE_PLACEHOLDER){
+    if(baseUrl){
+      TIMELINE_LINE_PLACEHOLDER.classList.add('hidden');
+    }else{
+      TIMELINE_LINE_PLACEHOLDER.textContent='暂无法生成图表';
+      TIMELINE_LINE_PLACEHOLDER.classList.remove('hidden');
+    }
+  }
+  if(TIMELINE_LINE_IMAGE){
+    if(baseUrl){
+      const displayUrl=`${baseUrl}&format=png&_=${Date.now()}`;
+      TIMELINE_LINE_IMAGE.src=displayUrl;
+      TIMELINE_LINE_IMAGE.alt=`Timeline of publication counts (bin size ${binSize} years)`;
+      TIMELINE_LINE_IMAGE.classList.remove('hidden');
+    }else{
+      TIMELINE_LINE_IMAGE.classList.add('hidden');
+      TIMELINE_LINE_IMAGE.removeAttribute('src');
+    }
+  }
+  TIMELINE_LINE_DOWNLOAD_URLS.png=baseUrl?`${baseUrl}&format=png&download=true`:'';
+  TIMELINE_LINE_DOWNLOAD_URLS.svg=baseUrl?`${baseUrl}&format=svg&download=true`:'';
+  const hasDownloads=!!baseUrl;
+  Object.values(TIMELINE_LINE_DOWNLOAD_BUTTONS).forEach(btn=>{
+    if(!btn) return;
+    btn.disabled=!hasDownloads;
+  });
+
   if(!window.Plotly){
-    TIMELINE_CHART_IDS.forEach(id=>{
+    TIMELINE_PLOTLY_IDS.forEach(id=>{
       const el=qs(id);
       if(!el) return;
       el.innerHTML='<div class="treemap-empty">Plotly 未加载</div>';
@@ -2407,41 +2976,6 @@ function renderTimelineCharts(timeline){
     return;
   }
 
-  const labels=timeline.bins.map(bin=>bin.label||`${bin.start}-${bin.end}`);
-  const counts=timeline.bins.map(bin=>Number(bin.count)||0);
-
-  const lineEl=qs('timeline_line_chart');
-  if(lineEl){
-    lineEl.innerHTML='';
-    const lineTrace={
-      x:labels,
-      y:counts,
-      type:'scatter',
-      mode:'lines+markers',
-      line:{shape:'spline', color:'#2563eb', width:3, smoothing:0.6},
-      marker:{size:8, color:'#1d4ed8', line:{color:'#ffffff', width:1}},
-      hovertemplate:'<b>%{x}</b><br>篇数：%{y}<extra></extra>',
-    };
-    const lineLayout={
-      margin:{l:56,r:20,t:40,b:56},
-      height:320,
-      paper_bgcolor:'rgba(255,255,255,0)',
-      plot_bgcolor:'rgba(255,255,255,0)',
-      xaxis:{title:'年份区间', tickangle:-30},
-      yaxis:{title:'篇数', rangemode:'tozero', zerolinecolor:'rgba(148,163,184,0.45)'},
-      hovermode:'x unified',
-      showlegend:false,
-      font:{family:'"Inter",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', color:'#0f172a'},
-    };
-    const lineData=[lineTrace];
-    const storedData=cloneDeep(lineData);
-    const storedLayout=cloneDeep(lineLayout);
-    TIMELINE_LINE_FIGURE={ data: storedData, layout: storedLayout };
-    try{ Plotly.react(lineEl, cloneDeep(lineData), cloneDeep(lineLayout), {...TIMELINE_CONFIG}); }catch(e){
-      lineEl.innerHTML='<div class="treemap-empty">可视化渲染失败</div>';
-      TIMELINE_LINE_FIGURE=null;
-    }
-  }
   updateTimelineStackToggle();
   renderTimelineStackChart(timeline);
   resizeTimelineCharts();
@@ -2592,7 +3126,7 @@ function openTimelineFigureFullScreen(figure, fallbackTitle){
 
 function resizeTimelineCharts(){
   if(!window.Plotly) return;
-  TIMELINE_CHART_IDS.forEach(id=>{
+  TIMELINE_PLOTLY_IDS.forEach(id=>{
     const el=qs(id);
     if(!el) return;
     if(!el.querySelector('.plotly')) return;
@@ -4115,6 +4649,7 @@ async function loadSession(sid){
   PAGER.page=1; PAGER.size=parseInt(qs('ps_input').value||"50")||50;
   clearScatterPlot('等待计算后展示。');
   resetTopicVizState();
+  resetSamplingState();
   renderSessionMeta(j.meta||null);
   await refreshStats();
   populateFilterOptions();
@@ -4126,6 +4661,7 @@ async function loadSession(sid){
   syncSortSelect();
   await loadPage();
   await fetchScatterAndRender();
+  await loadSamplingList();
   qs('dlg_sessions').close();
 }
 
@@ -4141,27 +4677,46 @@ async function saveExcelServer(){
   alert("已保存到服务器：\n"+(j.saved_path||""));
 }
 
-async function exportBatchExcel(){
+function openBatchExportDialog(){
   if(!SESSION_ID){ alert("请先上传/载入会话"); return; }
-  const input = prompt("选择导出维度：输入 topic（按调整后议题）、field（按调整后领域）或 both（两者）","both");
-  if(input===null){ return; }
-  const normalized = input.trim().toLowerCase();
-  let targets;
-  if(!normalized || normalized === "both"){
-    targets = ["topic","field"];
-  }else if(normalized === "topic" || normalized === "field"){
-    targets = [normalized];
-  }else{
-    alert("输入无效，请输入 topic / field / both");
+  const dlg = qs('dlg_export_batch');
+  if(!dlg){
+    exportBatchExcel();
     return;
   }
-  const payload = { session_id: SESSION_ID, targets };
+  dlg.querySelectorAll('input[name="batch_export_target"]').forEach(input=>{
+    input.checked = true;
+  });
+  const err = qs('batch_export_error');
+  if(err){ err.classList.add('hidden'); }
+  dlg.showModal();
+}
+
+async function exportBatchExcel(targets){
+  if(!SESSION_ID){ alert("请先上传/载入会话"); return; }
+  let cleanedTargets = [];
+  if(Array.isArray(targets)){
+    for(const item of targets){
+      const key = String(item||"").trim().toLowerCase();
+      if((key === "topic" || key === "field") && !cleanedTargets.includes(key)){
+        cleanedTargets.push(key);
+      }
+    }
+  }
+  if(!cleanedTargets.length){
+    cleanedTargets = ["topic","field"];
+  }
+  const payload = { session_id: SESSION_ID, targets: cleanedTargets };
   const r = await fetch("/export_excel_split",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
   if(!r.ok){ alert("批量导出失败："+await r.text()); return; }
   const j = await r.json();
   const lines = [];
   lines.push(`批量导出完成，共生成 ${j.total_files||0} 个文件`);
   if(j.root_dir){ lines.push(`存储目录：${j.root_dir}`); }
+  if(Array.isArray(j.targets) && j.targets.length){
+    const labels = j.targets.map(t=>t==='field'? '调整后领域':'调整后议题');
+    lines.push(`导出维度：${labels.join('、')}`);
+  }
   if(j.summary){
     if(j.summary.topic){ lines.push(`· 按议题：${j.summary.topic.groups||0} 个分组，${j.summary.topic.rows||0} 篇`); }
     if(j.summary.field){ lines.push(`· 按领域：${j.summary.field.groups||0} 个分组，${j.summary.field.rows||0} 篇`); }
@@ -4222,7 +4777,33 @@ function bindEvents(){
   qs('btn_save_session').onclick=saveSession;
   qs('btn_load_session').onclick=openLoadDialog;
   qs('btn_save_excel').onclick=saveExcelServer;
-  const btnExportBatch=qs('btn_export_batch'); if(btnExportBatch) btnExportBatch.onclick=exportBatchExcel;
+  const btnExportBatch=qs('btn_export_batch'); if(btnExportBatch) btnExportBatch.onclick=openBatchExportDialog;
+  const dlgExportBatch=qs('dlg_export_batch');
+  if(dlgExportBatch){
+    const btnBatchClose=qs('btn_export_batch_close'); if(btnBatchClose) btnBatchClose.onclick=()=>dlgExportBatch.close();
+    const btnBatchCancel=qs('btn_export_batch_cancel'); if(btnBatchCancel) btnBatchCancel.onclick=()=>dlgExportBatch.close();
+    const btnBatchConfirm=qs('btn_export_batch_confirm');
+    if(btnBatchConfirm){
+      btnBatchConfirm.onclick=()=>{
+        const selections=Array.from(dlgExportBatch.querySelectorAll('input[name="batch_export_target"]:checked')).map(el=>el.value);
+        if(!selections.length){
+          const err=qs('batch_export_error'); if(err){ err.classList.remove('hidden'); }
+          return;
+        }
+        const err=qs('batch_export_error'); if(err){ err.classList.add('hidden'); }
+        dlgExportBatch.close();
+        exportBatchExcel(selections);
+      };
+    }
+    dlgExportBatch.querySelectorAll('input[name="batch_export_target"]').forEach(input=>{
+      input.addEventListener('change',()=>{
+        const err=qs('batch_export_error'); if(err){ err.classList.add('hidden'); }
+      });
+    });
+    dlgExportBatch.addEventListener('close',()=>{
+      const err=qs('batch_export_error'); if(err){ err.classList.add('hidden'); }
+    });
+  }
   const btnTopicYear=qs('btn_export_topic_year'); if(btnTopicYear) btnTopicYear.onclick=exportTopicYearExcel;
   qs('btn_download_last').onclick=downloadLast;
   const btnSaveAll=qs('btn_save_all'); if(btnSaveAll) btnSaveAll.onclick=saveAllChanges;
