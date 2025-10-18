@@ -7,7 +7,7 @@
   打开 http://127.0.0.1:8000
 """
 import io, os, gc, re, json, uuid, time, math, traceback
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime
 from threading import Lock
 from typing import Dict, Any, List, Optional, Tuple
@@ -74,6 +74,7 @@ TOPIC_VIZ_CACHE: Dict[str, Dict[str, Any]] = {}
 
 TEXT_COLUMNS = ["结构化总结", "Abstract", "Article Title"]
 TOKEN_PATTERN = re.compile(r"[A-Za-z]{2,}|[\u4e00-\u9fa5]{2,}|\d{2,}")
+YEAR_PATTERN = re.compile(r"(18|19|20|21)\d{2}")
 STOPWORDS = set([
     "the", "and", "with", "from", "that", "this", "which", "were", "have", "has",
     "research", "study", "analysis", "based", "results", "data", "using", "into",
@@ -597,6 +598,76 @@ def safe_filename(name:str) -> str:
     name = name.strip()
     if not name: name = "export"
     return name
+
+def _normalize_cell_value(value: Any) -> str:
+    try:
+        if pd.isna(value):
+            return ""
+    except Exception:
+        pass
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    lower = text.lower()
+    if lower in ("nan", "none", "null", "na"):
+        return ""
+    return text
+
+def _normalized_series(df: pd.DataFrame, column: str) -> List[str]:
+    if column not in df.columns:
+        return ["" for _ in range(int(df.shape[0]))]
+    series = df[column]
+    return [_normalize_cell_value(v) for v in series.tolist()]
+
+def _effective_categories(df: pd.DataFrame, adjust_col: str, fallback_col: str) -> List[str]:
+    adjust_vals = _normalized_series(df, adjust_col)
+    fallback_vals = _normalized_series(df, fallback_col)
+    effective: List[str] = []
+    for adj, orig in zip(adjust_vals, fallback_vals):
+        val = adj or orig
+        if not val:
+            val = "未分类"
+        effective.append(val)
+    return effective
+
+def _extract_year(value: Any) -> Optional[int]:
+    try:
+        if pd.isna(value):
+            return None
+    except Exception:
+        pass
+    if value is None:
+        return None
+    if isinstance(value, (int, np.integer)):
+        return int(value)
+    if isinstance(value, float):
+        if math.isnan(value):
+            return None
+        return int(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return int(text)
+    except Exception:
+        m = YEAR_PATTERN.search(text)
+        if m:
+            try:
+                return int(m.group())
+            except Exception:
+                return None
+    return None
+
+def _year_bucket(year: Optional[int], span: int) -> str:
+    if not isinstance(span, int) or span < 1:
+        span = 1
+    if not year:
+        return "未知年份"
+    start = (int(year) // span) * span
+    end = start + span - 1
+    return f"{start}-{end}"
 
 # ================== 前端配置 ==================
 @app.get("/frontend_config")
@@ -1362,6 +1433,180 @@ def export_excel_save(payload: Dict[str,Any]):
         })
     except Exception as e:
         return PlainTextResponse(f"导出失败：{e}", 500)
+
+@app.post("/export_excel_split")
+def export_excel_split(payload: Dict[str,Any]):
+    sid = payload.get("session_id","")
+    targets_raw = payload.get("targets", [])
+    if not sid:
+        return PlainTextResponse("缺少 session_id", 400)
+    if isinstance(targets_raw, str):
+        targets = [targets_raw]
+    else:
+        try:
+            targets = list(targets_raw)
+        except Exception:
+            targets = []
+    allowed = {
+        "topic": {
+            "adjust": ADJUST_TOPIC_COL,
+            "fallback": "研究主题（议题）分类",
+            "dir": "by_topic",
+            "label": "调整后议题"
+        },
+        "field": {
+            "adjust": ADJUST_FIELD_COL,
+            "fallback": "研究领域分类",
+            "dir": "by_field",
+            "label": "调整后领域"
+        }
+    }
+    cleaned: List[str] = []
+    for t in targets:
+        key = str(t).strip().lower()
+        if key in allowed and key not in cleaned:
+            cleaned.append(key)
+    if not cleaned:
+        cleaned = ["topic", "field"]
+
+    try:
+        if sid not in DATASTORE:
+            with _get_lock(sid):
+                DATASTORE[sid] = load_session_from_disk(sid)
+                _touch(sid); _evict_if_needed()
+        df = DATASTORE[sid]
+
+        timestamp = _now_str()
+        base_dir = os.path.join(OUTPUT_DIR, sid, f"batch_export_{timestamp}")
+        os.makedirs(base_dir, exist_ok=True)
+
+        files: List[Dict[str,Any]] = []
+        summary = {key: {"groups": 0, "rows": 0} for key in cleaned}
+
+        for key in cleaned:
+            cfg = allowed[key]
+            target_dir = os.path.join(base_dir, cfg["dir"])
+            os.makedirs(target_dir, exist_ok=True)
+            effective = _effective_categories(df, cfg["adjust"], cfg["fallback"])
+            group_series = pd.Series(effective, index=df.index, name="_group")
+            for label, sub_df in df.groupby(group_series, sort=False):
+                group_label = str(label) if label else "未分类"
+                if not group_label.strip():
+                    group_label = "未分类"
+                count = int(sub_df.shape[0])
+                summary[key]["groups"] += 1
+                summary[key]["rows"] += count
+                fname = safe_filename(f"{group_label}({count}篇)")
+                path = os.path.join(target_dir, f"{fname}.xlsx")
+                with pd.ExcelWriter(path, engine="openpyxl") as writer:
+                    sub_df.to_excel(writer, index=False)
+                rel = os.path.relpath(path, start=os.getcwd()).replace("\\","/")
+                files.append({
+                    "target": key,
+                    "label": group_label,
+                    "count": count,
+                    "path": rel
+                })
+
+        meta = _read_meta(sid)
+        meta["last_split_export_time"] = timestamp
+        meta["last_split_export_dir"] = os.path.relpath(base_dir, start=os.getcwd()).replace("\\","/")
+        meta["last_split_targets"] = cleaned
+        _write_meta(sid, meta)
+        gc.collect()
+
+        return JSONResponse({
+            "ok": True,
+            "root_dir": meta["last_split_export_dir"],
+            "total_files": len(files),
+            "targets": cleaned,
+            "summary": summary,
+            "files": files
+        })
+    except Exception as e:
+        return PlainTextResponse(f"批量导出失败：{e}", 500)
+
+@app.post("/export_topic_year")
+def export_topic_year(payload: Dict[str,Any]):
+    sid = payload.get("session_id","")
+    span_raw = payload.get("year_span") or payload.get("interval") or payload.get("interval_years")
+    if not sid:
+        return PlainTextResponse("缺少 session_id", 400)
+    try:
+        span = int(span_raw) if span_raw is not None else 10
+    except Exception:
+        span = 10
+    if span < 1:
+        span = 1
+
+    try:
+        if sid not in DATASTORE:
+            with _get_lock(sid):
+                DATASTORE[sid] = load_session_from_disk(sid)
+                _touch(sid); _evict_if_needed()
+        df = DATASTORE[sid]
+
+        effective_topics = _effective_categories(df, ADJUST_TOPIC_COL, "研究主题（议题）分类")
+        years_source = _normalized_series(df, "Publication Year")
+        years = [_extract_year(v) for v in years_source]
+
+        topic_buckets: Dict[str, Dict[str, List[int]]] = defaultdict(lambda: defaultdict(list))
+        for idx, (topic, year_val) in enumerate(zip(effective_topics, years)):
+            bucket = _year_bucket(year_val, span)
+            topic_buckets[topic][bucket].append(idx)
+
+        timestamp = _now_str()
+        base_dir = os.path.join(OUTPUT_DIR, sid, f"topic_year_export_{timestamp}")
+        os.makedirs(base_dir, exist_ok=True)
+
+        files: List[Dict[str,Any]] = []
+        total_buckets = 0
+
+        for topic, bucket_map in topic_buckets.items():
+            topic_label = topic or "未分类"
+            topic_dir = os.path.join(base_dir, safe_filename(topic_label) or "topic")
+            os.makedirs(topic_dir, exist_ok=True)
+            for bucket, indices in bucket_map.items():
+                if not indices:
+                    continue
+                sub_df = df.iloc[indices]
+                count = int(sub_df.shape[0])
+                total_buckets += 1
+                fname = safe_filename(f"{bucket}({count}篇)")
+                path = os.path.join(topic_dir, f"{fname}.xlsx")
+                with pd.ExcelWriter(path, engine="openpyxl") as writer:
+                    sub_df.to_excel(writer, index=False)
+                rel = os.path.relpath(path, start=os.getcwd()).replace("\\","/")
+                files.append({
+                    "topic": topic_label,
+                    "bucket": bucket,
+                    "count": count,
+                    "path": rel
+                })
+
+        meta = _read_meta(sid)
+        meta["last_topic_year_export_time"] = timestamp
+        meta["last_topic_year_export_dir"] = os.path.relpath(base_dir, start=os.getcwd()).replace("\\","/")
+        meta["last_topic_year_span"] = span
+        _write_meta(sid, meta)
+        gc.collect()
+
+        summary = {
+            "topics": len(topic_buckets),
+            "span": span,
+            "rows": int(df.shape[0]),
+            "buckets": total_buckets
+        }
+
+        return JSONResponse({
+            "ok": True,
+            "root_dir": meta["last_topic_year_export_dir"],
+            "total_files": len(files),
+            "summary": summary,
+            "files": files
+        })
+    except Exception as e:
+        return PlainTextResponse(f"议题年份切片导出失败：{e}", 500)
 
 @app.get("/file")
 def file_serve(path: str = Query(...)):
