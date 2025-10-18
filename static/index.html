@@ -779,6 +779,7 @@
               <section class="bg-white rounded-2xl shadow p-6 space-y-4 h-full">
                 <div id="sampling_detail_zone" class="sampling-detail-empty">请在左侧选择分类核对员以查看抽样详情。</div>
                 <div id="sampling_items_zone"></div>
+                <div id="sampling_pager_zone" class="sampling-pager hidden"></div>
               </section>
             </div>
           </div>
@@ -911,7 +912,8 @@ let ACTIVE_COL="topic"; // "topic"|"field"
 const PAGER = { page:1, size:50, total:0, pages:1 };
 let LAST_EXPORT_URL=""; // 可选下载地址
 let SAMPLING_DEFAULT_RATE = 0.03;
-const SAMPLING_STATE = { list: [], loading: false, activeId: '', data: new Map() };
+const SAMPLING_PAGE_SIZE = 50;
+const SAMPLING_STATE = { list: [], loading: false, activeId: '', data: new Map(), pageByInspector: new Map(), pageSize: SAMPLING_PAGE_SIZE };
 const TREEMAP_PLOTS={};
 const TREEMAP_STATE={};
 const TREEMAP_CATEGORY_LIMIT=24;
@@ -1622,7 +1624,7 @@ if(samplingListZone){
 const samplingItemsZone = qs('sampling_items_zone');
 if(samplingItemsZone){
   samplingItemsZone.addEventListener('change', e=>{
-    const select = e.target;
+    const select = e.target.closest('select');
     if(select && select.tagName === 'SELECT' && select.classList.contains('sampling-select')){
       const itemId = select.dataset.itemId;
       if(itemId){ saveSamplingSelection(itemId); }
@@ -1642,6 +1644,17 @@ if(samplingItemsZone){
     }else{
       hint.classList.remove('hidden');
       tipBtn.setAttribute('aria-expanded','true');
+    }
+  });
+}
+const samplingPagerZone = qs('sampling_pager_zone');
+if(samplingPagerZone){
+  samplingPagerZone.addEventListener('click', e=>{
+    const btn = e.target.closest('button[data-page]');
+    if(!btn || btn.disabled) return;
+    const targetPage = Number(btn.dataset.page);
+    if(Number.isFinite(targetPage)){
+      setSamplingPage(SAMPLING_STATE.activeId, targetPage);
     }
   });
 }
@@ -1740,6 +1753,8 @@ function resetSamplingState(){
   SAMPLING_STATE.loading = false;
   SAMPLING_STATE.activeId = '';
   SAMPLING_STATE.data = new Map();
+  SAMPLING_STATE.pageByInspector = new Map();
+  SAMPLING_STATE.pageSize = SAMPLING_PAGE_SIZE;
   renderSamplingList();
   renderSamplingDetail();
 }
@@ -1785,11 +1800,13 @@ function renderSamplingList(){
 function renderSamplingDetail(data=null){
   const detail = qs('sampling_detail_zone');
   const itemsZone = qs('sampling_items_zone');
+  const pagerZone = qs('sampling_pager_zone');
   if(!detail || !itemsZone){ return; }
   detail.classList.toggle('sampling-detail-empty', !data);
   if(!data){
     detail.innerHTML = '请在左侧选择分类核对员以查看抽样详情。';
     itemsZone.innerHTML = '';
+    if(pagerZone){ pagerZone.innerHTML=''; pagerZone.classList.add('hidden'); }
     return;
   }
   const audit = data.audit||{};
@@ -1818,9 +1835,21 @@ function renderSamplingDetail(data=null){
     <div class="sampling-detail-updated">最近更新：${updated}</div>`;
   if(!items.length){
     itemsZone.innerHTML = '<div class="sampling-empty">暂无抽样样本</div>';
+    if(pagerZone){ pagerZone.innerHTML=''; pagerZone.classList.add('hidden'); }
     return;
   }
-  itemsZone.innerHTML = items.map(renderSamplingItem).join('');
+  const inspectorId = audit.inspector_id||SAMPLING_STATE.activeId||'';
+  const pageSize = Math.max(1, Number(SAMPLING_STATE.pageSize)||SAMPLING_PAGE_SIZE);
+  const totalItems = items.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems/pageSize));
+  let currentPage = Number(SAMPLING_STATE.pageByInspector.get(inspectorId))||1;
+  if(currentPage>totalPages) currentPage = totalPages;
+  if(currentPage<1) currentPage = 1;
+  SAMPLING_STATE.pageByInspector.set(inspectorId, currentPage);
+  const start = (currentPage-1)*pageSize;
+  const pageItems = items.slice(start, start+pageSize);
+  itemsZone.innerHTML = pageItems.map(renderSamplingItem).join('');
+  renderSamplingPager({ page:currentPage, totalPages, totalItems, pageSize });
 }
 function renderSamplingItem(item){
   const itemId = item.item_id||'';
@@ -1878,6 +1907,44 @@ function renderSamplingItem(item){
     </div>
   </article>`;
 }
+function renderSamplingPager(meta){
+  const pagerZone = qs('sampling_pager_zone');
+  if(!pagerZone) return;
+  if(!meta || meta.totalPages<=1){
+    pagerZone.innerHTML='';
+    pagerZone.classList.add('hidden');
+    return;
+  }
+  const { page, totalPages, totalItems, pageSize } = meta;
+  const start = (page-1)*pageSize+1;
+  const end = Math.min(totalItems, page*pageSize);
+  const prevPage = Math.max(1, page-1);
+  const nextPage = Math.min(totalPages, page+1);
+  pagerZone.classList.remove('hidden');
+  pagerZone.innerHTML = `
+    <div class="sampling-pager-meta">第 ${page} / ${totalPages} 页 · 显示 ${start}-${end} / ${totalItems}</div>
+    <div class="sampling-pager-buttons">
+      <button type="button" class="sampling-pager-btn" data-page="1" ${page<=1?'disabled':''}>首页</button>
+      <button type="button" class="sampling-pager-btn" data-page="${prevPage}" ${page<=1?'disabled':''}>上一页</button>
+      <button type="button" class="sampling-pager-btn" data-page="${nextPage}" ${page>=totalPages?'disabled':''}>下一页</button>
+      <button type="button" class="sampling-pager-btn" data-page="${totalPages}" ${page>=totalPages?'disabled':''}>末页</button>
+    </div>`;
+}
+
+function setSamplingPage(inspectorId, page){
+  if(!inspectorId) return;
+  const numericPage = Number(page);
+  if(!Number.isFinite(numericPage)) return;
+  const dataset = SAMPLING_STATE.data.get(inspectorId);
+  if(!dataset){ return; }
+  const items = Array.isArray(dataset.items)?dataset.items:[];
+  const pageSize = Math.max(1, Number(SAMPLING_STATE.pageSize)||SAMPLING_PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(items.length/pageSize));
+  const safePage = Math.max(1, Math.min(totalPages, Math.round(numericPage)));
+  SAMPLING_STATE.pageByInspector.set(inspectorId, safePage);
+  renderSamplingDetail(dataset);
+}
+
 function renderSamplingSelect(list, value, itemId, kind){
   const options=['<option value="">请选择</option>'];
   if(Array.isArray(list)){
@@ -1942,6 +2009,9 @@ async function openSamplingAudit(inspectorId, options={}){
   if(!SESSION_ID || !inspectorId) return;
   const force = options.force===true;
   SAMPLING_STATE.activeId = inspectorId;
+  if(force || !SAMPLING_STATE.data.has(inspectorId)){
+    SAMPLING_STATE.pageByInspector.set(inspectorId, 1);
+  }
   renderSamplingList();
   if(!force && SAMPLING_STATE.data.has(inspectorId)){
     renderSamplingDetail(SAMPLING_STATE.data.get(inspectorId));
