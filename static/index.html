@@ -266,7 +266,7 @@
                         </div>
                         <div>
                           <h4 class="home-action-title">按调整分类批量导出</h4>
-                          <p class="home-action-desc">根据调整后的议题或领域拆分多个 Excel，集中写入服务器目录。</p>
+                          <p class="home-action-desc">可选择按调整后的议题、领域或两者拆分多个 Excel，集中写入服务器目录。</p>
                         </div>
                       </div>
                       <button id="btn_export_batch" class="action-btn home-action-btn bg-amber-500 text-white hover:bg-amber-400 shadow-sm" title="按调整后的分类批量导出多个 Excel 文件">
@@ -780,6 +780,30 @@
   <div id="sess_list_zone" class="p-4 max-h-[60vh] overflow-y-auto text-sm"></div>
   <div class="p-4 border-t flex items-center justify-end">
     <button class="btn bg-slate-700 text-white hover:bg-slate-600" onclick="qs('dlg_sessions').close()">关闭</button>
+  </div>
+</dialog>
+<dialog id="dlg_export_batch" class="rounded-xl p-0 w-[440px] max-w-[95vw]">
+  <div class="p-4 border-b flex items-center justify-between">
+    <h3 class="font-semibold text-slate-900">按调整分类批量导出</h3>
+    <button id="btn_export_batch_close" class="btn btn-sm btn-ghost text-slate-600" type="button">✕</button>
+  </div>
+  <div class="p-5 space-y-4 text-sm text-slate-700">
+    <p class="leading-relaxed">请选择要导出的维度，系统会分别为所选分类生成 Excel 子表。默认会同时导出调整后的议题与领域。</p>
+    <div class="space-y-3">
+      <label class="flex items-center gap-2">
+        <input id="chk_export_topic" class="h-4 w-4 rounded border-slate-300 text-slate-800" type="checkbox" name="batch_export_target" value="topic" checked>
+        <span class="font-medium text-slate-800">按调整后议题分表</span>
+      </label>
+      <label class="flex items-center gap-2">
+        <input id="chk_export_field" class="h-4 w-4 rounded border-slate-300 text-slate-800" type="checkbox" name="batch_export_target" value="field" checked>
+        <span class="font-medium text-slate-800">按调整后领域分表</span>
+      </label>
+    </div>
+    <p id="batch_export_error" class="text-xs text-rose-500 hidden">请至少选择一个导出维度。</p>
+  </div>
+  <div class="p-4 border-t flex items-center justify-end gap-2">
+    <button id="btn_export_batch_cancel" class="btn btn-ghost text-slate-600" type="button">取消</button>
+    <button id="btn_export_batch_confirm" class="btn bg-slate-800 text-white hover:bg-slate-700" type="button">生成</button>
   </div>
 </dialog>
 <dialog id="dlg_word_cloud" class="word-cloud-dialog">
@@ -4090,27 +4114,46 @@ async function saveExcelServer(){
   alert("已保存到服务器：\n"+(j.saved_path||""));
 }
 
-async function exportBatchExcel(){
+function openBatchExportDialog(){
   if(!SESSION_ID){ alert("请先上传/载入会话"); return; }
-  const input = prompt("选择导出维度：输入 topic（按调整后议题）、field（按调整后领域）或 both（两者）","both");
-  if(input===null){ return; }
-  const normalized = input.trim().toLowerCase();
-  let targets;
-  if(!normalized || normalized === "both"){
-    targets = ["topic","field"];
-  }else if(normalized === "topic" || normalized === "field"){
-    targets = [normalized];
-  }else{
-    alert("输入无效，请输入 topic / field / both");
+  const dlg = qs('dlg_export_batch');
+  if(!dlg){
+    exportBatchExcel();
     return;
   }
-  const payload = { session_id: SESSION_ID, targets };
+  dlg.querySelectorAll('input[name="batch_export_target"]').forEach(input=>{
+    input.checked = true;
+  });
+  const err = qs('batch_export_error');
+  if(err){ err.classList.add('hidden'); }
+  dlg.showModal();
+}
+
+async function exportBatchExcel(targets){
+  if(!SESSION_ID){ alert("请先上传/载入会话"); return; }
+  let cleanedTargets = [];
+  if(Array.isArray(targets)){
+    for(const item of targets){
+      const key = String(item||"").trim().toLowerCase();
+      if((key === "topic" || key === "field") && !cleanedTargets.includes(key)){
+        cleanedTargets.push(key);
+      }
+    }
+  }
+  if(!cleanedTargets.length){
+    cleanedTargets = ["topic","field"];
+  }
+  const payload = { session_id: SESSION_ID, targets: cleanedTargets };
   const r = await fetch("/export_excel_split",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
   if(!r.ok){ alert("批量导出失败："+await r.text()); return; }
   const j = await r.json();
   const lines = [];
   lines.push(`批量导出完成，共生成 ${j.total_files||0} 个文件`);
   if(j.root_dir){ lines.push(`存储目录：${j.root_dir}`); }
+  if(Array.isArray(j.targets) && j.targets.length){
+    const labels = j.targets.map(t=>t==='field'? '调整后领域':'调整后议题');
+    lines.push(`导出维度：${labels.join('、')}`);
+  }
   if(j.summary){
     if(j.summary.topic){ lines.push(`· 按议题：${j.summary.topic.groups||0} 个分组，${j.summary.topic.rows||0} 篇`); }
     if(j.summary.field){ lines.push(`· 按领域：${j.summary.field.groups||0} 个分组，${j.summary.field.rows||0} 篇`); }
@@ -4171,7 +4214,33 @@ function bindEvents(){
   qs('btn_save_session').onclick=saveSession;
   qs('btn_load_session').onclick=openLoadDialog;
   qs('btn_save_excel').onclick=saveExcelServer;
-  const btnExportBatch=qs('btn_export_batch'); if(btnExportBatch) btnExportBatch.onclick=exportBatchExcel;
+  const btnExportBatch=qs('btn_export_batch'); if(btnExportBatch) btnExportBatch.onclick=openBatchExportDialog;
+  const dlgExportBatch=qs('dlg_export_batch');
+  if(dlgExportBatch){
+    const btnBatchClose=qs('btn_export_batch_close'); if(btnBatchClose) btnBatchClose.onclick=()=>dlgExportBatch.close();
+    const btnBatchCancel=qs('btn_export_batch_cancel'); if(btnBatchCancel) btnBatchCancel.onclick=()=>dlgExportBatch.close();
+    const btnBatchConfirm=qs('btn_export_batch_confirm');
+    if(btnBatchConfirm){
+      btnBatchConfirm.onclick=()=>{
+        const selections=Array.from(dlgExportBatch.querySelectorAll('input[name="batch_export_target"]:checked')).map(el=>el.value);
+        if(!selections.length){
+          const err=qs('batch_export_error'); if(err){ err.classList.remove('hidden'); }
+          return;
+        }
+        const err=qs('batch_export_error'); if(err){ err.classList.add('hidden'); }
+        dlgExportBatch.close();
+        exportBatchExcel(selections);
+      };
+    }
+    dlgExportBatch.querySelectorAll('input[name="batch_export_target"]').forEach(input=>{
+      input.addEventListener('change',()=>{
+        const err=qs('batch_export_error'); if(err){ err.classList.add('hidden'); }
+      });
+    });
+    dlgExportBatch.addEventListener('close',()=>{
+      const err=qs('batch_export_error'); if(err){ err.classList.add('hidden'); }
+    });
+  }
   const btnTopicYear=qs('btn_export_topic_year'); if(btnTopicYear) btnTopicYear.onclick=exportTopicYearExcel;
   qs('btn_download_last').onclick=downloadLast;
   const btnSaveAll=qs('btn_save_all'); if(btnSaveAll) btnSaveAll.onclick=saveAllChanges;
