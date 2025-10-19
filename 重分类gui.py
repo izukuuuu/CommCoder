@@ -970,6 +970,129 @@ def _sampling_item_status(item: Dict[str, Any]) -> str:
         return "partial"
     return "pending"
 
+def _sampling_metrics(audit: Dict[str, Any]) -> Dict[str, Any]:
+    items = audit.get("items") or []
+
+    def _norm(value: Any) -> str:
+        return _normalize_cell_value(value)
+
+    topic_counter: Counter[str] = Counter()
+    field_counter: Counter[str] = Counter()
+    ai_topic_counter: Counter[str] = Counter()
+    ai_field_counter: Counter[str] = Counter()
+
+    topic_compared = 0
+    topic_matches = 0
+    field_compared = 0
+    field_matches = 0
+    joint_compared = 0
+    joint_matches = 0
+    orig_topic_compared = 0
+    orig_topic_matches = 0
+    orig_field_compared = 0
+    orig_field_matches = 0
+
+    for item in items:
+        selected_topic = _norm(item.get("selected_topic"))
+        selected_field = _norm(item.get("selected_field"))
+        ai_topic = _norm(item.get("ai_topic"))
+        ai_field = _norm(item.get("ai_field"))
+        orig_topic = _norm(item.get("orig_topic"))
+        orig_field = _norm(item.get("orig_field"))
+
+        if selected_topic:
+            topic_counter[selected_topic] += 1
+        if selected_field:
+            field_counter[selected_field] += 1
+        if ai_topic:
+            ai_topic_counter[ai_topic] += 1
+        if ai_field:
+            ai_field_counter[ai_field] += 1
+
+        if selected_topic and ai_topic:
+            topic_compared += 1
+            if selected_topic == ai_topic:
+                topic_matches += 1
+
+        if selected_field and ai_field:
+            field_compared += 1
+            if selected_field == ai_field:
+                field_matches += 1
+
+        if selected_topic and selected_field and ai_topic and ai_field:
+            joint_compared += 1
+            if selected_topic == ai_topic and selected_field == ai_field:
+                joint_matches += 1
+
+        if selected_topic and orig_topic:
+            orig_topic_compared += 1
+            if selected_topic == orig_topic:
+                orig_topic_matches += 1
+
+        if selected_field and orig_field:
+            orig_field_compared += 1
+            if selected_field == orig_field:
+                orig_field_matches += 1
+
+    def _metric(matches: int, compared: int) -> Dict[str, Any]:
+        accuracy = (matches / compared) if compared else None
+        return {
+            "matches": int(matches),
+            "compared": int(compared),
+            "mismatches": int(max(0, compared - matches)),
+            "accuracy": accuracy,
+            "accuracy_percent": round(accuracy * 100.0, 2) if accuracy is not None else None,
+        }
+
+    def _distribution(counter: Counter[str]) -> Tuple[int, List[Dict[str, Any]]]:
+        total = int(sum(counter.values()))
+        if total <= 0:
+            return 0, []
+        top_entries = counter.most_common(8)
+        result: List[Dict[str, Any]] = []
+        for label, count in top_entries:
+            result.append(
+                {
+                    "label": label,
+                    "count": int(count),
+                    "percent": round((count / total) * 100.0, 2) if total else 0.0,
+                }
+            )
+        return total, result
+
+    human_topic_total, human_topic_top = _distribution(topic_counter)
+    human_field_total, human_field_top = _distribution(field_counter)
+    ai_topic_total, ai_topic_top = _distribution(ai_topic_counter)
+    ai_field_total, ai_field_top = _distribution(ai_field_counter)
+
+    return {
+        "topic": _metric(topic_matches, topic_compared),
+        "field": _metric(field_matches, field_compared),
+        "joint": _metric(joint_matches, joint_compared),
+        "orig_topic": _metric(orig_topic_matches, orig_topic_compared),
+        "orig_field": _metric(orig_field_matches, orig_field_compared),
+        "selected_topic": {
+            "total": human_topic_total,
+            "unique": len(topic_counter),
+            "top": human_topic_top,
+        },
+        "selected_field": {
+            "total": human_field_total,
+            "unique": len(field_counter),
+            "top": human_field_top,
+        },
+        "ai_topic": {
+            "total": ai_topic_total,
+            "unique": len(ai_topic_counter),
+            "top": ai_topic_top,
+        },
+        "ai_field": {
+            "total": ai_field_total,
+            "unique": len(ai_field_counter),
+            "top": ai_field_top,
+        },
+    }
+
 def _sampling_summary(audit: Dict[str, Any]) -> Dict[str, Any]:
     items = audit.get("items") or []
     total = len(items)
@@ -988,6 +1111,13 @@ def _sampling_summary(audit: Dict[str, Any]) -> Dict[str, Any]:
         status = "completed"
     elif completed or partial:
         status = "in_progress"
+    metrics = _sampling_metrics(audit)
+    metrics["progress"] = {
+        "completed": completed,
+        "total": total,
+        "progress": progress,
+        "progress_percent": round(progress * 100.0, 2) if total else 0.0,
+    }
     return {
         "inspector": audit.get("inspector", ""),
         "inspector_id": audit.get("inspector_id", ""),
@@ -1004,6 +1134,7 @@ def _sampling_summary(audit: Dict[str, Any]) -> Dict[str, Any]:
         "updated_at": audit.get("updated_at", ""),
         "status": status,
         "seed": audit.get("random_seed"),
+        "metrics": metrics,
     }
 
 def _sampling_item_payload(item: Dict[str, Any]) -> Dict[str, Any]:

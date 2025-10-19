@@ -1832,6 +1832,77 @@ function renderSamplingList(){
     </button>`;
   }).join('');
 }
+
+function renderSamplingMetrics(metrics){
+  if(!metrics || typeof metrics !== 'object'){ return ''; }
+  const metricCards = [];
+  const metricConfig = [
+    { key:'topic', title:'议题准确率', subtitle:'AI 预测 vs 人工核对' },
+    { key:'field', title:'领域准确率', subtitle:'AI 预测 vs 人工核对' },
+    { key:'joint', title:'整体一致率', subtitle:'议题与领域均一致' },
+    { key:'orig_topic', title:'原始议题一致率', subtitle:'人工 vs 原始分类' },
+    { key:'orig_field', title:'原始领域一致率', subtitle:'人工 vs 原始分类' },
+  ];
+  metricConfig.forEach(cfg=>{
+    const m = metrics[cfg.key]||{};
+    const compared = Number(m.compared)||0;
+    const matches = Number(m.matches)||0;
+    const accuracyPercent = Number(m.accuracy_percent);
+    const valueText = Number.isFinite(accuracyPercent)?samplingPercentDisplay(accuracyPercent):'—';
+    const detail = compared>0?`样本 ${matches}/${compared}`:'暂无对比样本';
+    metricCards.push(`<div class="sampling-metric-card">
+      <p class="sampling-metric-title">${escapeHtml(cfg.title)}</p>
+      <p class="sampling-metric-value">${valueText}</p>
+      <p class="sampling-metric-meta">${escapeHtml(cfg.subtitle)}</p>
+      <p class="sampling-metric-detail">${escapeHtml(detail)}</p>
+    </div>`);
+  });
+
+  const distributions = [];
+  const selectedTopic = metrics.selected_topic||{};
+  const selectedField = metrics.selected_field||{};
+  const aiTopic = metrics.ai_topic||{};
+  const aiField = metrics.ai_field||{};
+
+  const selectedTopicCard = renderSamplingDistributionCard('人工议题分布', selectedTopic.top, selectedTopic.total);
+  if(selectedTopicCard){ distributions.push(selectedTopicCard); }
+  const selectedFieldCard = renderSamplingDistributionCard('人工领域分布', selectedField.top, selectedField.total);
+  if(selectedFieldCard){ distributions.push(selectedFieldCard); }
+  const aiTopicCard = renderSamplingDistributionCard('AI 议题分布', aiTopic.top, aiTopic.total);
+  if(aiTopicCard){ distributions.push(aiTopicCard); }
+  const aiFieldCard = renderSamplingDistributionCard('AI 领域分布', aiField.top, aiField.total);
+  if(aiFieldCard){ distributions.push(aiFieldCard); }
+
+  const cardsHtml = metricCards.length?`<div class="sampling-metrics-grid">${metricCards.join('')}</div>`:'';
+  const distributionsHtml = distributions.length?`<div class="sampling-metrics-dist-grid">${distributions.join('')}</div>`:'';
+  if(!cardsHtml && !distributionsHtml){ return ''; }
+  return `<section class="sampling-metrics">${cardsHtml}${distributionsHtml}</section>`;
+}
+
+function renderSamplingDistributionCard(title, entries, total){
+  if(!Array.isArray(entries) || !entries.length){ return ''; }
+  const safeTotal = Number(total)||0;
+  const listItems = entries.map(entry=>{
+    const rawLabel = entry?.label||'未分类';
+    const label = escapeHtml(rawLabel);
+    const labelAttr = escapeAttr(rawLabel||'未分类');
+    const count = safeNumber(entry?.count||0);
+    const percentVal = Number(entry?.percent);
+    const percentText = Number.isFinite(percentVal)?samplingPercentDisplay(percentVal):'—';
+    return `<li class="sampling-metric-dist-item">
+      <span class="sampling-metric-dist-label" title="${labelAttr}">${label}</span>
+      <span class="sampling-metric-dist-value"><span>${count}</span><span class="sampling-metric-dist-percent">${percentText}</span></span>
+    </li>`;
+  }).join('');
+  return `<div class="sampling-metric-dist-card">
+    <div class="sampling-metric-dist-header">
+      <span class="sampling-metric-dist-title">${escapeHtml(title)}</span>
+      <span class="sampling-metric-dist-total">总计 ${safeNumber(safeTotal)}</span>
+    </div>
+    <ul class="sampling-metric-dist-list">${listItems}</ul>
+  </div>`;
+}
+
 function renderSamplingDetail(data=null){
   const detail = qs('sampling_detail_zone');
   const itemsZone = qs('sampling_items_zone');
@@ -1857,6 +1928,7 @@ function renderSamplingDetail(data=null){
   const pending = Number(audit.pending)||0;
   const ratePercent = samplingPercentDisplay((Number(audit.sample_rate)||SAMPLING_DEFAULT_RATE)*100);
   const updated = escapeHtml(audit.updated_at||'—');
+  const metricsBlock = renderSamplingMetrics(audit.metrics);
   detail.innerHTML = `<div class="sampling-detail-header">
       <div>
         <h3 class="sampling-detail-title">${inspectorName}</h3>
@@ -1867,7 +1939,8 @@ function renderSamplingDetail(data=null){
         <div class="sampling-detail-progress-text">已完成 ${completed} · 进行中 ${inProgress} · 待处理 ${pending}</div>
       </div>
     </div>
-    <div class="sampling-detail-updated">最近更新：${updated}</div>`;
+    <div class="sampling-detail-updated">最近更新：${updated}</div>
+    ${metricsBlock}`;
   if(!items.length){
     itemsZone.innerHTML = '<div class="sampling-empty">暂无抽样样本</div>';
     if(pagerZone){ pagerZone.innerHTML=''; pagerZone.classList.add('hidden'); }
