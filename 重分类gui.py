@@ -993,6 +993,15 @@ def _sampling_metrics(audit: Dict[str, Any]) -> Dict[str, Any]:
     orig_field_compared = 0
     orig_field_matches = 0
 
+    topic_selected_compared: Counter[str] = Counter()
+    topic_ai_compared: Counter[str] = Counter()
+    field_selected_compared: Counter[str] = Counter()
+    field_ai_compared: Counter[str] = Counter()
+    orig_topic_selected_compared: Counter[str] = Counter()
+    orig_topic_ref_compared: Counter[str] = Counter()
+    orig_field_selected_compared: Counter[str] = Counter()
+    orig_field_ref_compared: Counter[str] = Counter()
+
     for item in items:
         selected_topic = _norm(item.get("selected_topic"))
         selected_field = _norm(item.get("selected_field"))
@@ -1014,11 +1023,15 @@ def _sampling_metrics(audit: Dict[str, Any]) -> Dict[str, Any]:
             topic_compared += 1
             if selected_topic == ai_topic:
                 topic_matches += 1
+            topic_selected_compared[selected_topic] += 1
+            topic_ai_compared[ai_topic] += 1
 
         if selected_field and ai_field:
             field_compared += 1
             if selected_field == ai_field:
                 field_matches += 1
+            field_selected_compared[selected_field] += 1
+            field_ai_compared[ai_field] += 1
 
         if selected_topic and selected_field and ai_topic and ai_field:
             joint_compared += 1
@@ -1029,20 +1042,45 @@ def _sampling_metrics(audit: Dict[str, Any]) -> Dict[str, Any]:
             orig_topic_compared += 1
             if selected_topic == orig_topic:
                 orig_topic_matches += 1
+            orig_topic_selected_compared[selected_topic] += 1
+            orig_topic_ref_compared[orig_topic] += 1
 
         if selected_field and orig_field:
             orig_field_compared += 1
             if selected_field == orig_field:
                 orig_field_matches += 1
+            orig_field_selected_compared[selected_field] += 1
+            orig_field_ref_compared[orig_field] += 1
 
-    def _metric(matches: int, compared: int) -> Dict[str, Any]:
+    def _metric(
+        matches: int,
+        compared: int,
+        left_counter: Optional[Counter[str]] = None,
+        right_counter: Optional[Counter[str]] = None,
+    ) -> Dict[str, Any]:
         accuracy = (matches / compared) if compared else None
+        kappa: Optional[float] = None
+        if compared and left_counter is not None and right_counter is not None:
+            total = float(compared)
+            if total > 0:
+                pe = 0.0
+                labels = set(left_counter.keys()) | set(right_counter.keys())
+                for label in labels:
+                    pe += (left_counter.get(label, 0) / total) * (
+                        right_counter.get(label, 0) / total
+                    )
+                po = accuracy if accuracy is not None else 0.0
+                denom = 1.0 - pe
+                if abs(denom) > 1e-9:
+                    kappa = (po - pe) / denom
+                    kappa = max(-1.0, min(1.0, kappa))
         return {
             "matches": int(matches),
             "compared": int(compared),
             "mismatches": int(max(0, compared - matches)),
             "accuracy": accuracy,
             "accuracy_percent": round(accuracy * 100.0, 2) if accuracy is not None else None,
+            "kappa": round(kappa, 4) if kappa is not None else None,
         }
 
     def _distribution(counter: Counter[str]) -> Tuple[int, List[Dict[str, Any]]]:
@@ -1067,11 +1105,21 @@ def _sampling_metrics(audit: Dict[str, Any]) -> Dict[str, Any]:
     ai_field_total, ai_field_top = _distribution(ai_field_counter)
 
     return {
-        "topic": _metric(topic_matches, topic_compared),
-        "field": _metric(field_matches, field_compared),
+        "topic": _metric(topic_matches, topic_compared, topic_selected_compared, topic_ai_compared),
+        "field": _metric(field_matches, field_compared, field_selected_compared, field_ai_compared),
         "joint": _metric(joint_matches, joint_compared),
-        "orig_topic": _metric(orig_topic_matches, orig_topic_compared),
-        "orig_field": _metric(orig_field_matches, orig_field_compared),
+        "orig_topic": _metric(
+            orig_topic_matches,
+            orig_topic_compared,
+            orig_topic_selected_compared,
+            orig_topic_ref_compared,
+        ),
+        "orig_field": _metric(
+            orig_field_matches,
+            orig_field_compared,
+            orig_field_selected_compared,
+            orig_field_ref_compared,
+        ),
         "selected_topic": {
             "total": human_topic_total,
             "unique": len(topic_counter),

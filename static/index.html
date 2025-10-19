@@ -1850,11 +1850,15 @@ function renderSamplingMetrics(metrics){
     const accuracyPercent = Number(m.accuracy_percent);
     const valueText = Number.isFinite(accuracyPercent)?samplingPercentDisplay(accuracyPercent):'—';
     const detail = compared>0?`样本 ${matches}/${compared}`:'暂无对比样本';
+    const kappaValue = typeof m.kappa === 'number'?m.kappa:null;
+    const kappaText = Number.isFinite(kappaValue)?kappaValue.toFixed(3):'—';
+    const kappaLine = `Cohen's κ：${kappaText}`;
     metricCards.push(`<div class="sampling-metric-card">
       <p class="sampling-metric-title">${escapeHtml(cfg.title)}</p>
       <p class="sampling-metric-value">${valueText}</p>
       <p class="sampling-metric-meta">${escapeHtml(cfg.subtitle)}</p>
       <p class="sampling-metric-detail">${escapeHtml(detail)}</p>
+      <p class="sampling-metric-detail">${escapeHtml(kappaLine)}</p>
     </div>`);
   });
 
