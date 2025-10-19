@@ -67,6 +67,7 @@ plt.rcParams["xtick.color"] = "#1f2937"
 plt.rcParams["ytick.color"] = "#1f2937"
 
 APP_VERSION = "4.0.0"
+TIMELINE_MIN_YEAR = 1965
 SESS_DIR    = os.getenv("SESS_DIR", "sessions")
 OUTPUT_DIR  = os.getenv("OUTPUT_DIR", "Output")
 STATIC_DIR  = "static"
@@ -1333,6 +1334,18 @@ def _timeline(df: pd.DataFrame, bin_years: int) -> Dict[str, Any]:
     timeline_df = df[["Publication Year", ADJUST_TOPIC_COL, ADJUST_FIELD_COL]].copy()
     timeline_df["Publication Year"] = pd.to_numeric(timeline_df["Publication Year"], errors="coerce")
     timeline_df = timeline_df.dropna(subset=["Publication Year"])
+    if timeline_df.empty:
+        return {
+            "bin_size": bin_size,
+            "total": 0,
+            "min_year": None,
+            "max_year": None,
+            "bins": [],
+            "stack_topic": {"series": []},
+            "stack_field": {"series": []},
+        }
+
+    timeline_df = timeline_df[timeline_df["Publication Year"] >= TIMELINE_MIN_YEAR]
     if timeline_df.empty:
         return {
             "bin_size": bin_size,
