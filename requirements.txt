@@ -9,3 +9,4 @@ hdbscan
 wordcloud
 matplotlib
 sentence-transformers
+nltk

@@ -11,7 +11,7 @@ import io, os, gc, re, json, uuid, time, math, traceback, hashlib, random
 from collections import Counter, defaultdict
 from datetime import datetime
 from threading import Lock
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Set
 
 import numpy as np
 import pandas as pd
@@ -25,6 +25,13 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import PCA
 from sklearn.feature_extraction.text import TfidfVectorizer
 from wordcloud import WordCloud
+
+try:
+    import nltk  # type: ignore
+    from nltk.corpus import stopwords as nltk_stopwords  # type: ignore
+except Exception:  # pragma: no cover - 可选依赖
+    nltk = None  # type: ignore
+    nltk_stopwords = None  # type: ignore
 
 try:
     import hdbscan  # type: ignore
@@ -85,15 +92,77 @@ SESSION_LOCKS_LOCK = Lock()
 SCATTER_CACHE: Dict[str, Dict[str, Any]] = {}
 TOPIC_VIZ_CACHE: Dict[str, Dict[str, Any]] = {}
 
-TEXT_COLUMNS = ["结构化总结", "Abstract", "Article Title"]
+SUMMARY_COLUMN = "结构化总结"
+KEYWORD_TEXT_COLUMNS = ["Article Title", "Abstract"]
+TEXT_COLUMNS = [SUMMARY_COLUMN] + KEYWORD_TEXT_COLUMNS
 TOKEN_PATTERN = re.compile(r"[A-Za-z]{2,}|[\u4e00-\u9fa5]{2,}|\d{2,}")
 YEAR_PATTERN = re.compile(r"(18|19|20|21)\d{2}")
-STOPWORDS = set([
-    "the", "and", "with", "from", "that", "this", "which", "were", "have", "has",
-    "research", "study", "analysis", "based", "results", "data", "using", "into",
-    "对于", "以及", "研究", "方法", "结果", "分析", "提出", "进行", "领域", "主题", "意义", "探讨",
-    "关注", "问题", "关系", "影响", "发展", "中国", "美国", "社会", "文章", "作者", "指出"
-])
+
+
+def _load_english_stopwords() -> Set[str]:
+    if nltk_stopwords is None:
+        return set()
+    try:
+        return set(nltk_stopwords.words("english"))
+    except LookupError:
+        if nltk is not None:
+            try:
+                nltk.download("stopwords", quiet=True)
+                return set(nltk_stopwords.words("english"))
+            except Exception:
+                return set()
+        return set()
+    except Exception:
+        return set()
+
+
+ENGLISH_STOPWORDS = _load_english_stopwords()
+BASE_STOPWORDS = set(
+    [
+        "the",
+        "and",
+        "with",
+        "from",
+        "that",
+        "this",
+        "which",
+        "were",
+        "have",
+        "has",
+        "research",
+        "study",
+        "analysis",
+        "based",
+        "results",
+        "data",
+        "using",
+        "into",
+        "对于",
+        "以及",
+        "研究",
+        "方法",
+        "结果",
+        "分析",
+        "提出",
+        "进行",
+        "领域",
+        "主题",
+        "意义",
+        "探讨",
+        "关注",
+        "问题",
+        "关系",
+        "影响",
+        "发展",
+        "中国",
+        "美国",
+        "社会",
+        "文章",
+        "作者",
+        "指出",
+    ]
+)
+STOPWORDS = BASE_STOPWORDS.union(ENGLISH_STOPWORDS)
 
 WORDCLOUD_FONT_ENV = os.getenv("WORDCLOUD_FONT_PATH", "").strip()
 WORDCLOUD_FONT_CANDIDATES = [
@@ -308,8 +377,8 @@ def _tokenize_text(text: str) -> List[str]:
     return tokens
 
 
-def _combine_text_columns(df: pd.DataFrame) -> List[str]:
-    cols = [c for c in TEXT_COLUMNS if c in df.columns]
+def _combine_text_columns(df: pd.DataFrame, columns: List[str]) -> List[str]:
+    cols = [c for c in columns if c in df.columns]
     if not cols:
         return []
     series = df[cols[0]].fillna("").astype(str)
@@ -326,7 +395,9 @@ def _category_keywords(
 ) -> Tuple[List[Dict[str, Any]], List[str], List[int], List[str]]:
     if column not in df.columns or df.empty:
         return [], [], [], []
-    work = df[[column] + [c for c in TEXT_COLUMNS if c in df.columns]].copy()
+    text_columns = [c for c in KEYWORD_TEXT_COLUMNS if c in df.columns]
+    work_columns = [column] + text_columns
+    work = df[work_columns].copy()
     work[column] = work[column].fillna("").astype(str).str.strip().replace("", fallback_label)
     categories: List[Dict[str, Any]] = []
     texts: List[str] = []
@@ -335,7 +406,7 @@ def _category_keywords(
     for label, group in work.groupby(column):
         label_str = str(label).strip() or fallback_label
         total = int(group.shape[0])
-        combined_texts = _combine_text_columns(group)
+        combined_texts = _combine_text_columns(group, text_columns)
         freq: Counter[str] = Counter()
         for text in combined_texts:
             freq.update(_tokenize_text(text))
@@ -565,6 +636,94 @@ def _generate_word_cloud_assets(words: List[Dict[str, Any]]) -> Dict[str, Any]:
         "width": wc.width,
         "height": wc.height,
         "words_used": len(frequencies),
+    }
+
+
+def _generate_keyword_bar_assets(
+    words: List[Dict[str, Any]],
+    top_n: int = 12,
+) -> Dict[str, Any]:
+    entries: List[Tuple[str, int, float]] = []
+    for item in words:
+        token = str(item.get("token", "")).strip()
+        count = int(item.get("count", 0) or 0)
+        weight = float(item.get("weight", 0.0) or 0.0)
+        if not token or count <= 0:
+            continue
+        entries.append((token, count, weight))
+        if len(entries) >= top_n:
+            break
+    if not entries:
+        raise ValueError("no keyword frequencies")
+
+    labels = [token for token, _, _ in entries]
+    counts = [count for _, count, _ in entries]
+    weights = [weight for _, _, weight in entries]
+
+    figure_height = max(2.8, len(labels) * 0.5 + 1.6)
+    figure_width = max(4.2, 5.2)
+    max_dim = max(figure_height, figure_width)
+    if max_dim > 8.0:
+        scale = 8.0 / max_dim
+        figure_height *= scale
+        figure_width *= scale
+
+    fig, ax = plt.subplots(figsize=(figure_width, figure_height))
+    positions = np.arange(len(labels))
+    bars = ax.barh(positions, counts, color="#2563eb", alpha=0.9)
+
+    ax.set_yticks(positions)
+    ax.set_yticklabels(labels, fontsize=11, fontfamily="Times New Roman")
+    ax.set_xlabel("Occurrence Count", fontsize=12)
+    ax.set_ylabel("Keyword", fontsize=12)
+    ax.invert_yaxis()
+
+    ax.set_axisbelow(True)
+    ax.grid(False)
+    ax.set_facecolor("#ffffff")
+    fig.patch.set_facecolor("#ffffff")
+
+    for spine_name, spine in ax.spines.items():
+        if spine_name in ("left", "bottom"):
+            spine.set_visible(True)
+            spine.set_color("#1f2937")
+            spine.set_linewidth(1.1)
+        else:
+            spine.set_visible(False)
+
+    ax.tick_params(axis="x", labelsize=11, direction="out", length=4, width=0.8)
+    ax.tick_params(axis="y", labelsize=11, direction="out", length=4, width=0.8)
+
+    bar_labels = []
+    for idx, value in enumerate(counts):
+        percent = weights[idx] * 100 if idx < len(weights) else 0.0
+        if percent > 0:
+            bar_labels.append(f"{value:,} ({percent:.1f}%)")
+        else:
+            bar_labels.append(f"{value:,}")
+    ax.bar_label(bars, labels=bar_labels, padding=6, fontsize=10, color="#1f2937")
+
+    fig.tight_layout()
+
+    png_buffer = io.BytesIO()
+    svg_buffer = io.BytesIO()
+    fig.savefig(
+        png_buffer,
+        format="png",
+        dpi=300,
+        bbox_inches="tight",
+        facecolor="white",
+    )
+    fig.savefig(svg_buffer, format="svg", bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+
+    png_data = base64.b64encode(png_buffer.getvalue()).decode("ascii")
+    svg_data = base64.b64encode(svg_buffer.getvalue()).decode("ascii")
+
+    return {
+        "png_data_url": f"data:image/png;base64,{png_data}",
+        "svg_data_url": f"data:image/svg+xml;base64,{svg_data}",
+        "words_used": len(labels),
     }
 
 
@@ -1384,6 +1543,66 @@ def word_cloud_assets(
             **assets,
         }
     )
+
+
+@app.get("/keyword_chart_assets")
+def keyword_chart_assets(
+    session_id: str = Query(...),
+    dimension: str = Query("topic"),
+    label: Optional[str] = Query(None),
+):
+    try:
+        payload = _get_topic_visual_data(session_id)
+    except ValueError:
+        return PlainTextResponse("无效 session_id", status_code=400)
+
+    dim_key = (dimension or "").strip().lower()
+    dim_map = {"topic": "topic_adj", "field": "field_adj"}
+    if dim_key not in dim_map:
+        return PlainTextResponse("dimension 必须为 topic 或 field", status_code=400)
+
+    dim_payload = payload.get(dim_map[dim_key], {}) or {}
+    categories = dim_payload.get("categories") or []
+    if not categories:
+        return JSONResponse({"ok": False, "message": "暂无关键词数据"})
+
+    target = None
+    if label:
+        label_str = str(label)
+        for cat in categories:
+            if str(cat.get("label", "")) == label_str:
+                target = cat
+                break
+    if not target:
+        target = categories[0]
+
+    words = target.get("top_words") or []
+    try:
+        assets = _generate_keyword_bar_assets(words)
+    except ValueError:
+        return JSONResponse({"ok": False, "message": "暂无关键词数据"})
+    except Exception:
+        traceback.print_exc()
+        return JSONResponse({"ok": False, "message": "关键词图生成失败"})
+
+    category_label = str(target.get("label") or "未分类")
+    slug = _slugify_filename(category_label)
+    png_filename = f"{dim_key}_keywords_{slug}.png"
+    svg_filename = f"{dim_key}_keywords_{slug}.svg"
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "category": category_label,
+            "dimension": dim_key,
+            "document_count": int(target.get("count", 0) or 0),
+            "total_tokens": int(target.get("total_tokens", 0) or 0),
+            "png_filename": png_filename,
+            "svg_filename": svg_filename,
+            **assets,
+        }
+    )
+
 
 @app.get("/data")
 def get_data(
