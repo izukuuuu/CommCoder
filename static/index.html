@@ -1842,6 +1842,7 @@ function renderSamplingMetrics(metrics){
     { key:'joint', title:'整体一致率', subtitle:'议题与领域均一致' },
     { key:'orig_topic', title:'原始议题一致率', subtitle:'人工 vs 原始分类' },
     { key:'orig_field', title:'原始领域一致率', subtitle:'人工 vs 原始分类' },
+    { key:'orig_joint', title:'原始总体一致率', subtitle:'人工 vs 原始分类均一致' },
   ];
   metricConfig.forEach(cfg=>{
     const m = metrics[cfg.key]||{};

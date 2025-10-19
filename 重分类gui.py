@@ -992,6 +992,8 @@ def _sampling_metrics(audit: Dict[str, Any]) -> Dict[str, Any]:
     orig_topic_matches = 0
     orig_field_compared = 0
     orig_field_matches = 0
+    orig_joint_compared = 0
+    orig_joint_matches = 0
 
     topic_selected_compared: Counter[str] = Counter()
     topic_ai_compared: Counter[str] = Counter()
@@ -1051,6 +1053,16 @@ def _sampling_metrics(audit: Dict[str, Any]) -> Dict[str, Any]:
                 orig_field_matches += 1
             orig_field_selected_compared[selected_field] += 1
             orig_field_ref_compared[orig_field] += 1
+
+        if (
+            selected_topic
+            and selected_field
+            and orig_topic
+            and orig_field
+        ):
+            orig_joint_compared += 1
+            if selected_topic == orig_topic and selected_field == orig_field:
+                orig_joint_matches += 1
 
     def _metric(
         matches: int,
@@ -1119,6 +1131,10 @@ def _sampling_metrics(audit: Dict[str, Any]) -> Dict[str, Any]:
             orig_field_compared,
             orig_field_selected_compared,
             orig_field_ref_compared,
+        ),
+        "orig_joint": _metric(
+            orig_joint_matches,
+            orig_joint_compared,
         ),
         "selected_topic": {
             "total": human_topic_total,
