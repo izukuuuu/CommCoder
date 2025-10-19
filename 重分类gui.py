@@ -43,6 +43,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.font_manager import FontProperties
 
 # ============== 可选：sentence-transformers ==============
 _ST_MODEL = None
@@ -65,6 +66,7 @@ plt.rcParams["font.family"] = ["Times New Roman", "Times", "serif"]
 plt.rcParams["axes.labelcolor"] = "#1f2937"
 plt.rcParams["xtick.color"] = "#1f2937"
 plt.rcParams["ytick.color"] = "#1f2937"
+plt.rcParams["axes.unicode_minus"] = False
 
 APP_VERSION = "4.0.0"
 TIMELINE_MIN_YEAR = 1965
@@ -199,6 +201,250 @@ def _resolve_wordcloud_font() -> Optional[str]:
 WORDCLOUD_FONT_PATH = _resolve_wordcloud_font()
 WORDCLOUD_WIDTH = int(os.getenv("WORDCLOUD_WIDTH", "1600"))
 WORDCLOUD_HEIGHT = int(os.getenv("WORDCLOUD_HEIGHT", "900"))
+
+SCATTER_COLORS = [
+    "#2563eb",
+    "#1d4ed8",
+    "#0ea5e9",
+    "#10b981",
+    "#f97316",
+    "#f43f5e",
+    "#a855f7",
+    "#facc15",
+    "#14b8a6",
+    "#6366f1",
+]
+
+SCATTER_CHINESE_FONT: Optional[FontProperties] = None
+
+
+def _resolve_scatter_chinese_font() -> Optional[FontProperties]:
+    """优先复用词云字体，失败时按常见家族名称回退。"""
+
+    candidates: List[str] = []
+    if WORDCLOUD_FONT_PATH:
+        candidates.append(WORDCLOUD_FONT_PATH)
+    candidates.extend(
+        [
+            "C:/Windows/Fonts/simsun.ttc",
+            "C:/Windows/Fonts/simfang.ttf",
+            "C:/Windows/Fonts/simhei.ttf",
+            "C:/Windows/Fonts/msyh.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSerifCJK-Regular.ttc",
+        ]
+    )
+    for path in candidates:
+        if not path:
+            continue
+        if not os.path.exists(path):
+            continue
+        try:
+            return FontProperties(fname=path)
+        except Exception:
+            continue
+    for family in ["SimSun", "SimHei", "Songti SC", "Microsoft YaHei", "Noto Sans CJK SC"]:
+        try:
+            font_path = matplotlib.font_manager.findfont(FontProperties(family=family), fallback_to_default=False)
+            if font_path:
+                return FontProperties(fname=font_path)
+        except Exception:
+            continue
+    return None
+
+
+SCATTER_CHINESE_FONT = _resolve_scatter_chinese_font()
+
+
+def _contains_cjk(text: str) -> bool:
+    return bool(re.search(r"[\u4e00-\u9fff]", text or ""))
+
+
+def _scatter_color_for_cluster(cluster: int, has_clusters: bool) -> str:
+    if not has_clusters:
+        return "#2563eb"
+    if cluster < 0:
+        return "#ef4444"
+    idx = abs(int(cluster)) % len(SCATTER_COLORS)
+    return SCATTER_COLORS[idx]
+
+
+def _format_pipeline(vectorizer: str, reduction: str) -> str:
+    parts = []
+    if vectorizer:
+        parts.append(vectorizer.upper())
+    if reduction:
+        parts.append(reduction.upper())
+    return " → ".join(parts)
+
+
+def _scatter_summary(
+    cluster_count: int,
+    cluster_algo: str,
+    explained: float,
+    pipeline_text: str,
+    total_docs: int,
+) -> str:
+    summary_parts: List[str] = []
+    if cluster_count <= 1:
+        summary_parts.append("未进一步聚类")
+    else:
+        algo = cluster_algo.upper() if cluster_algo else ""
+        if algo:
+            summary_parts.append(f"{algo} 聚 {cluster_count} 簇")
+        else:
+            summary_parts.append(f"聚 {cluster_count} 簇")
+    summary_parts.append(f"方差解释 {explained * 100:.1f}%")
+    if pipeline_text:
+        summary_parts.append(f"语义管线：{pipeline_text}")
+    if total_docs > 0:
+        summary_parts.append(f"覆盖文献 {total_docs}")
+    return " · ".join(part for part in summary_parts if part)
+
+
+def _generate_scatter_assets(
+    points: List[Dict[str, Any]],
+    cluster_count: int,
+    cluster_algo: str,
+    explained: float,
+    pipeline_text: str,
+    total_docs: int,
+    slug: str,
+) -> Dict[str, Any]:
+    if not points:
+        return {}
+
+    x_values = np.array([float(p.get("x", 0.0)) for p in points], dtype=float)
+    y_values = np.array([float(p.get("y", 0.0)) for p in points], dtype=float)
+    counts = np.array([max(1, int(p.get("count", 0))) for p in points], dtype=float)
+    sqrt_counts = np.sqrt(counts)
+
+    if np.all(np.isfinite(sqrt_counts)) and sqrt_counts.max() > sqrt_counts.min():
+        norm = (sqrt_counts - sqrt_counts.min()) / (sqrt_counts.max() - sqrt_counts.min())
+    else:
+        norm = np.zeros_like(sqrt_counts)
+
+    marker_sizes = 120 + norm * 420
+    has_clusters = cluster_count > 1
+    colors = [
+        _scatter_color_for_cluster(int(p.get("cluster", 0)), has_clusters)
+        for p in points
+    ]
+
+    fig, ax = plt.subplots(figsize=(7.2, 5.4))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+    ax.grid(True, linestyle="--", linewidth=0.6, alpha=0.25)
+    ax.set_xlabel("Semantic Dimension 1", fontname="Times New Roman", fontsize=12)
+    ax.set_ylabel("Semantic Dimension 2", fontname="Times New Roman", fontsize=12)
+    ax.tick_params(axis="both", labelsize=10)
+    for label in ax.get_xticklabels() + ax.get_yticklabels():
+        label.set_fontname("Times New Roman")
+
+    scatter = ax.scatter(
+        x_values,
+        y_values,
+        s=marker_sizes,
+        c=colors,
+        alpha=0.88,
+        edgecolors="#ffffff",
+        linewidths=1.1,
+    )
+
+    x_pad = max(1e-9, float(np.nanmax(x_values) - np.nanmin(x_values))) * 0.08
+    y_pad = max(1e-9, float(np.nanmax(y_values) - np.nanmin(y_values))) * 0.08
+    ax.margins(0.08)
+    ax.set_xlim(np.nanmin(x_values) - x_pad, np.nanmax(x_values) + x_pad)
+    ax.set_ylim(np.nanmin(y_values) - y_pad, np.nanmax(y_values) + y_pad)
+
+    sorted_idx = np.argsort(-counts)
+    top_k = min(12, len(points))
+    offset = y_pad if y_pad > 0 else 0.05
+    for idx in sorted_idx[:top_k]:
+        label = str(points[idx].get("label") or "")
+        if not label:
+            continue
+        text_kwargs: Dict[str, Any] = {
+            "fontsize": 10,
+            "color": "#0f172a",
+            "ha": "center",
+            "va": "bottom",
+        }
+        if _contains_cjk(label) and SCATTER_CHINESE_FONT is not None:
+            text_kwargs["fontproperties"] = SCATTER_CHINESE_FONT
+        else:
+            text_kwargs["fontname"] = "Times New Roman"
+        ax.text(x_values[idx], y_values[idx] + offset, label, **text_kwargs)
+
+    summary = _scatter_summary(cluster_count, cluster_algo, explained, pipeline_text, total_docs)
+    ax.set_title("语义二维映射", fontname="Times New Roman", fontsize=14, color="#0f172a")
+    ax.annotate(
+        summary,
+        xy=(0, 1.02),
+        xycoords="axes fraction",
+        ha="left",
+        va="bottom",
+        fontsize=10,
+        fontname="Times New Roman",
+        color="#475569",
+    )
+
+    legend_elements = []
+    if has_clusters:
+        legend_elements = []
+        unique_clusters = sorted({int(p.get("cluster", 0)) for p in points if int(p.get("cluster", 0)) >= 0})
+        for cluster in unique_clusters[:8]:
+            legend_elements.append(
+                plt.Line2D(
+                    [0],
+                    [0],
+                    marker="o",
+                    color="w",
+                    markerfacecolor=_scatter_color_for_cluster(cluster, True),
+                    markeredgecolor="#ffffff",
+                    markersize=8,
+                    label=f"簇 {cluster + 1}",
+                )
+            )
+        if any(int(p.get("cluster", 0)) < 0 for p in points):
+            legend_elements.append(
+                plt.Line2D(
+                    [0],
+                    [0],
+                    marker="o",
+                    color="w",
+                    markerfacecolor="#ef4444",
+                    markeredgecolor="#ffffff",
+                    markersize=8,
+                    label="噪声",
+                )
+            )
+    if legend_elements:
+        ax.legend(handles=legend_elements, loc="upper right", frameon=False, fontsize=9)
+
+    fig.tight_layout()
+
+    png_buffer = io.BytesIO()
+    svg_buffer = io.BytesIO()
+    fig.savefig(png_buffer, format="png", dpi=300, bbox_inches="tight", facecolor="white")
+    fig.savefig(svg_buffer, format="svg", bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+
+    png_data = base64.b64encode(png_buffer.getvalue()).decode("ascii")
+    svg_data = base64.b64encode(svg_buffer.getvalue()).decode("ascii")
+    png_buffer.close()
+    svg_buffer.close()
+
+    base = _slugify_filename(slug or "scatter") or "scatter"
+    png_filename = f"{base}_semantic_map.png"
+    svg_filename = f"{base}_semantic_map.svg"
+
+    return {
+        "png_data_url": f"data:image/png;base64,{png_data}",
+        "svg_data_url": f"data:image/svg+xml;base64,{svg_data}",
+        "png_filename": png_filename,
+        "svg_filename": svg_filename,
+    }
 WORDCLOUD_MAX_WORDS = int(os.getenv("WORDCLOUD_MAX_WORDS", "120"))
 
 def _get_lock(sid: str) -> Lock:
@@ -435,7 +681,12 @@ def _category_keywords(
     return categories, texts, counts, labels
 
 
-def _category_scatter(texts: List[str], labels: List[str], counts: List[int]) -> Dict[str, Any]:
+def _category_scatter(
+    texts: List[str],
+    labels: List[str],
+    counts: List[int],
+    slug: str,
+) -> Dict[str, Any]:
     n = len(labels)
     if n == 0:
         return {"points": [], "cluster_count": 0, "explained_variance": 0.0}
@@ -543,6 +794,26 @@ def _category_scatter(texts: List[str], labels: List[str], counts: List[int]) ->
         unique_clusters = cluster_count
         effective_clusters = cluster_count
 
+    explained = max(0.0, min(1.0, float(explained)))
+    total_docs = int(sum(max(0, c) for c in counts))
+    pipeline_text = _format_pipeline(vectorizer_name, reduction_method)
+    summary_text = _scatter_summary(effective_clusters, cluster_algo or "", explained, pipeline_text, total_docs)
+
+    assets: Dict[str, Any] = {}
+    try:
+        assets = _generate_scatter_assets(
+            points,
+            effective_clusters,
+            cluster_algo or "",
+            explained,
+            pipeline_text,
+            total_docs,
+            slug,
+        )
+    except Exception:
+        traceback.print_exc()
+        assets = {}
+
     return {
         "points": points,
         "cluster_count": int(effective_clusters),
@@ -551,6 +822,10 @@ def _category_scatter(texts: List[str], labels: List[str], counts: List[int]) ->
         "cluster_algorithm": cluster_algo or "",
         "vectorizer": vectorizer_name,
         "reduction": reduction_method,
+        "document_total": total_docs,
+        "pipeline_text": pipeline_text,
+        "summary": summary_text,
+        **assets,
     }
 
 
@@ -561,8 +836,8 @@ def _topic_visual_payload(df: pd.DataFrame) -> Dict[str, Any]:
     field_categories, field_texts, field_counts, field_labels = _category_keywords(
         df, ADJUST_FIELD_COL, "未分类"
     )
-    topic_scatter = _category_scatter(topic_texts, topic_labels, topic_counts)
-    field_scatter = _category_scatter(field_texts, field_labels, field_counts)
+    topic_scatter = _category_scatter(topic_texts, topic_labels, topic_counts, "topic_adj")
+    field_scatter = _category_scatter(field_texts, field_labels, field_counts, "field_adj")
     return {
         "topic_adj": {
             "categories": topic_categories,
