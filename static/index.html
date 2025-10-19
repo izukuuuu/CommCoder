@@ -735,7 +735,7 @@
               </div>
               <div class="text-xs text-slate-500" id="sampling_header_hint">默认抽样比例：3%</div>
             </div>
-            <p class="text-xs text-slate-400">提示：样本列表中不会直接显示 AI 分类，请通过右侧提示按钮按需查看。</p>
+            <p class="text-xs text-slate-400">提示：样本列表右侧默认展示 AI 分类，如认可可一键应用到选择。</p>
           </div>
 
           <div class="sampling-layout">
@@ -1629,19 +1629,43 @@ if(samplingItemsZone){
     }
   });
   samplingItemsZone.addEventListener('click', e=>{
-    const tipBtn = e.target.closest('.sampling-tip-btn');
-    if(!tipBtn) return;
-    const targetId = tipBtn.dataset.aiTarget;
-    if(!targetId) return;
-    const hint = document.getElementById(targetId);
-    if(!hint) return;
-    const expanded = tipBtn.getAttribute('aria-expanded') === 'true';
-    if(expanded){
-      hint.classList.add('hidden');
-      tipBtn.setAttribute('aria-expanded','false');
+    const applyBtn = e.target.closest('.sampling-apply-btn');
+    if(!applyBtn || applyBtn.disabled) return;
+    const itemId = applyBtn.dataset.itemId;
+    if(!itemId) return;
+    const itemEl = document.querySelector(`[data-sampling-item="${CSS.escape(itemId)}"]`);
+    if(!itemEl) return;
+    const aiTopic = applyBtn.dataset.aiTopic||'';
+    const aiField = applyBtn.dataset.aiField||'';
+    let applied = false;
+    if(aiTopic){
+      const topicSelect = itemEl.querySelector('select[data-kind="topic"]');
+      if(topicSelect){
+        const hasOption = Array.from(topicSelect.options).some(opt=>opt.value===aiTopic);
+        if(hasOption){
+          if(topicSelect.value !== aiTopic){
+            topicSelect.value = aiTopic;
+          }
+          applied = true;
+        }
+      }
+    }
+    if(aiField){
+      const fieldSelect = itemEl.querySelector('select[data-kind="field"]');
+      if(fieldSelect){
+        const hasOption = Array.from(fieldSelect.options).some(opt=>opt.value===aiField);
+        if(hasOption){
+          if(fieldSelect.value !== aiField){
+            fieldSelect.value = aiField;
+          }
+          applied = true;
+        }
+      }
+    }
+    if(applied){
+      saveSamplingSelection(itemId);
     }else{
-      hint.classList.remove('hidden');
-      tipBtn.setAttribute('aria-expanded','true');
+      showToast('未找到匹配的 AI 分类选项', 'warning');
     }
   });
 }
@@ -1836,13 +1860,16 @@ function renderSamplingItem(item){
   const status = item.status||'pending';
   const statusLabel = samplingStatusLabel(status);
   const statusClass = samplingStatusClass(status);
-  const aiTopic = item.ai_topic?escapeHtml(item.ai_topic):'—';
-  const aiField = item.ai_field?escapeHtml(item.ai_field):'—';
+  const aiTopicRaw = item.ai_topic?String(item.ai_topic):'';
+  const aiFieldRaw = item.ai_field?String(item.ai_field):'';
+  const aiTopic = aiTopicRaw?escapeHtml(aiTopicRaw):'—';
+  const aiField = aiFieldRaw?escapeHtml(aiFieldRaw):'—';
   const origTopic = item.orig_topic?escapeHtml(item.orig_topic):'—';
   const origField = item.orig_field?escapeHtml(item.orig_field):'—';
   const topicSelect = renderSamplingSelect(TOPIC_LIST, item.selected_topic||'', itemId, 'topic');
   const fieldSelect = renderSamplingSelect(FIELD_LIST, item.selected_field||'', itemId, 'field');
   const checkedText = item.checked_at?`最近保存：${escapeHtml(item.checked_at)}`:'';
+  const canApply = !!(aiTopicRaw||aiFieldRaw);
   return `<article class="sampling-item" data-sampling-item="${escapeAttr(itemId)}">
     <div class="sampling-item-header">
       <div>
@@ -1863,13 +1890,13 @@ function renderSamplingItem(item){
           <select class="sampling-select" data-kind="field" data-item-id="${escapeAttr(itemId)}">${fieldSelect}</select>
         </div>
         <div class="sampling-tip-group">
-          <button type="button" class="sampling-tip-btn" data-ai-target="ai-${escapeAttr(itemId)}" aria-expanded="false" title="查看 AI 分类提示">?</button>
-          <div id="ai-${escapeAttr(itemId)}" class="sampling-ai-hint hidden">
+          <div id="ai-${escapeAttr(itemId)}" class="sampling-ai-hint">
             <p>AI 议题：${aiTopic}</p>
             <p>AI 领域：${aiField}</p>
             <p class="sampling-ai-sub">原始议题：${origTopic}</p>
             <p class="sampling-ai-sub">原始领域：${origField}</p>
           </div>
+          <button type="button" class="btn btn-sm btn-ghost sampling-apply-btn" data-item-id="${escapeAttr(itemId)}" data-ai-topic="${escapeAttr(aiTopicRaw)}" data-ai-field="${escapeAttr(aiFieldRaw)}" title="将选择更新为 AI 分类"${canApply?'':' disabled'}>采用 AI 分类</button>
         </div>
       </div>
     </div>
