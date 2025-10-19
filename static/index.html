@@ -593,6 +593,7 @@
                 <div id="timeline_line_chart" class="timeline-chart-box">
                   <div id="timeline_line_placeholder" class="treemap-empty hidden"></div>
                   <img id="timeline_line_image" class="timeline-line-image hidden" alt="Timeline line chart" loading="lazy" />
+                  <div id="timeline_line_labels" class="timeline-line-label-layer hidden" aria-hidden="true"></div>
                 </div>
               </div>
               <div>
@@ -971,6 +972,7 @@ let TIMELINE_STACK_DIM='topic_adj';
 let TIMELINE_STACK_FIGURE=null;
 const TIMELINE_LINE_IMAGE=document.getElementById('timeline_line_image');
 const TIMELINE_LINE_PLACEHOLDER=document.getElementById('timeline_line_placeholder');
+const TIMELINE_LINE_LABEL_LAYER=document.getElementById('timeline_line_labels');
 const TIMELINE_LINE_DOWNLOAD_BUTTONS={
   png:document.getElementById('btn_download_timeline_png'),
   svg:document.getElementById('btn_download_timeline_svg')
@@ -1471,6 +1473,14 @@ Object.entries(TIMELINE_LINE_DOWNLOAD_BUTTONS).forEach(([format, btn])=>{
     document.body.removeChild(anchor);
   });
 });
+if(TIMELINE_LINE_IMAGE){
+  TIMELINE_LINE_IMAGE.addEventListener('load',()=>{
+    requestAnimationFrame(()=>positionTimelineLineLabels());
+  });
+  TIMELINE_LINE_IMAGE.addEventListener('error',()=>{
+    requestAnimationFrame(()=>positionTimelineLineLabels());
+  });
+}
 
 function pingHomeLock(){
   if(!HOME_LOCK_WRAP) return;
@@ -2947,6 +2957,110 @@ function setCategoryChartView(category, view){
   renderActiveCategoryChart(category);
 }
 
+function resetTimelineLineLabels(){
+  if(!TIMELINE_LINE_LABEL_LAYER) return;
+  TIMELINE_LINE_LABEL_LAYER.innerHTML='';
+  TIMELINE_LINE_LABEL_LAYER.classList.add('hidden');
+}
+
+function getTimelineBinLabel(bin, idx){
+  if(!bin) return `区间 ${idx+1}`;
+  const rawLabel = bin.label;
+  if(rawLabel!==undefined && rawLabel!==null){
+    const text = String(rawLabel).trim();
+    if(text) return text;
+  }
+  const hasStart = bin.start!==undefined && bin.start!==null;
+  const hasEnd = bin.end!==undefined && bin.end!==null;
+  if(hasStart && hasEnd){
+    return `${bin.start}-${bin.end}`;
+  }
+  if(hasStart){
+    return `${bin.start}`;
+  }
+  if(hasEnd){
+    return `${bin.end}`;
+  }
+  return `区间 ${idx+1}`;
+}
+
+function updateTimelineLineLabels(timeline){
+  if(!TIMELINE_LINE_LABEL_LAYER) return;
+  resetTimelineLineLabels();
+  if(!timeline || !Array.isArray(timeline.bins) || !timeline.bins.length){
+    return;
+  }
+  const bins = timeline.bins;
+  const counts = bins.map(bin=>Number(bin?.count)||0);
+  const maxCount = counts.length?Math.max(...counts):0;
+  if(!Number.isFinite(maxCount)){
+    return;
+  }
+  const frag=document.createDocumentFragment();
+  bins.forEach((bin, idx)=>{
+    const count = counts[idx]||0;
+    const labelText = getTimelineBinLabel(bin, idx);
+    const wrapper=document.createElement('div');
+    wrapper.className='timeline-line-label';
+    wrapper.dataset.index=String(idx);
+    wrapper.dataset.count=String(count);
+    wrapper.dataset.label=labelText;
+    wrapper.setAttribute('title', `${labelText}：${numberFormatter.format(count)} 篇`);
+    const countEl=document.createElement('span');
+    countEl.className='timeline-line-label-count';
+    countEl.textContent=numberFormatter.format(count);
+    const rangeEl=document.createElement('span');
+    rangeEl.className='timeline-line-label-range';
+    rangeEl.textContent=labelText;
+    wrapper.appendChild(countEl);
+    wrapper.appendChild(rangeEl);
+    frag.appendChild(wrapper);
+  });
+  TIMELINE_LINE_LABEL_LAYER.appendChild(frag);
+  requestAnimationFrame(()=>positionTimelineLineLabels());
+}
+
+function positionTimelineLineLabels(){
+  if(!TIMELINE_LINE_LABEL_LAYER) return;
+  const labelEls=Array.from(TIMELINE_LINE_LABEL_LAYER.querySelectorAll('.timeline-line-label'));
+  if(!labelEls.length){
+    TIMELINE_LINE_LABEL_LAYER.classList.add('hidden');
+    return;
+  }
+  const bins=(TIMELINE_DATA && Array.isArray(TIMELINE_DATA.bins))?TIMELINE_DATA.bins:[];
+  if(!bins.length || bins.length!==labelEls.length){
+    TIMELINE_LINE_LABEL_LAYER.classList.add('hidden');
+    return;
+  }
+  const counts=bins.map(bin=>Number(bin?.count)||0);
+  const maxCount=counts.length?Math.max(...counts):0;
+  if(!Number.isFinite(maxCount)){
+    TIMELINE_LINE_LABEL_LAYER.classList.add('hidden');
+    return;
+  }
+  const layerRect=TIMELINE_LINE_LABEL_LAYER.getBoundingClientRect();
+  const referenceEl=(TIMELINE_LINE_IMAGE && !TIMELINE_LINE_IMAGE.classList.contains('hidden'))?TIMELINE_LINE_IMAGE:null;
+  const targetRect=referenceEl?referenceEl.getBoundingClientRect():layerRect;
+  const leftOffset=Math.max(0, targetRect.left-layerRect.left);
+  const rightOffset=Math.max(0, layerRect.right-targetRect.right);
+  const topOffset=Math.max(0, targetRect.top-layerRect.top);
+  const bottomOffset=Math.max(0, layerRect.bottom-targetRect.bottom);
+  const innerWidth=Math.max(1, TIMELINE_LINE_LABEL_LAYER.clientWidth-leftOffset-rightOffset);
+  const innerHeight=Math.max(1, TIMELINE_LINE_LABEL_LAYER.clientHeight-topOffset-bottomOffset);
+  const minTop=topOffset+8;
+  const maxTop=topOffset+innerHeight-12;
+  labelEls.forEach((el, idx)=>{
+    const xRatio=bins.length>1?(idx/(bins.length-1)):0.5;
+    const yRatio=maxCount>0?(counts[idx]/maxCount):0;
+    const left=leftOffset+(innerWidth*xRatio);
+    const projectedTop=topOffset+((1-yRatio)*innerHeight)-12;
+    const clampedTop=Math.min(Math.max(projectedTop, minTop), maxTop);
+    el.style.left=`${left}px`;
+    el.style.top=`${clampedTop}px`;
+  });
+  TIMELINE_LINE_LABEL_LAYER.classList.remove('hidden');
+}
+
 function clearTimelineCharts(message){
   TIMELINE_STACK_FIGURE=null;
   const summary=qs('timeline_summary');
@@ -2979,6 +3093,7 @@ function clearTimelineCharts(message){
   });
   TIMELINE_LINE_DOWNLOAD_URLS.png='';
   TIMELINE_LINE_DOWNLOAD_URLS.svg='';
+  resetTimelineLineLabels();
   TIMELINE_PLOTLY_IDS.forEach(id=>{
     const el=qs(id);
     if(!el) return;
@@ -3006,6 +3121,7 @@ function setTimelineAreaLabel(text){
 
 function renderTimelineCharts(timeline){
   TIMELINE_DATA=timeline||null;
+  updateTimelineLineLabels(timeline);
   const summary=qs('timeline_summary');
   const select=qs('timeline_bin_select');
   TIMELINE_STACK_FIGURE=null;
@@ -3222,6 +3338,7 @@ function openTimelineFigureFullScreen(figure, fallbackTitle){
 }
 
 function resizeTimelineCharts(){
+  positionTimelineLineLabels();
   if(!window.Plotly) return;
   TIMELINE_PLOTLY_IDS.forEach(id=>{
     const el=qs(id);
