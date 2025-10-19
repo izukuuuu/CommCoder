@@ -1511,7 +1511,7 @@ def _render_timeline_line_figure(labels: List[str], counts: List[int]):
     ax.set_xticks(positions)
     ax.set_xticklabels(labels, rotation=35, ha="right")
     ax.set_xlabel("Year Interval", fontsize=12)
-    ax.set_ylabel("Count", fontsize=12)
+    ax.set_ylabel("Publication Count", fontsize=12)
 
     max_count = max(counts) if counts else 0
     upper = max_count * 1.1 if max_count > 0 else 1
