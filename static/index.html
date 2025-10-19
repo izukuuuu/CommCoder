@@ -3489,6 +3489,22 @@ function renderTopicVizScatter(dim){
   if(red){ pipelineParts.push(red.toUpperCase()); }
   const pipelineText = pipelineParts.length ? `语义管线：${pipelineParts.join(' → ')}` : '';
   const docTotal = points.reduce((sum,p)=>sum+safeNumber(p?.count||0),0);
+  const counts = points.map(p=>Math.max(0, safeNumber(p?.count||0)));
+  const sqrtCounts = counts.map(cnt=>Math.sqrt(cnt));
+  const MIN_MARKER_SIZE = 12;
+  const MAX_MARKER_SIZE = 64;
+  const minSqrt = Math.min(...sqrtCounts);
+  const maxSqrt = Math.max(...sqrtCounts);
+  const sizeRange = MAX_MARKER_SIZE - MIN_MARKER_SIZE;
+  const hasNonZeroCount = counts.some(cnt=>cnt>0);
+  const markerSizes = sqrtCounts.map(val=>{
+    if(!Number.isFinite(val)) return MIN_MARKER_SIZE;
+    if(maxSqrt <= minSqrt){
+      return hasNonZeroCount ? MIN_MARKER_SIZE + sizeRange / 2 : MIN_MARKER_SIZE;
+    }
+    const normalized = (val - minSqrt) / (maxSqrt - minSqrt);
+    return MIN_MARKER_SIZE + normalized * sizeRange;
+  });
   const trace={
     type: points.length>400 ? 'scattergl' : 'scatter',
     mode: points.length<=labelCount ? 'markers+text' : 'markers',
@@ -3497,10 +3513,7 @@ function renderTopicVizScatter(dim){
     text: points.map((p,idx)=> labelSet.has(idx) ? (p?.label||'') : ''),
     textposition:'top center',
     marker:{
-      size: points.map(p=>{
-        const base = Math.sqrt(Math.max(1, safeNumber(p?.count||0)));
-        return Math.max(12, Math.min(42, base*6));
-      }),
+      size: markerSizes,
       color: points.map(p=>{
         if(!showClusters){ return '#2563eb'; }
         const idx = Math.abs(Number.parseInt(p?.cluster ?? 0,10)) % TOPIC_VIZ_COLORS.length;
