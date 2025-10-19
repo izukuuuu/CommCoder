@@ -3106,25 +3106,50 @@ function renderTimelineStackChart(timeline){
   seriesList.forEach((serie, idx)=>{
     if(!serie) return;
     const rawCounts = Array.isArray(serie.counts) ? serie.counts : [];
-    const counts = labels.map((_,i)=>Number(rawCounts[i])||0);
-    const color = TIMELINE_STACK_COLORS[idx % TIMELINE_STACK_COLORS.length];
-    const customdata = counts.map((val,i)=>{
+    const points = labels.map((label,i)=>{
+      const count = Number(rawCounts[i])||0;
       const total = totals[i]||0;
-      const percent = total>0 ? (val/total*100) : 0;
-      return [val, percent, total];
+      const percent = total>0 ? (count/total*100) : 0;
+      return { label, count, total, percent };
+    }).filter(point=>point.count>0 && point.total>0);
+    if(!points.length){
+      return;
+    }
+    const color = TIMELINE_STACK_COLORS[idx % TIMELINE_STACK_COLORS.length];
+    const yLabel = serie.label || `分类 ${idx+1}`;
+    const markerSizes = points.map(point=>{
+      const size = Math.sqrt(Math.max(point.percent, 0));
+      return Math.max(12, Math.min(58, size*6));
+    });
+    const percentLabels = points.map(point=>{
+      if(point.percent<=0) return '';
+      if(point.percent>=10){
+        return `${point.percent.toFixed(0)}%`;
+      }
+      return `${point.percent.toFixed(1)}%`;
     });
     traces.push({
-      x:labels,
-      y:counts,
       type:'scatter',
-      mode:'lines',
-      name:serie.label||`分类 ${idx+1}`,
-      stackgroup:'one',
-      groupnorm:'percent',
-      line:{shape:'spline', smoothing:0.6, width:1.8, color},
-      fill:'tonexty',
-      hovertemplate:'<b>%{fullData.name}</b><br>%{x}<br>数量：%{customdata[0]}<br>占比：%{customdata[1]:.2f}%<br>总计：%{customdata[2]}<extra></extra>',
-      customdata,
+      mode:'markers+text',
+      name:yLabel,
+      x:points.map(point=>point.label),
+      y:points.map(()=>yLabel),
+      marker:{
+        size:markerSizes,
+        color,
+        opacity:0.85,
+        sizemode:'diameter',
+        line:{width:1,color:'rgba(15,23,42,0.15)'}
+      },
+      text:percentLabels,
+      textposition:'top center',
+      textfont:{
+        family:'"Inter",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+        color:'#0f172a',
+        size:12
+      },
+      hovertemplate:'<b>%{y}</b><br>%{x}<br>占比：%{customdata[1]:.2f}%<br>数量：%{customdata[0]}<br>总计：%{customdata[2]}<extra></extra>',
+      customdata:points.map(point=>[point.count, point.percent, point.total])
     });
   });
   if(!traces.length){
@@ -3132,16 +3157,22 @@ function renderTimelineStackChart(timeline){
     return;
   }
   areaEl.innerHTML='';
-  traces[0].fill='tozeroy';
+  const categoryOrder = Array.from(new Set(traces.map(trace=>trace.name).filter(Boolean)));
   const layout={
-    margin:{l:64,r:24,t:46,b:60},
-    height:320,
+    margin:{l:120,r:24,t:46,b:64},
+    height:Math.max(260, 120 + categoryOrder.length*64),
     paper_bgcolor:'rgba(255,255,255,0)',
     plot_bgcolor:'rgba(255,255,255,0)',
-    hovermode:'x unified',
+    hovermode:'closest',
     legend:{orientation:'h', yanchor:'bottom', y:1.02, xanchor:'left', x:0},
-    xaxis:{title:'年份区间', tickangle:-30},
-    yaxis:{title:'占比（%）', range:[0,100], ticksuffix:'%', rangemode:'tozero'},
+    xaxis:{title:'年份区间', tickangle:-30, automargin:true},
+    yaxis:{
+      title:TIMELINE_STACK_LABELS[TIMELINE_STACK_DIM]||'',
+      type:'category',
+      automargin:true,
+      categoryorder:'array',
+      categoryarray:categoryOrder
+    },
     font:{family:'"Inter",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', color:'#0f172a'}
   };
   const storedData=cloneDeep(traces);
