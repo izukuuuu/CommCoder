@@ -1376,6 +1376,19 @@ def _render_timeline_line_figure(labels: List[str], counts: List[int]):
     ax.set_axisbelow(True)
     ax.grid(axis="y", color="#dbeafe", linewidth=0.8, linestyle="--", alpha=0.7)
 
+    label_offset = max_count * 0.04 if max_count > 0 else 0.5
+    for pos, cnt in zip(positions, counts):
+        ax.text(
+            pos,
+            cnt + label_offset,
+            f"{cnt:,}",
+            ha="center",
+            va="bottom",
+            fontsize=11,
+            color="#1f2937",
+            fontweight="semibold",
+        )
+
     for spine_name, spine in ax.spines.items():
         if spine_name in ("left", "bottom"):
             spine.set_visible(True)
