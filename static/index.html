@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
   <link rel="stylesheet" href="/static/style.css"/>
 </head>
 <body class="bg-slate-100">
@@ -988,7 +989,12 @@ const WORD_CLOUD_DOWNLOAD_PNG_ID='word_cloud_download_png';
 const WORD_CLOUD_DOWNLOAD_SVG_ID='word_cloud_download_svg';
 const WORD_CLOUD_DEFAULT_HINT='请选择分类以生成词云。';
 let WORD_CLOUD_REQUEST_TOKEN=0;
-let KEYWORD_CHART_REQUEST_TOKEN=0;
+const KEYWORD_BAR_LIMIT=15;
+const KEYWORD_COLOR_PALETTE=[
+  '#2563eb','#16a34a','#f97316','#dc2626','#0891b2',
+  '#9333ea','#64748b','#ef4444','#22c55e','#eab308'
+];
+const TOPIC_KEYWORD_CHARTS={ topic:new Map(), field:new Map() };
 
 /* ===================== 统计与图表工具 ===================== */
 function safeNumber(value){
@@ -1015,6 +1021,10 @@ function formatPercentText(percent){
   const num=Number(percent);
   if(!Number.isFinite(num)) return '';
   return `${num.toFixed(2)}%`;
+}
+function normalizeKeywordWeight(value){
+  const num=Number(value);
+  return Number.isFinite(num)?num:0;
 }
 function getDisplayFromSource(source){
   if(source===undefined||source===null) return '';
@@ -4312,10 +4322,112 @@ function setTopicVizMessage(dim, message){
   }
 }
 
+function disposeKeywordCharts(dim){
+  const store=TOPIC_KEYWORD_CHARTS[dim];
+  if(!store) return;
+  store.forEach(chart=>{
+    if(chart && typeof chart.dispose==='function'){
+      try{ chart.dispose(); }catch(e){}
+    }
+  });
+  store.clear();
+}
+
+function getKeywordDashboardData(dim){
+  const dimData=TOPIC_VIZ_STATE.data[dim]||{};
+  const kind=dim==='field'?'field':'topic';
+  const entries=[];
+
+  const normalizeEntry=entry=>{
+    if(!entry) return null;
+    const rawLabel=String(entry.label??entry.topicName??'').trim();
+    const keywordsRaw=Array.isArray(entry.keywords)?entry.keywords:[];
+    const weightsRaw=Array.isArray(entry.weights)?entry.weights:[];
+    const countsRaw=Array.isArray(entry.counts)?entry.counts:[];
+    const limitedKeywords=[];
+    const limitedWeights=[];
+    const limitedCounts=[];
+    for(let i=0;i<keywordsRaw.length && limitedKeywords.length<KEYWORD_BAR_LIMIT;i+=1){
+      const token=String(keywordsRaw[i]??'').trim();
+      if(!token) continue;
+      limitedKeywords.push(token);
+      const weight=normalizeKeywordWeight(weightsRaw[i]);
+      limitedWeights.push(weight);
+      const count=countsRaw[i]!==undefined?safeNumber(countsRaw[i]):0;
+      limitedCounts.push(count);
+    }
+    if(!limitedKeywords.length) return null;
+    const displayCandidate=
+      resolveDisplayText(rawLabel, entry, kind==='field'?'field':'topic')
+      || String(entry.display_label??entry.displayLabel??entry.topicName??rawLabel||'未分类');
+    return {
+      label: rawLabel,
+      displayLabel: displayCandidate,
+      keywords: limitedKeywords,
+      weights: limitedWeights,
+      counts: limitedCounts,
+      documentCount: safeNumber(entry.document_count??entry.documentCount??entry.count??0),
+      totalTokens: safeNumber(entry.total_tokens??entry.totalTokens??0),
+    };
+  };
+
+  const rawDashboard=Array.isArray(dimData.keyword_dashboard)?dimData.keyword_dashboard:[];
+  rawDashboard.forEach(entry=>{
+    const normalized=normalizeEntry(entry);
+    if(normalized) entries.push(normalized);
+  });
+  if(entries.length){
+    return entries;
+  }
+
+  const categories=Array.isArray(dimData.categories)?dimData.categories:[];
+  categories.forEach(cat=>{
+    if(!cat) return;
+    const words=Array.isArray(cat.top_words)?cat.top_words:[];
+    const keywords=[];
+    const weights=[];
+    const counts=[];
+    for(let i=0;i<words.length && keywords.length<KEYWORD_BAR_LIMIT;i+=1){
+      const word=words[i];
+      if(!word) continue;
+      const token=String(word.token??'').trim();
+      if(!token) continue;
+      keywords.push(token);
+      weights.push(normalizeKeywordWeight(word.weight));
+      counts.push(safeNumber(word.count??0));
+    }
+    const entry={
+      label: cat.label??'',
+      display_label: cat.display_label??'',
+      keywords,
+      weights,
+      counts,
+      document_count: cat.count??0,
+      total_tokens: cat.total_tokens??0,
+    };
+    const normalized=normalizeEntry(entry);
+    if(normalized) entries.push(normalized);
+  });
+  return entries;
+}
+
+function resizeKeywordCharts(dim){
+  const store=TOPIC_KEYWORD_CHARTS[dim];
+  if(!store) return;
+  store.forEach(chart=>{
+    if(!chart || typeof chart.resize!=='function') return;
+    const dom=typeof chart.getDom==='function'?chart.getDom():chart._dom||chart._domRoot||chart.dom;
+    if(dom && isChartHidden(dom)) return;
+    try{ chart.resize(); }catch(e){}
+  });
+}
+
 function clearTopicVizCharts(dim){
   ['words','scatter'].forEach(type=>{
     const el = getTopicVizChartEl(dim, type);
-    if(el && window.Plotly){
+    if(type==='words'){
+      disposeKeywordCharts(dim);
+    }else if(el && window.Plotly){
       try{ Plotly.purge(el); }catch(e){}
     }
     if(el){
@@ -4377,7 +4489,6 @@ function resetTopicVizState(){
   TOPIC_VIZ_STATE.loading=false;
   TOPIC_VIZ_STATE.data={ topic:null, field:null };
   TOPIC_VIZ_STATE.selected={ topic:null, field:null };
-  KEYWORD_CHART_REQUEST_TOKEN=0;
   TOPIC_VIZ_DIMENSIONS.forEach(dim=>{
     clearTopicVizCharts(dim);
     const cfg=getTopicVizConfig(dim);
@@ -4404,107 +4515,166 @@ function updateTopicVizListActive(dim){
   });
 }
 
-async function renderTopicVizKeywords(dim, category){
+function renderTopicVizKeywords(dim, category){
   const cfg = getTopicVizConfig(dim);
   const chartEl = getTopicVizChartEl(dim, 'words');
   if(!chartEl) return;
   const hintEl = cfg ? document.querySelector(cfg.keywordHintSelector) : null;
 
-  const totalTokens = safeNumber(category?.total_tokens||0);
-  const totalDocs = safeNumber(category?.count||0);
-  if(hintEl){
-    if(category){
-      const tokensText = totalTokens>0 ? `词频总计 ${totalTokens}` : '词频不足';
-      hintEl.textContent = `文献 ${totalDocs} 篇 · ${tokensText}`;
-    }else{
-      hintEl.textContent='';
-    }
-  }
+  const dashboard = getKeywordDashboardData(dim);
+  const targetLabel = category?.label ? String(category.label) : '';
 
-  const hasWords = Array.isArray(category?.top_words) && category.top_words.length>0;
-  if(!category || !hasWords){
-    chartEl.innerHTML='<div class="topic-viz-empty">该分类暂未提取出关键词。</div>';
-    return;
-  }
-  if(!SESSION_ID){
-    chartEl.innerHTML='<div class="topic-viz-empty">请先上传或载入会话以生成关键词图。</div>';
-    return;
-  }
-
-  const requestToken=++KEYWORD_CHART_REQUEST_TOKEN;
-  chartEl.innerHTML='<div class="topic-viz-empty">关键词图生成中…</div>';
-
-  const params=new URLSearchParams();
-  params.set('session_id', SESSION_ID);
-  params.set('dimension', dim);
-  if(category?.label){ params.set('label', category.label); }
-  params.set('t', Date.now().toString());
-
-  let data=null;
-  try{
-    const resp=await fetch(`/keyword_chart_assets?${params.toString()}`,{cache:'no-store'});
-    if(!resp.ok){
-      const errText=(await resp.text())||'关键词图生成失败。';
-      if(requestToken===KEYWORD_CHART_REQUEST_TOKEN){
-        chartEl.innerHTML=`<div class="topic-viz-empty">${escapeHtml(errText)}</div>`;
-      }
-      return;
-    }
-    data=await resp.json();
-  }catch(err){
-    console.error('关键词图生成接口异常', err);
-    if(requestToken===KEYWORD_CHART_REQUEST_TOKEN){
-      chartEl.innerHTML='<div class="topic-viz-empty">关键词图生成失败，请稍后重试。</div>';
-    }
-    return;
-  }
-
-  if(requestToken!==KEYWORD_CHART_REQUEST_TOKEN){
-    return;
-  }
-  if(!data || data.ok!==true){
-    const fallback=(data && data.message)?data.message:'暂无关键词数据。';
-    chartEl.innerHTML=`<div class="topic-viz-empty">${escapeHtml(fallback)}</div>`;
-    return;
-  }
-
-  const pngUrl=(data.png_data_url||'').toString();
-  const svgUrl=(data.svg_data_url||'').toString();
-  if(!pngUrl){
-    chartEl.innerHTML='<div class="topic-viz-empty">关键词图生成失败，请稍后重试。</div>';
-    return;
-  }
-
-  const displayLabel=resolveDisplayText(category?.label||'', getDisplayFromSource(category), dim==='field'?'field':'topic');
+  disposeKeywordCharts(dim);
   chartEl.innerHTML='';
 
-  const imageWrapper=document.createElement('div');
-  imageWrapper.className='topic-viz-keyword-image-wrapper';
-  const img=document.createElement('img');
-  img.className='topic-viz-keyword-image';
-  img.loading='lazy';
-  img.src=pngUrl;
-  img.alt=`${displayLabel||'Unmapped'} keyword frequency chart`;
-  imageWrapper.appendChild(img);
-  chartEl.appendChild(imageWrapper);
-
-  const downloads=document.createElement('div');
-  downloads.className='topic-viz-keyword-downloads';
-  const pngLink=document.createElement('a');
-  pngLink.className='topic-viz-keyword-download-btn';
-  pngLink.href=pngUrl;
-  pngLink.download=data.png_filename||'keyword_chart.png';
-  pngLink.textContent='Download PNG';
-  downloads.appendChild(pngLink);
-  if(svgUrl){
-    const svgLink=document.createElement('a');
-    svgLink.className='topic-viz-keyword-download-btn';
-    svgLink.href=svgUrl;
-    svgLink.download=data.svg_filename||'keyword_chart.svg';
-    svgLink.textContent='Download SVG';
-    downloads.appendChild(svgLink);
+  if(!dashboard.length){
+    if(hintEl){ hintEl.textContent='暂无关键词数据。'; }
+    chartEl.innerHTML='<div class="topic-viz-empty">暂无关键词数据。</div>';
+    return;
   }
-  chartEl.appendChild(downloads);
+
+  const totalDocs = dashboard.reduce((sum,item)=>sum+safeNumber(item.documentCount||0),0);
+  const summaryParts=[`分类 ${dashboard.length} 个`];
+  if(totalDocs>0){ summaryParts.push(`覆盖文献 ${totalDocs}`); }
+  if(hintEl){ hintEl.textContent=summaryParts.join(' · '); }
+
+  const grid=document.createElement('div');
+  grid.className='topic-keyword-grid';
+  chartEl.appendChild(grid);
+
+  const store = TOPIC_KEYWORD_CHARTS[dim] || new Map();
+  if(!TOPIC_KEYWORD_CHARTS[dim]){
+    TOPIC_KEYWORD_CHARTS[dim]=store;
+  }
+
+  let activeFound=false;
+
+  dashboard.forEach((item,index)=>{
+    const card=document.createElement('article');
+    card.className='topic-keyword-card';
+    card.dataset.keywordLabel=item.label||'';
+    if(targetLabel && item.label===targetLabel){
+      card.classList.add('topic-keyword-card-active');
+      activeFound=true;
+    }
+
+    const header=document.createElement('div');
+    header.className='topic-keyword-card-header';
+    const title=document.createElement('h5');
+    title.className='topic-keyword-card-title';
+    title.textContent=item.displayLabel||'未分类';
+    header.appendChild(title);
+    const meta=document.createElement('div');
+    meta.className='topic-keyword-card-meta';
+    const docCount=safeNumber(item.documentCount||0);
+    const tokenCount=safeNumber(item.totalTokens||0);
+    const docText=`文献 <strong>${docCount}</strong> 篇`;
+    const tokenText=tokenCount>0?`词频 <strong>${tokenCount}</strong>`:'词频不足';
+    meta.innerHTML=`<span>${docText}</span><span>${tokenText}</span>`;
+    header.appendChild(meta);
+    card.appendChild(header);
+
+    const chartContainer=document.createElement('div');
+    chartContainer.className='topic-keyword-chart';
+    chartContainer.id=`topic_keyword_chart_${dim}_${index}`;
+    card.appendChild(chartContainer);
+    grid.appendChild(card);
+
+    if(!window.echarts){
+      chartContainer.innerHTML='<div class="topic-viz-empty">ECharts 未加载</div>';
+      return;
+    }
+
+    const keywords=item.keywords.slice(0, KEYWORD_BAR_LIMIT);
+    const weights=item.weights.slice(0, keywords.length).map(normalizeKeywordWeight);
+    const counts=Array.isArray(item.counts)?item.counts.slice(0, keywords.length).map(val=>safeNumber(val)):keywords.map(()=>0);
+    const color=KEYWORD_COLOR_PALETTE[index % KEYWORD_COLOR_PALETTE.length];
+
+    const chart=echarts.init(chartContainer);
+    store.set(chartContainer.id, chart);
+
+    chart.setOption({
+      color:[color],
+      animationDuration:450,
+      grid:{ top:36, left:24, right:12, bottom:60 },
+      tooltip:{
+        trigger:'axis',
+        axisPointer:{ type:'shadow' },
+        formatter: params=>{
+          if(!Array.isArray(params) || !params.length) return '';
+          const first=params[0];
+          const value=Number(first.value||0);
+          const percent=value*100;
+          const percentText=percent>=10?`${percent.toFixed(1)}%`:`${percent.toFixed(2)}%`;
+          const countVal=Number(first.data?.count);
+          const countText=Number.isFinite(countVal) && countVal>0 ? ` · 词频 ${countVal}` : '';
+          return `${first.name}<br/>权重 ${percentText}${countText}`;
+        },
+      },
+      xAxis:{
+        type:'category',
+        data:keywords,
+        axisLabel:{ interval:0, rotate:32, color:'#475569', fontSize:11 },
+        axisTick:{ alignWithLabel:true },
+        axisLine:{ lineStyle:{ color:'rgba(148,163,184,0.45)' } },
+      },
+      yAxis:{
+        type:'value',
+        axisLabel:{
+          color:'#475569',
+          fontSize:11,
+          formatter:value=>{
+            const num=Number(value)||0;
+            const percent=num*100;
+            return percent>=10?`${percent.toFixed(0)}%`:`${percent.toFixed(1)}%`;
+          },
+        },
+        splitLine:{ lineStyle:{ color:'rgba(148,163,184,0.25)' } },
+      },
+      series:[{
+        type:'bar',
+        barMaxWidth:36,
+        data:weights.map((val,idx)=>({ value:val, count:counts[idx], name:keywords[idx] })),
+        label:{
+          show:true,
+          position:'top',
+          fontSize:10,
+          color:'#0f172a',
+          formatter:params=>{
+            const val=Number(params.value||0);
+            if(!Number.isFinite(val) || val<=0){
+              return '';
+            }
+            const percent=val*100;
+            const percentText=percent>=10?`${percent.toFixed(1)}%`:`${percent.toFixed(2)}%`;
+            const count=Number(params.data?.count);
+            if(Number.isFinite(count) && count>0){
+              return `${percentText}\n(${count})`;
+            }
+            return percentText;
+          },
+        },
+      }],
+    });
+
+    setTimeout(()=>{
+      try{ chart.resize(); }catch(e){}
+    },0);
+  });
+
+  if(!activeFound){
+    const firstCard=grid.querySelector('.topic-keyword-card');
+    if(firstCard){
+      firstCard.classList.add('topic-keyword-card-active');
+    }
+  }
+
+  if(targetLabel){
+    const targetCard=grid.querySelector('.topic-keyword-card-active');
+    if(targetCard && typeof targetCard.scrollIntoView==='function'){
+      targetCard.scrollIntoView({ behavior:'smooth', block:'nearest' });
+    }
+  }
 }
 
 function renderTopicVizScatter(dim){
@@ -4741,9 +4911,11 @@ function selectTopicVizCategory(dim, label){
   const target = categories.find(cat=>cat.label===label) || categories[0];
   TOPIC_VIZ_STATE.selected[dim] = target ? target.label : null;
   updateTopicVizListActive(dim);
-  renderTopicVizKeywords(dim, target || null).catch(err=>{
+  try{
+    renderTopicVizKeywords(dim, target || null);
+  }catch(err){
     console.error('关键词图渲染失败', err);
-  });
+  }
 }
 
 function renderTopicVizPanel(dim){
@@ -5019,15 +5191,14 @@ function setTopicVizTab(dim, options={}){
 }
 
 function resizeTopicVizCharts(){
-  if(!window.Plotly) return;
   TOPIC_VIZ_DIMENSIONS.forEach(dim=>{
-    ['words','scatter'].forEach(type=>{
-      const el=getTopicVizChartEl(dim,type);
-      if(!el) return;
-      if(isChartHidden(el)) return;
-      if(!el.querySelector('.plotly')) return;
-      try{ Plotly.Plots.resize(el); }catch(e){}
-    });
+    resizeKeywordCharts(dim);
+    if(!window.Plotly) return;
+    const el=getTopicVizChartEl(dim,'scatter');
+    if(!el) return;
+    if(isChartHidden(el)) return;
+    if(!el.querySelector('.plotly')) return;
+    try{ Plotly.Plots.resize(el); }catch(e){}
   });
 }
 

@@ -27,6 +27,8 @@ def _prepare_category_payload(
     *,
     limit: int,
 ) -> List[Dict[str, Any]]:
+    """Fallback helper that derives keyword data from raw categories."""
+
     result: List[Dict[str, Any]] = []
     for category in categories:
         words = category.get("top_words") or []
@@ -35,7 +37,8 @@ def _prepare_category_payload(
 
         keywords: List[str] = []
         weights: List[float] = []
-        for word in words[:limit]:
+        counts: List[int] = []
+        for word in words:
             token = str(word.get("token", "")).strip()
             if not token:
                 continue
@@ -43,8 +46,15 @@ def _prepare_category_payload(
                 weight = float(word.get("weight", 0.0) or 0.0)
             except (TypeError, ValueError):
                 weight = 0.0
+            try:
+                count = int(word.get("count", 0) or 0)
+            except (TypeError, ValueError):
+                count = 0
             keywords.append(token)
             weights.append(weight)
+            counts.append(count)
+            if len(keywords) >= limit:
+                break
 
         if not keywords:
             continue
@@ -54,9 +64,68 @@ def _prepare_category_payload(
         result.append(
             {
                 "topicName": display_label,
+                "label": label,
                 "keywords": keywords,
                 "weights": weights,
+                "counts": counts,
                 "documentCount": int(category.get("count", 0) or 0),
+                "totalTokens": int(category.get("total_tokens", 0) or 0),
+            }
+        )
+    return result
+
+
+def _prepare_dashboard_entries(
+    entries: Iterable[Dict[str, Any]],
+    *,
+    limit: int,
+) -> List[Dict[str, Any]]:
+    """Normalise keyword dashboard entries coming from the backend payload."""
+
+    result: List[Dict[str, Any]] = []
+    for entry in entries:
+        keywords = entry.get("keywords") or []
+        weights = entry.get("weights") or []
+        counts = entry.get("counts") or []
+        if not isinstance(keywords, list) or not isinstance(weights, list):
+            continue
+
+        limited_keywords = [str(k).strip() for k in keywords if str(k).strip()][:limit]
+        if not limited_keywords:
+            continue
+
+        limited_weights: List[float] = []
+        limited_counts: List[int] = []
+        for idx, token in enumerate(limited_keywords):
+            weight_raw = weights[idx] if idx < len(weights) else 0.0
+            try:
+                weight = float(weight_raw or 0.0)
+            except (TypeError, ValueError):
+                weight = 0.0
+            limited_weights.append(weight)
+            count_raw = counts[idx] if idx < len(counts) else 0
+            try:
+                count = int(count_raw or 0)
+            except (TypeError, ValueError):
+                count = 0
+            limited_counts.append(count)
+
+        display_label = str(
+            entry.get("display_label")
+            or entry.get("topicName")
+            or entry.get("label")
+            or "未分类"
+        )
+
+        result.append(
+            {
+                "topicName": display_label,
+                "label": str(entry.get("label", "")),
+                "keywords": limited_keywords,
+                "weights": limited_weights,
+                "counts": limited_counts,
+                "documentCount": int(entry.get("document_count", entry.get("documentCount", 0)) or 0),
+                "totalTokens": int(entry.get("total_tokens", entry.get("totalTokens", 0)) or 0),
             }
         )
     return result
@@ -199,13 +268,19 @@ def main() -> None:
     dim_map = {"topic": "topic_adj", "field": "field_adj"}
     dim_key = dim_map.get(args.dimension, "topic_adj")
     dim_payload = payload.get(dim_key, {}) if isinstance(payload, dict) else {}
-    categories = dim_payload.get("categories") if isinstance(dim_payload, dict) else None
-    if not categories:
-        raise RuntimeError("当前数据集中暂无可用于关键词仪表盘的数据")
 
-    prepared = _prepare_category_payload(categories, limit=max(args.top, 1))
+    prepared: List[Dict[str, Any]] = []
+    if isinstance(dim_payload, dict):
+        raw_dashboard = dim_payload.get("keyword_dashboard")
+        if isinstance(raw_dashboard, list) and raw_dashboard:
+            prepared = _prepare_dashboard_entries(raw_dashboard, limit=max(args.top, 1))
+        if not prepared:
+            categories = dim_payload.get("categories")
+            if isinstance(categories, list):
+                prepared = _prepare_category_payload(categories, limit=max(args.top, 1))
+
     if not prepared:
-        raise RuntimeError("关键词数据为空，无法生成仪表盘")
+        raise RuntimeError("当前数据集中暂无可用于关键词仪表盘的数据")
 
     title = "研究主题关键词概览" if args.dimension == "topic" else "研究领域关键词概览"
     html_text = _build_html(prepared, title=title)

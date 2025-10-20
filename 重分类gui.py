@@ -985,6 +985,79 @@ def _category_scatter(
     }
 
 
+def _prepare_keyword_dashboard(
+    categories: List[Dict[str, Any]],
+    *,
+    label_mapping: Optional[Dict[str, str]] = None,
+    limit: int = 15,
+) -> List[Dict[str, Any]]:
+    if not categories:
+        return []
+
+    dashboard: List[Dict[str, Any]] = []
+    mapping = label_mapping or {}
+
+    for category in categories:
+        if not isinstance(category, dict):
+            continue
+
+        words = category.get("top_words") or []
+        if not isinstance(words, list):
+            continue
+
+        keywords: List[str] = []
+        weights: List[float] = []
+        counts: List[int] = []
+
+        for word in words:
+            if not isinstance(word, dict):
+                continue
+            token = str(word.get("token", "")).strip()
+            if not token:
+                continue
+            weight_raw = word.get("weight", 0.0)
+            try:
+                weight = float(weight_raw or 0.0)
+            except (TypeError, ValueError):
+                weight = 0.0
+            count_raw = word.get("count", 0)
+            try:
+                count = int(count_raw or 0)
+            except (TypeError, ValueError):
+                count = 0
+
+            keywords.append(token)
+            weights.append(round(weight, 4))
+            counts.append(count)
+
+            if len(keywords) >= limit:
+                break
+
+        if not keywords:
+            continue
+
+        label = str(category.get("label", "") or "未分类")
+        display = str(
+            category.get("display_label")
+            or _label_display(label, mapping)
+            or label
+        )
+
+        dashboard.append(
+            {
+                "label": label,
+                "display_label": display,
+                "document_count": int(category.get("count", 0) or 0),
+                "total_tokens": int(category.get("total_tokens", 0) or 0),
+                "keywords": keywords,
+                "weights": weights,
+                "counts": counts,
+            }
+        )
+
+    return dashboard
+
+
 def _topic_visual_payload(df: pd.DataFrame) -> Dict[str, Any]:
     topic_categories, topic_texts, topic_counts, topic_labels = _category_keywords(
         df, ADJUST_TOPIC_COL, "未分类", label_mapping=TOPIC_LABEL_MAP
@@ -998,14 +1071,23 @@ def _topic_visual_payload(df: pd.DataFrame) -> Dict[str, Any]:
     field_scatter = _category_scatter(
         field_texts, field_labels, field_counts, "field_adj", label_mapping=FIELD_LABEL_MAP
     )
+    topic_dashboard = _prepare_keyword_dashboard(
+        topic_categories, label_mapping=TOPIC_LABEL_MAP
+    )
+    field_dashboard = _prepare_keyword_dashboard(
+        field_categories, label_mapping=FIELD_LABEL_MAP
+    )
+
     return {
         "topic_adj": {
             "categories": topic_categories,
             "scatter": topic_scatter,
+            "keyword_dashboard": topic_dashboard,
         },
         "field_adj": {
             "categories": field_categories,
             "scatter": field_scatter,
+            "keyword_dashboard": field_dashboard,
         },
     }
 
