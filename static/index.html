@@ -2856,32 +2856,51 @@ function renderJournalChart(dim, index, entry){
   },0);
   const trace={
     type:'bar',
-    x:labels,
-    y:counts,
-    marker:{ color:colors },
+    orientation:'h',
+    y:labels,
+    x:counts,
+    marker:{
+      color:colors,
+      line:{ color:'rgba(15,23,42,0.12)', width:1 }
+    },
     text:texts,
     textposition:'outside',
     textfont:{ size:11, color:'#0f172a' },
+    insidetextanchor:'middle',
     hovertext:hoverTexts,
     hovertemplate:'%{hovertext}<extra></extra>',
     cliponaxis:false,
   };
   const longestLabelLength=labels.reduce((max,label)=>Math.max(max,String(label||'').length),0);
-  const estimatedLabelHeight=Math.max(0, longestLabelLength*9);
-  const rect=typeof container.getBoundingClientRect==='function'?container.getBoundingClientRect():null;
-  const containerHeight=rect && Number.isFinite(rect.height) ? rect.height : (container.clientHeight||0);
-  const height=Math.max(320, containerHeight>0?containerHeight+80:360);
-  const bottomMargin=Math.max(84, Math.min(260, estimatedLabelHeight+60));
-  const yRangeMax=maxCount>0?maxCount*1.18:1;
+  const leftMargin=Math.min(320, Math.max(130, Math.round(longestLabelLength*11)));
+  const barHeight=Math.max(34, Math.min(52, Math.round(longestLabelLength>12?46:40)));
+  const height=Math.max(260, 120 + labels.length*barHeight);
+  const xRangeMax=maxCount>0?maxCount*1.15:1;
   const layout={
-    margin:{ l:72, r:32, t:36, b:bottomMargin },
+    margin:{ l:leftMargin, r:36, t:40, b:36 },
     height,
     paper_bgcolor:'rgba(0,0,0,0)',
     plot_bgcolor:'rgba(0,0,0,0)',
-    xaxis:{ tickfont:{ size:11, color:'#334155' }, tickangle:-42, ticklen:0, automargin:true },
-    yaxis:{ tickfont:{ size:11, color:'#334155' }, gridcolor:'rgba(148,163,184,0.25)', zeroline:false, rangemode:'tozero', range:[0,yRangeMax], automargin:true },
+    xaxis:{
+      tickfont:{ size:11, color:'#334155' },
+      gridcolor:'rgba(148,163,184,0.25)',
+      zeroline:false,
+      rangemode:'tozero',
+      range:[0,xRangeMax],
+      ticksuffix:'',
+    },
+    yaxis:{
+      tickfont:{ size:11, color:'#334155' },
+      gridcolor:'rgba(148,163,184,0.18)',
+      zeroline:false,
+      automargin:true,
+      categoryorder:'array',
+      categoryarray:labels,
+      ticksuffix:'',
+      autorange:'reversed',
+    },
     showlegend:false,
-    bargap:0.32,
+    bargap:0.36,
   };
   const config={ displayModeBar:false, responsive:true };
   let plotPromise;
