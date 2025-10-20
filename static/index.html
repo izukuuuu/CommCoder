@@ -38,6 +38,7 @@
           <label class="sr-only" for="mobile_page_select">页面导航</label>
           <select id="mobile_page_select" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-600 bg-white">
             <option value="page-home">主页</option>
+            <option value="page-overview">数据概况</option>
             <option value="page-coding" data-requires-session="true">编码工作台</option>
             <option value="page-visual" data-requires-session="true">数据可视化</option>
             <option value="page-sampling" data-requires-session="true">抽样检测</option>
@@ -60,6 +61,10 @@
           <button class="nav-link nav-link-active" data-target="page-home" title="主页" aria-label="主页">
             <svg class="nav-icon w-5 h-5" data-heroicon="home-modern" aria-hidden="true"></svg>
             <span class="nav-label">主页</span>
+          </button>
+          <button class="nav-link" data-target="page-overview" title="数据概况" aria-label="数据概况">
+            <svg class="nav-icon w-5 h-5" data-heroicon="chart-bar" aria-hidden="true"></svg>
+            <span class="nav-label">数据概况</span>
           </button>
           <button class="nav-link" data-target="page-coding" data-requires-session="true" title="编码工作台" aria-label="编码工作台">
             <svg class="nav-icon w-5 h-5" data-heroicon="adjustments-horizontal" aria-hidden="true"></svg>
@@ -310,6 +315,40 @@
                 </div>
               </section>
             </div>
+          </div>
+        </section>
+
+        <section id="page-overview" class="page-section hidden space-y-8">
+          <div class="bg-white rounded-2xl shadow p-6 space-y-2">
+            <h2 class="text-lg font-semibold text-slate-900">数据概况</h2>
+            <p class="text-sm text-slate-500">Times Cited, All Databases 根据 Source Title 汇总。</p>
+          </div>
+
+          <div class="bg-white rounded-2xl shadow p-6 space-y-6">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h3 class="text-base font-semibold text-slate-900">期刊概况</h3>
+                <p class="text-sm text-slate-500">Table 1 · List of selected journals.</p>
+              </div>
+              <div class="text-xs text-slate-400">数据范围：1965 – 2024</div>
+            </div>
+
+            <div class="overflow-x-auto border border-slate-200/80 rounded-2xl">
+              <table class="min-w-full divide-y divide-slate-200 text-sm text-slate-700" aria-describedby="journal_overview_summary">
+                <thead class="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th scope="col" class="px-4 py-3 text-left">序号</th>
+                    <th scope="col" class="px-4 py-3 text-left">期刊名称</th>
+                    <th scope="col" class="px-4 py-3 text-right">Times Cited (All Databases)</th>
+                    <th scope="col" class="px-4 py-3 text-left">JIF Quartile</th>
+                    <th scope="col" class="px-4 py-3 text-right">Publications (1965-2024)</th>
+                  </tr>
+                </thead>
+                <tbody id="journal_overview_body" class="bg-white"></tbody>
+              </table>
+            </div>
+            <p id="journal_overview_summary" class="text-xs text-slate-500">数据加载中…</p>
+            <p class="text-xs text-slate-400">说明：JIF Quartile 列保留原始筛选结果，当前均为 Q1。</p>
           </div>
         </section>
 
@@ -1406,6 +1445,96 @@ if(LANGUAGE_TOGGLE){
 applyLanguage('zh');
 
 const numberFormatter = new Intl.NumberFormat('zh-CN');
+
+const JOURNAL_OVERVIEW_DATA = [
+  { name: 'NEW MEDIA & SOCIETY', citations: 13552, quartile: 'Q1', publications: 471 },
+  { name: 'JOURNAL OF COMMUNICATION', citations: 9922, quartile: 'Q1', publications: 82 },
+  { name: 'HEALTH COMMUNICATION', citations: 8268, quartile: 'Q1', publications: 445 },
+  { name: 'Information Communication & Society', citations: 8179, quartile: 'Q1', publications: 268 },
+  { name: 'PUBLIC OPINION QUARTERLY', citations: 6865, quartile: 'Q1', publications: 102 },
+  { name: 'JOURNAL OF ADVERTISING', citations: 6506, quartile: 'Q1', publications: 68 },
+  { name: 'PUBLIC RELATIONS REVIEW', citations: 6031, quartile: 'Q1', publications: 154 },
+  { name: 'JOURNAL OF HEALTH COMMUNICATION', citations: 6013, quartile: 'Q1', publications: 169 },
+  { name: 'Social Media + Society', citations: 5995, quartile: 'Q1', publications: 302 },
+  { name: 'JOURNAL OF SOCIAL AND PERSONAL RELATIONSHIPS', citations: 5982, quartile: 'Q1', publications: 260 },
+  { name: 'COMMUNICATION RESEARCH', citations: 5867, quartile: 'Q1', publications: 98 },
+  { name: 'Journal of Computer-Mediated Communication', citations: 5343, quartile: 'Q1', publications: 84 },
+  { name: 'Digital Journalism', citations: 4601, quartile: 'Q1', publications: 50 },
+  { name: 'HUMAN COMMUNICATION RESEARCH', citations: 4388, quartile: 'Q1', publications: 77 },
+  { name: 'Journalism', citations: 4335, quartile: 'Q1', publications: 265 },
+  { name: 'TELECOMMUNICATIONS POLICY', citations: 4301, quartile: 'Q1', publications: 198 },
+  { name: 'Journalism Studies', citations: 4156, quartile: 'Q1', publications: 205 },
+  { name: 'COMMUNICATION MONOGRAPHS', citations: 4103, quartile: 'Q1', publications: 56 },
+  { name: 'International Journal of Advertising', citations: 4060, quartile: 'Q1', publications: 99 },
+  { name: 'MEDIA CULTURE & SOCIETY', citations: 3813, quartile: 'Q1', publications: 196 },
+  { name: 'PUBLIC UNDERSTANDING OF SCIENCE', citations: 3675, quartile: 'Q1', publications: 128 },
+  { name: 'POLITICAL COMMUNICATION', citations: 3664, quartile: 'Q1', publications: 107 },
+  { name: 'COMMUNICATION THEORY', citations: 3648, quartile: 'Q1', publications: 36 },
+  { name: 'JOURNALISM & MASS COMMUNICATION QUARTERLY', citations: 3501, quartile: 'Q1', publications: 145 },
+  { name: 'Profesional de la Informacion', citations: 2801, quartile: 'Q1', publications: 181 },
+  { name: 'MEDIA PSYCHOLOGY', citations: 2784, quartile: 'Q1', publications: 71 },
+  { name: 'DISCOURSE & SOCIETY', citations: 2624, quartile: 'Q1', publications: 120 },
+  { name: 'Mass Communication and Society', citations: 2472, quartile: 'Q1', publications: 105 },
+  { name: 'SCIENCE COMMUNICATION', citations: 2456, quartile: 'Q1', publications: 75 },
+  { name: 'International Journal of Press-Politics', citations: 2303, quartile: 'Q1', publications: 81 },
+  { name: 'Environmental Communication-A Journal of Nature and Culture', citations: 2266, quartile: 'Q1', publications: 160 },
+  { name: 'Communication Methods and Measures', citations: 2189, quartile: 'Q1', publications: 41 },
+  { name: 'Journal of Public Relations Research', citations: 2178, quartile: 'Q1', publications: 54 },
+  { name: 'Media and Communication', citations: 2120, quartile: 'Q1', publications: 220 },
+  { name: 'RESEARCH ON LANGUAGE AND SOCIAL INTERACTION', citations: 2010, quartile: 'Q1', publications: 36 },
+  { name: 'Comunicar', citations: 1995, quartile: 'Q1', publications: 60 },
+  { name: 'Convergence-The International Journal of Research into New Media Technologies', citations: 1781, quartile: 'Q1', publications: 67 },
+  { name: 'INFORMATION SOCIETY', citations: 1731, quartile: 'Q1', publications: 45 },
+  { name: 'Television & New Media', citations: 1534, quartile: 'Q1', publications: 109 },
+  { name: 'INTERNATIONAL JOURNAL OF CONFLICT MANAGEMENT', citations: 1506, quartile: 'Q1', publications: 88 },
+  { name: 'Games and Culture', citations: 1501, quartile: 'Q1', publications: 160 },
+  { name: 'Communication & Sport', citations: 1280, quartile: 'Q1', publications: 112 },
+  { name: 'Policy and Internet', citations: 1201, quartile: 'Q1', publications: 83 },
+  { name: 'Journal of Information Technology & Politics', citations: 1093, quartile: 'Q1', publications: 74 },
+  { name: 'Cyberpsychology-Journal of Psychosocial Research on Cyberspace', citations: 1052, quartile: 'Q1', publications: 64 },
+  { name: 'International Journal of Business Communication', citations: 983, quartile: 'Q1', publications: 73 },
+  { name: 'Mobile Media & Communication', citations: 977, quartile: 'Q1', publications: 78 },
+  { name: 'Discourse Context & Media', citations: 958, quartile: 'Q1', publications: 49 }
+];
+
+function renderJournalOverviewTable(){
+  const tbody = document.getElementById('journal_overview_body');
+  const summary = document.getElementById('journal_overview_summary');
+  if(!tbody){
+    return;
+  }
+  if(!Array.isArray(JOURNAL_OVERVIEW_DATA) || JOURNAL_OVERVIEW_DATA.length === 0){
+    tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-center text-sm text-slate-400">暂无数据</td></tr>';
+    if(summary){
+      summary.textContent = '当前没有可显示的期刊数据。';
+    }
+    return;
+  }
+  const rows = JOURNAL_OVERVIEW_DATA.map((item, index)=>{
+    const rank = index + 1;
+    const name = escapeHtml(item.name || '未命名期刊');
+    const citations = numberFormatter.format(safeNumber(item.citations));
+    const quartile = escapeHtml(item.quartile || '—');
+    const publications = numberFormatter.format(safeNumber(item.publications));
+    const stripeClass = index % 2 === 1 ? 'bg-slate-50/80' : '';
+    return `<tr class="${stripeClass}">
+      <td class="px-4 py-3 text-sm text-slate-500 font-mono text-right">${rank}</td>
+      <td class="px-4 py-3 font-medium text-slate-900">${name}</td>
+      <td class="px-4 py-3 text-right font-mono text-slate-700">${citations}</td>
+      <td class="px-4 py-3 text-slate-600">${quartile}</td>
+      <td class="px-4 py-3 text-right font-mono text-slate-700">${publications}</td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML = rows;
+
+  if(summary){
+    const totalCitations = JOURNAL_OVERVIEW_DATA.reduce((acc, item)=>acc + safeNumber(item.citations), 0);
+    const totalPublications = JOURNAL_OVERVIEW_DATA.reduce((acc, item)=>acc + safeNumber(item.publications), 0);
+    summary.textContent = `共 ${numberFormatter.format(JOURNAL_OVERVIEW_DATA.length)} 种期刊，Times Cited 合计 ${numberFormatter.format(totalCitations)}，1965-2024 年发表量共 ${numberFormatter.format(totalPublications)} 篇。`;
+  }
+}
+
+renderJournalOverviewTable();
 const TOAST_THEMES = {
   info: "bg-slate-900/90 text-white",
   success: "bg-emerald-600 text-white",
