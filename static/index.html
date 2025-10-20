@@ -3384,32 +3384,32 @@ function renderJournalPanel(dim){
     container.innerHTML='<div class="journal-empty">暂无期刊统计数据</div>';
     return;
   }
-  const cards=data.map((entry,idx)=>{
-    const chartId=`journal_chart_${key}_${idx}`;
-    const category=escapeHtml(entry.category_display||entry.category||`分类 ${idx+1}`);
-    const metaParts=[];
-    if(entry.total>0){ metaParts.push(`共 ${numberFormatter.format(entry.total)} 篇`); }
-    if(entry.unique>0){ metaParts.push(`期刊数 ${numberFormatter.format(entry.unique)}`); }
-    const metaText=metaParts.length?escapeHtml(metaParts.join(' · ')):'';
-    const metaHtml=metaText?`<p class="journal-card-meta">${metaText}</p>`:'';
-    const tableRows=Array.isArray(entry.items)?entry.items.map((item,itemIdx)=>{
-      const label=escapeHtml(item?.label||`期刊 ${itemIdx+1}`);
-      const countText=numberFormatter.format(safeNumber(item?.count));
-      const percentVal=Number.isFinite(item?.percent)?Number(item.percent):null;
-      const percentText=percentVal!==null?`${percentVal>=10?percentVal.toFixed(1):percentVal.toFixed(2)}%`:'—';
-      return `
-        <tr>
-          <td class="journal-table-rank">${itemIdx+1}</td>
-          <td class="journal-table-label" title="${label}">${label}</td>
-          <td class="journal-table-count">${countText}</td>
-          <td class="journal-table-percent">${percentText}</td>
-        </tr>
-      `;
-    }).join(''):'');
-    const tableSection=tableRows?`
-      <div class="journal-table-wrapper">
-        <table class="journal-table" aria-label="${category} Top 5 期刊明细">
-          <thead>
+    const cards=data.map((entry,idx)=>{
+      const chartId=`journal_chart_${key}_${idx}`;
+      const category=escapeHtml(entry.category_display||entry.category||`分类 ${idx+1}`);
+      const metaParts=[];
+      if(entry.total>0){ metaParts.push(`共 ${numberFormatter.format(entry.total)} 篇`); }
+      if(entry.unique>0){ metaParts.push(`期刊数 ${numberFormatter.format(entry.unique)}`); }
+      const metaText=metaParts.length?escapeHtml(metaParts.join(' · ')):'';
+      const metaHtml=metaText?`<p class="journal-card-meta">${metaText}</p>`:'';
+      const tableRows=Array.isArray(entry.items)?entry.items.map((item,itemIdx)=>{
+        const label=escapeHtml(item?.label||`期刊 ${itemIdx+1}`);
+        const countText=numberFormatter.format(safeNumber(item?.count));
+        const percentVal=Number.isFinite(item?.percent)?Number(item.percent):null;
+        const percentText=percentVal!==null?`${percentVal>=10?percentVal.toFixed(1):percentVal.toFixed(2)}%`:'—';
+        return `
+          <tr>
+            <td class="journal-table-rank">${itemIdx+1}</td>
+            <td class="journal-table-label" title="${label}">${label}</td>
+            <td class="journal-table-count">${countText}</td>
+            <td class="journal-table-percent">${percentText}</td>
+          </tr>
+        `;
+      }).join('') : '';
+      const tableSection=tableRows?`
+        <div class="journal-table-wrapper">
+          <table class="journal-table" aria-label="${category} Top 5 期刊明细">
+            <thead>
             <tr>
               <th scope="col" class="journal-table-rank">#</th>
               <th scope="col" class="journal-table-label">期刊</th>
@@ -4465,9 +4465,10 @@ function getKeywordDashboardData(dim){
       limitedCounts.push(count);
     }
     if(!limitedKeywords.length) return null;
-    const displayCandidate=
-      resolveDisplayText(rawLabel, entry, kind==='field'?'field':'topic')
-      || String(entry.display_label??entry.displayLabel??entry.topicName??rawLabel||'未分类');
+      const fallbackRawLabel = rawLabel || '未分类';
+      const displayCandidate=
+        resolveDisplayText(rawLabel, entry, kind==='field'?'field':'topic')
+        || String(entry.display_label??entry.displayLabel??entry.topicName??fallbackRawLabel);
     return {
       label: rawLabel,
       displayLabel: displayCandidate,
