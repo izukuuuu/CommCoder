@@ -3358,6 +3358,35 @@ function renderJournalPanel(dim){
     if(entry.unique>0){ metaParts.push(`期刊数 ${numberFormatter.format(entry.unique)}`); }
     const metaText=metaParts.length?escapeHtml(metaParts.join(' · ')):'';
     const metaHtml=metaText?`<p class="journal-card-meta">${metaText}</p>`:'';
+    const tableRows=Array.isArray(entry.items)?entry.items.map((item,itemIdx)=>{
+      const label=escapeHtml(item?.label||`期刊 ${itemIdx+1}`);
+      const countText=numberFormatter.format(safeNumber(item?.count));
+      const percentVal=Number.isFinite(item?.percent)?Number(item.percent):null;
+      const percentText=percentVal!==null?`${percentVal>=10?percentVal.toFixed(1):percentVal.toFixed(2)}%`:'—';
+      return `
+        <tr>
+          <td class="journal-table-rank">${itemIdx+1}</td>
+          <td class="journal-table-label" title="${label}">${label}</td>
+          <td class="journal-table-count">${countText}</td>
+          <td class="journal-table-percent">${percentText}</td>
+        </tr>
+      `;
+    }).join(''):'');
+    const tableSection=tableRows?`
+      <div class="journal-table-wrapper">
+        <table class="journal-table" aria-label="${category} Top 5 期刊明细">
+          <thead>
+            <tr>
+              <th scope="col" class="journal-table-rank">#</th>
+              <th scope="col" class="journal-table-label">期刊</th>
+              <th scope="col" class="journal-table-count">篇数</th>
+              <th scope="col" class="journal-table-percent">占比</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+    `:`<div class="journal-table-wrapper"><div class="journal-table-empty">暂无 Top 5 数据</div></div>`;
     return `
       <article class="journal-card">
         <div class="journal-card-header">
@@ -3368,6 +3397,10 @@ function renderJournalPanel(dim){
           <span class="journal-card-badge">Top 5</span>
         </div>
         <div class="journal-chart" id="${chartId}" data-journal-dim="${key}" data-journal-index="${idx}"></div>
+        ${tableSection}
+        <div class="journal-card-actions">
+          <button type="button" class="journal-card-open" data-journal-open="${key}" data-journal-index="${idx}">新标签页查看完整榜单</button>
+        </div>
       </article>
     `;
   }).join('');
@@ -3382,6 +3415,304 @@ function renderJournalPanel(dim){
   data.forEach((entry,idx)=>{
     renderJournalChart(key, idx, entry);
   });
+}
+
+function openJournalDetail(dim,index){
+  const key = dim==='field' ? 'field' : 'topic';
+  const safeIndex = Number.isFinite(index)?index:parseInt(index,10)||0;
+  const dataList = (JOURNAL_RENDER_STATE[key] && JOURNAL_RENDER_STATE[key].length ? JOURNAL_RENDER_STATE[key] : JOURNAL_DATA[key]) || [];
+  const entry = dataList && dataList[safeIndex];
+  if(!entry){
+    alert('未找到期刊榜单数据。');
+    return;
+  }
+  const detailWindow = window.open('', '_blank');
+  if(!detailWindow){
+    alert('无法打开新标签页，请检查浏览器的弹出窗口设置。');
+    return;
+  }
+  const categoryRaw=entry.category_display||entry.category||`分类 ${safeIndex+1}`;
+  const categoryTitle=String(categoryRaw);
+  const metaParts=[];
+  if(entry.total>0){ metaParts.push(`共 ${numberFormatter.format(entry.total)} 篇`); }
+  if(entry.unique>0){ metaParts.push(`期刊数 ${numberFormatter.format(entry.unique)}`); }
+  const items=(Array.isArray(entry.items)?entry.items:[]).map((item,idx)=>{
+    const label=String(item?.label??`期刊 ${idx+1}`);
+    const count=safeNumber(item?.count);
+    const percentVal=Number.isFinite(item?.percent)?Number(item.percent):null;
+    return { rank:idx+1, label, count, percent:percentVal };
+  }).filter(item=>item.count>0);
+  const resolvedLocale=(function(){
+    try{
+      return numberFormatter.resolvedOptions().locale||'zh-CN';
+    }catch(e){
+      return 'zh-CN';
+    }
+  })();
+  const payload={
+    category:categoryTitle,
+    meta:metaParts,
+    items,
+    dimension:key==='field'?'研究领域（调整后）':'研究主题（调整后）',
+    total:safeNumber(entry.total),
+    unique:safeNumber(entry.unique),
+    locale:resolvedLocale,
+  };
+  const payloadJson=JSON.stringify(payload).replace(/</g,'\\u003c');
+  const docTitle=escapeHtml(`${categoryTitle} · Top 5 期刊`);
+  const detailDoc=detailWindow.document;
+  detailDoc.open();
+  detailDoc.write(`<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>${docTitle}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;}
+    html,body{height:100%;}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#f1f5f9;color:#0f172a;}
+    .detail-page{max-width:1200px;margin:0 auto;padding:2rem 1.5rem 3rem;display:flex;flex-direction:column;gap:1.75rem;}
+    .detail-header{display:flex;flex-direction:column;gap:0.5rem;}
+    .detail-dimension{font-size:0.85rem;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.08em;}
+    .detail-title{font-size:1.75rem;font-weight:700;margin:0;color:#0f172a;}
+    .detail-meta{font-size:0.85rem;color:#475569;margin:0;}
+    .detail-meta.hidden{display:none!important;}
+    .detail-grid{display:grid;gap:1.5rem;}
+    @media (min-width:1024px){.detail-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+    .detail-card{background:#fff;border-radius:1.2rem;padding:1.5rem;box-shadow:0 32px 64px -48px rgba(15,23,42,0.55);border:1px solid rgba(226,232,240,0.9);display:flex;flex-direction:column;gap:1rem;}
+    .detail-card h2{margin:0;font-size:1.1rem;font-weight:600;color:#0f172a;}
+    .detail-card-sub{font-size:0.85rem;color:#64748b;margin:0;}
+    .detail-chart-box{position:relative;width:100%;min-height:360px;border-radius:1rem;background:rgba(248,250,252,0.75);border:1px solid rgba(203,213,225,0.9);padding:0.75rem;}
+    .detail-chart-empty{display:flex;align-items:center;justify-content:center;min-height:320px;font-size:0.9rem;color:#64748b;background:rgba(248,250,252,0.85);border:1px dashed rgba(148,163,184,0.45);border-radius:1rem;text-align:center;}
+    .detail-chart{width:100%;height:100%;}
+    .detail-table-wrapper{display:flex;flex-direction:column;gap:0.75rem;}
+    .detail-table-container{border-radius:1rem;border:1px solid rgba(226,232,240,0.9);background:rgba(248,250,252,0.85);overflow:hidden;}
+    .detail-table{width:100%;border-collapse:collapse;font-size:0.85rem;color:#0f172a;}
+    .detail-table thead{background:rgba(226,232,240,0.85);color:#475569;text-transform:uppercase;letter-spacing:0.05em;font-size:0.75rem;}
+    .detail-table th,.detail-table td{padding:0.55rem 0.85rem;text-align:left;}
+    .detail-table tbody tr:nth-child(even){background:rgba(226,232,240,0.45);}
+    .detail-table tbody tr:hover{background:rgba(191,219,254,0.6);}
+    .detail-table-rank{width:3rem;text-align:center;font-weight:600;color:#1e3a8a;font-family:"JetBrains Mono","Fira Code",monospace;}
+    .detail-table-count,.detail-table-percent{font-family:"JetBrains Mono","Fira Code",monospace;text-align:right;}
+    .detail-table-empty{padding:0.75rem 1rem;font-size:0.82rem;color:#94a3b8;text-align:center;border:1px dashed rgba(148,163,184,0.4);border-radius:0.85rem;background:rgba(248,250,252,0.75);}
+    .hidden{display:none!important;}
+    footer{font-size:0.75rem;color:#94a3b8;text-align:center;margin-top:auto;}
+  </style>
+</head>
+<body>
+  <div class="detail-page">
+    <header class="detail-header">
+      <span class="detail-dimension" id="detail_dimension"></span>
+      <h1 class="detail-title" id="detail_title"></h1>
+      <p class="detail-meta" id="detail_meta"></p>
+    </header>
+    <section class="detail-grid">
+      <article class="detail-card">
+        <div>
+          <h2>Top 5 期刊条形图</h2>
+          <p class="detail-card-sub">横向条形展示 Top 5 期刊的篇数与占比，自动适配坐标轴范围。</p>
+        </div>
+        <div class="detail-chart-box">
+          <div id="detail_chart_empty" class="detail-chart-empty hidden">暂无可视化数据。</div>
+          <div id="journal_detail_chart" class="detail-chart" role="img" aria-label="期刊 Top 5 条形图"></div>
+        </div>
+      </article>
+      <article class="detail-card">
+        <div>
+          <h2>Top 5 期刊明细</h2>
+          <p class="detail-card-sub">包含期刊名称、篇数与分类内占比，方便导读。</p>
+        </div>
+        <div class="detail-table-wrapper">
+          <div class="detail-table-container">
+            <table class="detail-table" id="detail_table" aria-describedby="detail_title">
+              <thead>
+                <tr>
+                  <th scope="col" class="detail-table-rank">排名</th>
+                  <th scope="col">期刊</th>
+                  <th scope="col" class="detail-table-count">篇数</th>
+                  <th scope="col" class="detail-table-percent">占比</th>
+                </tr>
+              </thead>
+              <tbody id="detail_table_body"></tbody>
+            </table>
+          </div>
+          <div id="detail_table_empty" class="detail-table-empty hidden">暂无 Top 5 数据。</div>
+        </div>
+      </article>
+    </section>
+    <footer>CommCoder Studio · 期刊榜单详情</footer>
+  </div>
+  <script>
+    const DETAIL_PAYLOAD = ${payloadJson};
+    (function(){
+      const payload = DETAIL_PAYLOAD || {};
+      const locale = payload.locale || 'zh-CN';
+      const formatter = new Intl.NumberFormat(locale);
+      let chartResizeBound=false;
+      document.addEventListener('DOMContentLoaded', init);
+      function init(){
+        applyHeader();
+        renderTable();
+        renderChart();
+      }
+      function applyHeader(){
+        const dimensionEl=document.getElementById('detail_dimension');
+        const titleEl=document.getElementById('detail_title');
+        const metaEl=document.getElementById('detail_meta');
+        const titleText = (payload.category||'分类详情') + ' · Top 5 期刊';
+        if(dimensionEl){ dimensionEl.textContent = payload.dimension || ''; }
+        if(titleEl){ titleEl.textContent = titleText; }
+        document.title = titleText;
+        if(metaEl){
+          if(Array.isArray(payload.meta) && payload.meta.length){
+            metaEl.textContent = payload.meta.join(' · ');
+            metaEl.classList.remove('hidden');
+          }else{
+            metaEl.textContent = '';
+            metaEl.classList.add('hidden');
+          }
+        }
+      }
+      function renderTable(){
+        const tbody=document.getElementById('detail_table_body');
+        const table=document.getElementById('detail_table');
+        const empty=document.getElementById('detail_table_empty');
+        if(!tbody || !table || !empty) return;
+        tbody.innerHTML='';
+        const list=Array.isArray(payload.items)?payload.items:[];
+        if(!list.length){
+          table.classList.add('hidden');
+          empty.classList.remove('hidden');
+          return;
+        }
+        table.classList.remove('hidden');
+        empty.classList.add('hidden');
+        list.forEach(item=>{
+          const tr=document.createElement('tr');
+          const rank=document.createElement('td');
+          rank.className='detail-table-rank';
+          rank.textContent=String(item.rank||'');
+          const label=document.createElement('td');
+          label.textContent=item.label||'';
+          const count=document.createElement('td');
+          count.className='detail-table-count';
+          count.textContent=formatter.format(Number.isFinite(item.count)?item.count:0);
+          const percent=document.createElement('td');
+          percent.className='detail-table-percent';
+          if(Number.isFinite(item.percent)){
+            const percentValue = item.percent;
+            const decimals = percentValue >= 10 ? 1 : 2;
+            percent.textContent=percentValue.toFixed(decimals) + '%';
+          }else{
+            percent.textContent='—';
+          }
+          tr.append(rank,label,count,percent);
+          tbody.appendChild(tr);
+        });
+      }
+      function renderChart(){
+        const chartEl=document.getElementById('journal_detail_chart');
+        const empty=document.getElementById('detail_chart_empty');
+        const list=Array.isArray(payload.items)?payload.items:[];
+        if(!chartEl || !empty) return;
+        if(!list.length){
+          chartEl.classList.add('hidden');
+          empty.classList.remove('hidden');
+          return;
+        }
+        chartEl.classList.remove('hidden');
+        empty.classList.add('hidden');
+        const labels=list.map(item=>item.label||'');
+        const counts=list.map(item=>Number.isFinite(item.count)?item.count:0);
+        const percents=list.map(item=>Number.isFinite(item.percent)?item.percent:null);
+        const texts=counts.map((val,idx)=>{
+          const percent=percents[idx];
+          const percentText=Number.isFinite(percent)?(percent>=10?percent.toFixed(1):percent.toFixed(2))+'%':'';
+          const valueText=formatter.format(val);
+          return percentText?valueText+'（'+percentText+'）':valueText;
+        });
+        const hoverTexts=labels.map((label,idx)=>{
+          const countText=formatter.format(counts[idx]);
+          const percent=percents[idx];
+          const percentText=Number.isFinite(percent)?percent.toFixed(2)+'%':null;
+          return percentText?`${label}<br>数量：${countText}<br>占比：${percentText}`:`${label}<br>数量：${countText}`;
+        });
+        const colors=['#1d4ed8','#0f172a','#0284c7','#2563eb','#9333ea','#f97316','#16a34a'];
+        const longestLabelLength=labels.reduce((max,label)=>Math.max(max,String(label||'').length),0);
+        const leftMargin=Math.min(360, Math.max(150, Math.round(longestLabelLength*12)));
+        const height=Math.max(320, 140 + labels.length*52);
+        function draw(){
+          if(!window.Plotly){
+            setTimeout(draw, 120);
+            return;
+          }
+          const trace={
+            type:'bar',
+            orientation:'h',
+            y:labels,
+            x:counts,
+            marker:{ color:labels.map((_,idx)=>colors[idx%colors.length]), line:{ color:'rgba(15,23,42,0.12)', width:1 } },
+            text:texts,
+            textposition:'outside',
+            textfont:{ size:12, color:'#0f172a' },
+            hovertext:hoverTexts,
+            hovertemplate:'%{hovertext}<extra></extra>',
+            cliponaxis:false,
+          };
+          const maxCount=counts.reduce((m,val)=>Number.isFinite(val)&&val>m?val:m,0);
+          const layout={
+            margin:{ l:leftMargin, r:48, t:36, b:40 },
+            height,
+            paper_bgcolor:'rgba(0,0,0,0)',
+            plot_bgcolor:'rgba(0,0,0,0)',
+            xaxis:{
+              rangemode:'tozero',
+              range:[0, maxCount>0?maxCount*1.2:1],
+              tickfont:{ size:12, color:'#334155' },
+              gridcolor:'rgba(148,163,184,0.25)',
+              zeroline:false,
+            },
+            yaxis:{
+              autorange:'reversed',
+              tickfont:{ size:12, color:'#334155' },
+            },
+            showlegend:false,
+            bargap:0.34,
+          };
+          Plotly.newPlot(chartEl,[trace],layout,{displayModeBar:true,responsive:true}).then(()=>{
+            if(!chartResizeBound){
+              window.addEventListener('resize',()=>{
+                if(window.Plotly){
+                  try{ Plotly.Plots.resize(chartEl); }catch(e){}
+                }
+              });
+              chartResizeBound=true;
+            }
+          }).catch(()=>{
+            chartEl.classList.add('hidden');
+            empty.classList.remove('hidden');
+          });
+        }
+        draw();
+      }
+    })();
+  </script>
+</body>
+</html>`);
+  detailDoc.close();
+}
+
+let JOURNAL_OPEN_HANDLER_BOUND=false;
+function handleJournalOpenClick(event){
+  const rawTarget = event.target;
+  const target = rawTarget && typeof rawTarget.closest==='function' ? rawTarget.closest('[data-journal-open]') : null;
+  if(!target) return;
+  event.preventDefault();
+  const dim = target.dataset?.journalOpen==='field'?'field':'topic';
+  const index = parseInt(target.dataset?.journalIndex||'0',10);
+  openJournalDetail(dim, Number.isFinite(index)?index:0);
 }
 
 function renderDeferredJournalCharts(){
@@ -5750,6 +6081,10 @@ function bindEvents(){
   setRankVisExpanded(false);
   setVisualTab();
   setJournalTab('topic');
+  if(!JOURNAL_OPEN_HANDLER_BOUND){
+    document.addEventListener('click', handleJournalOpenClick);
+    JOURNAL_OPEN_HANDLER_BOUND=true;
+  }
   document.querySelectorAll('[data-chart-toggle]').forEach(wrapper=>{
     const category=wrapper?.dataset?.chartToggle;
     if(!category) return;
