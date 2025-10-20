@@ -625,9 +625,14 @@
                 <h3 class="font-semibold text-slate-900" data-i18n-key="topicViz.title">语义主题探索（调整后）</h3>
                 <p class="text-sm text-slate-500" data-i18n-key="topicViz.subtitle">查看每个分类的高频关键词，并在二维空间中观察主题之间的语义距离。</p>
               </div>
-              <div class="topic-viz-tab-toggle" id="topic_viz_tablist" role="tablist" aria-label="语义探索维度切换">
-                <button class="topic-viz-tab topic-viz-tab-active" type="button" data-topicviz-tab="topic" aria-selected="true" data-i18n-key="topicViz.tab.topic">研究主题（调整后）</button>
-                <button class="topic-viz-tab" type="button" data-topicviz-tab="field" aria-selected="false" data-i18n-key="topicViz.tab.field">研究领域（调整后）</button>
+              <div class="flex flex-wrap items-center gap-3">
+                <div class="topic-viz-tab-toggle" id="topic_viz_tablist" role="tablist" aria-label="语义探索维度切换">
+                  <button class="topic-viz-tab topic-viz-tab-active" type="button" data-topicviz-tab="topic" aria-selected="true" data-i18n-key="topicViz.tab.topic">研究主题（调整后）</button>
+                  <button class="topic-viz-tab" type="button" data-topicviz-tab="field" aria-selected="false" data-i18n-key="topicViz.tab.field">研究领域（调整后）</button>
+                </div>
+                <button id="btn_open_keyword_showcase" class="btn btn-sm btn-ghost text-slate-600 whitespace-nowrap" type="button" data-keyword-dim="topic" disabled aria-disabled="true" title="在新标签页打开便于期刊展示的关键词版面">
+                  新标签页展示：研究主题关键词
+                </button>
               </div>
             </div>
             <div class="topic-viz-panel" data-topicviz-panel="topic">
@@ -1059,6 +1064,7 @@ const KEYWORD_COLOR_PALETTE=[
   '#9333ea','#64748b','#ef4444','#22c55e','#eab308'
 ];
 const TOPIC_KEYWORD_CHARTS={ topic:new Map(), field:new Map() };
+const KEYWORD_SHOWCASE_BUTTON=document.getElementById('btn_open_keyword_showcase');
 
 /* ===================== 统计与图表工具 ===================== */
 function safeNumber(value){
@@ -1634,6 +1640,12 @@ TOPIC_VIZ_TAB_BUTTONS.forEach(btn=>{
     setTopicVizTab(btn.dataset.topicvizTab, {force:false});
   });
 });
+if(KEYWORD_SHOWCASE_BUTTON){
+  KEYWORD_SHOWCASE_BUTTON.addEventListener('click',()=>{
+    const dim = KEYWORD_SHOWCASE_BUTTON.dataset.keywordDim || TOPIC_VIZ_STATE.active;
+    openKeywordShowcase(dim);
+  });
+}
 resetTopicVizState();
 setTopicVizTab(TOPIC_VIZ_STATE.active, {force:false});
 function setTimelineStackDim(dim){
@@ -4601,6 +4613,252 @@ function resetWordCloudSection(){
   });
 }
 
+function updateKeywordShowcaseButton(dim, options={}){
+  if(!KEYWORD_SHOWCASE_BUTTON){
+    return;
+  }
+  const target=TOPIC_VIZ_DIMENSIONS.includes(dim)?dim:TOPIC_VIZ_STATE.active;
+  KEYWORD_SHOWCASE_BUTTON.dataset.keywordDim=target;
+  const isField=target==='field';
+  const label=isField?'新标签页展示：研究领域关键词':'新标签页展示：研究主题关键词';
+  const tooltip=isField?'在新标签页打开研究领域关键词展板':'在新标签页打开研究主题关键词展板';
+  KEYWORD_SHOWCASE_BUTTON.textContent=label;
+  KEYWORD_SHOWCASE_BUTTON.setAttribute('aria-label', tooltip);
+  KEYWORD_SHOWCASE_BUTTON.title=tooltip;
+  const hasDataRaw=options.hasData;
+  const hasData=hasDataRaw!==undefined?!!hasDataRaw:getKeywordDashboardData(target).length>0;
+  KEYWORD_SHOWCASE_BUTTON.disabled=!hasData;
+  KEYWORD_SHOWCASE_BUTTON.setAttribute('aria-disabled', hasData?'false':'true');
+  KEYWORD_SHOWCASE_BUTTON.classList.toggle('is-disabled', !hasData);
+}
+
+function openKeywordShowcase(dim){
+  const target=TOPIC_VIZ_DIMENSIONS.includes(dim)?dim:TOPIC_VIZ_STATE.active;
+  const dashboard=getKeywordDashboardData(target);
+  if(!dashboard.length){
+    window.alert('暂无关键词数据可展示');
+    return;
+  }
+  const showcaseWindow=window.open('', '_blank');
+  if(!showcaseWindow){
+    window.alert('无法打开新标签页，请检查浏览器设置。');
+    return;
+  }
+  const dimensionTitle=target==='field'?'研究领域高频关键词（调整后）':'研究主题高频关键词（调整后）';
+  const subtitleParts=[];
+  if(SESSION_META?.origin_filename){
+    subtitleParts.push(String(SESSION_META.origin_filename));
+  }
+  if(SESSION_ID){
+    subtitleParts.push(`Session ${SESSION_ID}`);
+  }
+  const subtitleHtml=subtitleParts.length?`<p class="showcase-subtitle">${subtitleParts.map(part=>escapeHtml(part)).join(' · ')}</p>`:'';
+  const docTotal=dashboard.reduce((sum,item)=>sum+safeNumber(item.documentCount||0),0);
+  const tokenTotal=dashboard.reduce((sum,item)=>sum+safeNumber(item.totalTokens||0),0);
+  const updatedText=SESSION_META?.updated_text?String(SESSION_META.updated_text):'';
+  const summarySegments=[];
+  summarySegments.push(`分类 ${dashboard.length} 个`);
+  if(docTotal>0){ summarySegments.push(`覆盖文献 ${numberFormatter.format(docTotal)}`); }
+  if(tokenTotal>0){ summarySegments.push(`总词频 ${numberFormatter.format(tokenTotal)}`); }
+  if(updatedText){ summarySegments.push(`最近保存 ${updatedText}`); }
+  const summaryHtml=summarySegments.length?summarySegments.map(seg=>`<span>${escapeHtml(seg)}</span>`).join('<span class="showcase-dot">·</span>'):'';
+  const summarySection=summaryHtml?`<div class="showcase-summary">${summaryHtml}</div>`:'';
+  const dataJson=JSON.stringify(dashboard).replace(/</g,'\\u003c');
+  const safeTitle=escapeHtml(dimensionTitle);
+  const html=`<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${safeTitle}</title>
+  <style>
+    :root{color-scheme:light;}
+    *,*::before,*::after{box-sizing:border-box;}
+    body{margin:0;padding:40px 48px 48px;font-family:"Source Han Sans","PingFang SC","Helvetica Neue","Segoe UI",sans-serif;background:#ffffff;color:#0f172a;}
+    header{max-width:1280px;margin:0 auto 32px;text-align:center;}
+    h1{margin:0;font-size:28px;font-weight:700;letter-spacing:0.01em;}
+    .showcase-subtitle{margin:12px 0 0;font-size:14px;color:#475569;}
+    .showcase-summary{margin:18px auto 0;display:flex;flex-wrap:wrap;gap:12px;justify-content:center;font-size:13px;color:#475569;}
+    .showcase-summary span{display:inline-flex;align-items:center;gap:4px;}
+    .showcase-dot{color:#cbd5f5;}
+    main{max-width:1280px;margin:0 auto;}
+    .keyword-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;}
+    @media (max-width:1280px){.keyword-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+    @media (max-width:768px){.keyword-grid{grid-template-columns:repeat(1,minmax(0,1fr));}}
+    .keyword-card{display:flex;flex-direction:column;gap:16px;padding:20px 22px;border:1px solid #e2e8f0;border-radius:18px;background:#fff;box-shadow:0 10px 24px -24px rgba(15,23,42,0.35);min-height:320px;}
+    .keyword-card-header{display:flex;flex-direction:column;gap:12px;}
+    .keyword-card-title-row{display:flex;align-items:center;gap:12px;}
+    .keyword-card-index{display:inline-flex;align-items:center;justify-content:center;min-width:36px;height:24px;padding:0 8px;border-radius:999px;background:#0f172a;color:#fff;font-size:12px;font-weight:600;letter-spacing:0.12em;}
+    .keyword-card-title{margin:0;font-size:18px;font-weight:600;line-height:1.35;color:#0f172a;text-align:left;}
+    .keyword-meta{display:flex;flex-wrap:wrap;gap:12px;font-size:13px;color:#475569;}
+    .keyword-chart{width:100%;height:260px;}
+    .keyword-chart-empty{display:flex;align-items:center;justify-content:center;width:100%;height:100%;border:1px dashed #cbd5f5;border-radius:12px;font-size:13px;color:#94a3b8;}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>${safeTitle}</h1>
+    ${subtitleHtml}
+    ${summarySection}
+  </header>
+  <main>
+    <section id="keyword_showcase_grid" class="keyword-grid" aria-label="${safeTitle}"></section>
+  </main>
+  <script>
+    window.KEYWORD_SHOWCASE_DATA=${dataJson};
+    window.KEYWORD_SHOWCASE_LIMIT=${KEYWORD_BAR_LIMIT};
+  <\/script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"><\/script>
+  <script>
+  (function(){
+    const data=Array.isArray(window.KEYWORD_SHOWCASE_DATA)?window.KEYWORD_SHOWCASE_DATA:[];
+    const limit=Number(window.KEYWORD_SHOWCASE_LIMIT)||15;
+    const grid=document.getElementById('keyword_showcase_grid');
+    if(!grid){ return; }
+    const charts=[];
+    const palette=['#2563eb','#16a34a','#f97316','#dc2626','#0891b2','#9333ea','#64748b','#ef4444','#22c55e','#eab308'];
+    const formatNumber=value=>{
+      const num=Number(value)||0;
+      try{ return new Intl.NumberFormat('zh-CN').format(num); }
+      catch(e){ return String(num); }
+    };
+    data.forEach((item,index)=>{
+      const card=document.createElement('article');
+      card.className='keyword-card';
+      const header=document.createElement('header');
+      header.className='keyword-card-header';
+      const titleRow=document.createElement('div');
+      titleRow.className='keyword-card-title-row';
+      const badge=document.createElement('span');
+      badge.className='keyword-card-index';
+      badge.textContent=String(index+1).padStart(2,'0');
+      const title=document.createElement('h2');
+      title.className='keyword-card-title';
+      title.textContent=item.displayLabel||item.label||'未分类';
+      titleRow.appendChild(badge);
+      titleRow.appendChild(title);
+      header.appendChild(titleRow);
+      const meta=document.createElement('div');
+      meta.className='keyword-meta';
+      const docCount=Math.max(0, Number(item.documentCount||0)||0);
+      const docSpan=document.createElement('span');
+      docSpan.textContent=`文献 ${formatNumber(docCount)}`;
+      meta.appendChild(docSpan);
+      const tokenCount=Math.max(0, Number(item.totalTokens||0)||0);
+      if(tokenCount>0){
+        const tokenSpan=document.createElement('span');
+        tokenSpan.textContent=`词频 ${formatNumber(tokenCount)}`;
+        meta.appendChild(tokenSpan);
+      }
+      header.appendChild(meta);
+      card.appendChild(header);
+      const chartEl=document.createElement('div');
+      chartEl.className='keyword-chart';
+      chartEl.id=`keyword_chart_${index}`;
+      card.appendChild(chartEl);
+      grid.appendChild(card);
+      const keywordsRaw=Array.isArray(item.keywords)?item.keywords:[];
+      const weightsRaw=Array.isArray(item.weights)?item.weights:[];
+      const countsRaw=Array.isArray(item.counts)?item.counts:[];
+      const keywords=keywordsRaw.slice(0, limit).map(token=>String(token));
+      if(!window.echarts){
+        chartEl.classList.add('keyword-chart-empty');
+        chartEl.textContent='ECharts 未加载';
+        return;
+      }
+      if(!keywords.length){
+        chartEl.classList.add('keyword-chart-empty');
+        chartEl.textContent='暂无关键词';
+        return;
+      }
+      const weights=keywords.map((_,idx)=>{
+        const value=Number(weightsRaw[idx]||0);
+        return Number.isFinite(value)?value:0;
+      });
+      const counts=keywords.map((_,idx)=>{
+        const value=Number(countsRaw[idx]||0);
+        return Number.isFinite(value)?value:0;
+      });
+      const chart=window.echarts.init(chartEl,null,{ renderer:'svg' });
+      chart.setOption({
+        color:[palette[index % palette.length]],
+        animationDuration:350,
+        grid:{ top:40, left:28, right:18, bottom:68 },
+        tooltip:{
+          trigger:'axis',
+          axisPointer:{ type:'shadow' },
+          formatter:params=>{
+            if(!params || !params.length){ return ''; }
+            const first=params[0];
+            const value=Number(first.value||0);
+            const percent=value*100;
+            const base=percent>=10?percent.toFixed(1):percent.toFixed(2);
+            const dataPoint=first.data||{};
+            const countVal=Number(dataPoint.count||0);
+            const countText=countVal>0?` · 词频 ${formatNumber(countVal)}`:'';
+            return `${first.name}<br/>权重 ${base}%${countText}`;
+          }
+        },
+        xAxis:{
+          type:'category',
+          data:keywords,
+          axisLabel:{ interval:0, rotate:30, color:'#475569', fontSize:11 },
+          axisTick:{ alignWithLabel:true },
+          axisLine:{ lineStyle:{ color:'#cbd5f5' } }
+        },
+        yAxis:{
+          type:'value',
+          axisLabel:{
+            color:'#475569',
+            fontSize:11,
+            formatter:value=>{
+              const num=Number(value)||0;
+              const percent=num*100;
+              return percent>=10?`${percent.toFixed(0)}%`:`${percent.toFixed(1)}%`;
+            }
+          },
+          splitLine:{ lineStyle:{ color:'#e2e8f0' } }
+        },
+        series:[{
+          type:'bar',
+          barMaxWidth:36,
+          data:keywords.map((key,idx)=>({ value:weights[idx], count:counts[idx], name:key })),
+          label:{
+            show:true,
+            position:'top',
+            fontSize:10,
+            color:'#0f172a',
+            formatter:params=>{
+              const val=Number(params.value||0);
+              if(!Number.isFinite(val) || val<=0){ return ''; }
+              const percent=val*100;
+              const base=percent>=10?percent.toFixed(1):percent.toFixed(2);
+              const countVal=Number(params.data?.count||0);
+              if(countVal>0){
+                return `${base}%\n(${formatNumber(countVal)})`;
+              }
+              return `${base}%`;
+            }
+          }
+        }]
+      });
+      charts.push(chart);
+    });
+    window.addEventListener('resize',()=>{
+      charts.forEach(chart=>{
+        try{ chart.resize(); }
+        catch(e){ /* noop */ }
+      });
+    });
+  })();
+  <\/script>
+</body>
+</html>`;
+  showcaseWindow.document.open();
+  showcaseWindow.document.write(html);
+  showcaseWindow.document.close();
+}
+
 function setTopicVizMessage(dim, message, messageKey){
   const cfg = getTopicVizConfig(dim);
   if(!cfg) return;
@@ -4804,6 +5062,7 @@ function resetTopicVizState(){
     setTopicVizMessage(dim, '', messageKey);
   });
   resetWordCloudSection();
+  updateKeywordShowcaseButton(TOPIC_VIZ_STATE.active, {hasData:false});
 }
 
 function updateTopicVizListActive(dim){
@@ -4835,6 +5094,7 @@ function renderTopicVizKeywords(dim, category){
     const emptyKeywords=getI18nText('topicViz.message.noKeywords')||'暂无关键词数据。';
     if(hintEl){ hintEl.textContent=emptyKeywords; }
     chartEl.innerHTML=`<div class="topic-viz-empty">${getI18nText('topicViz.message.noKeywords')||'暂无关键词数据。'}</div>`;
+    updateKeywordShowcaseButton(dim, {hasData:false});
     return;
   }
 
@@ -4980,6 +5240,7 @@ function renderTopicVizKeywords(dim, category){
       targetCard.scrollIntoView({ behavior:'smooth', block:'nearest' });
     }
   }
+  updateKeywordShowcaseButton(dim, {hasData:true});
 }
 
 function renderTopicVizScatter(dim){
@@ -5501,6 +5762,7 @@ function setTopicVizTab(dim, options={}){
   const target = TOPIC_VIZ_DIMENSIONS.includes(dim) ? dim : 'topic';
   const force = options.force === true;
   TOPIC_VIZ_STATE.active = target;
+  updateKeywordShowcaseButton(target);
   document.querySelectorAll('[data-topicviz-tab]').forEach(btn=>{
     const isActive = btn.dataset.topicvizTab === target;
     btn.classList.toggle('topic-viz-tab-active', isActive);
