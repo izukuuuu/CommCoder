@@ -3,6 +3,7 @@ pandas
 requests
 fastapi
 uvicorn[standard]
+python-multipart
 scikit-learn
 python-dotenv
 hdbscan
