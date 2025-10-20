@@ -1252,7 +1252,12 @@ const SORT_VALUE_DEFAULT='default';
 const SORT_VALUE_RANK_ASC='rank_asc';
 const SORT_VALUE_RANK_DESC='rank_desc';
 
-const qs = id=>document.getElementById(id);
+function qs(id){
+  return document.getElementById(id);
+}
+if(typeof window!=="undefined"){
+  window.qs = qs;
+}
 const escapeHtml = s=>String(s).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
 const escapeAttr = s=>escapeHtml(s).replaceAll('"','&quot;');
 const formatMultiline = text=>escapeHtml(text||"").replace(/\n/g,'<br>');
