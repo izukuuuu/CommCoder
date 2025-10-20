@@ -4081,17 +4081,17 @@ function renderTimelineStackChart(timeline){
     });
     const percentLabels = points.map(point=>{
       if(point.percent<=0) return '';
-      if(point.percent>=10){
-        return `${point.percent.toFixed(0)}%`;
-      }
       return `${point.percent.toFixed(1)}%`;
     });
-    traces.push({
+    const xValues = points.map(point=>point.label);
+    const yValues = points.map(()=>yDisplay);
+    const markerTrace={
       type:'scatter',
-      mode:'markers+text',
+      mode:'markers',
       name:yDisplay,
-      x:points.map(point=>point.label),
-      y:points.map(()=>yDisplay),
+      legendgroup:yDisplay,
+      x:xValues,
+      y:yValues,
       marker:{
         size:markerSizes,
         color,
@@ -4099,16 +4099,30 @@ function renderTimelineStackChart(timeline){
         sizemode:'diameter',
         line:{width:1,color:'rgba(15,23,42,0.15)'}
       },
-      text:percentLabels,
-      textposition:'top center',
-      textfont:{
-        family:'"Inter",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
-        color:'#0f172a',
-        size:12
-      },
       hovertemplate:'<b>%{y}</b><br>%{x}<br>占比：%{customdata[1]:.2f}%<br>数量：%{customdata[0]}<br>总计：%{customdata[2]}<extra></extra>',
       customdata:points.map(point=>[point.count, point.percent, point.total])
-    });
+    };
+    traces.push(markerTrace);
+    if(percentLabels.some(Boolean)){
+      traces.push({
+        type:'scatter',
+        mode:'text',
+        name:yDisplay,
+        legendgroup:yDisplay,
+        showlegend:false,
+        x:xValues,
+        y:yValues,
+        text:percentLabels,
+        textposition:'top center',
+        textfont:{
+          family:'"Inter",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+          color:'#0f172a',
+          size:12
+        },
+        hoverinfo:'skip',
+        cliponaxis:false
+      });
+    }
   });
   if(!traces.length){
     areaEl.innerHTML='<div class="treemap-empty">暂无分类占比数据</div>';
