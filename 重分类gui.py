@@ -19,7 +19,7 @@ import requests
 from fastapi import FastAPI, UploadFile, File, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, HTMLResponse
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import PCA
@@ -662,9 +662,19 @@ app = FastAPI(title="分类人工调整 GUI", version=APP_VERSION)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-@app.get("/", response_class=FileResponse)
+@app.get("/", response_class=HTMLResponse)
 def index():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    """Serve the main HTML shell with an explicit UTF-8 content-type."""
+    index_path = os.path.join(STATIC_DIR, "index.html")
+    try:
+        with open(index_path, "r", encoding="utf-8") as fh:
+            return HTMLResponse(content=fh.read(), media_type="text/html; charset=utf-8")
+    except FileNotFoundError:
+        return HTMLResponse(
+            content="<h1>index.html not found</h1>",
+            status_code=404,
+            media_type="text/html; charset=utf-8",
+        )
 
 # ================== 进度条 ==================
 def _progress_init(sid:str):
