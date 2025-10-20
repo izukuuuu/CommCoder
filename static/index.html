@@ -330,7 +330,7 @@
                 <h3 class="text-base font-semibold text-slate-900">期刊概况</h3>
                 <p class="text-sm text-slate-500">Table 1 · List of selected journals.</p>
               </div>
-              <div class="text-xs text-slate-400">数据范围：1965 – 2024</div>
+              <div id="journal_overview_year_range" class="text-xs text-slate-400">数据范围：—</div>
             </div>
 
             <div class="overflow-x-auto border border-slate-200/80 rounded-2xl">
@@ -341,7 +341,10 @@
                     <th scope="col" class="px-4 py-3 text-left">期刊名称</th>
                     <th scope="col" class="px-4 py-3 text-right">Times Cited (All Databases)</th>
                     <th scope="col" class="px-4 py-3 text-left">JIF Quartile</th>
-                    <th scope="col" class="px-4 py-3 text-right">Publications (1965-2024)</th>
+                    <th scope="col" class="px-4 py-3 text-right">
+                      Publications
+                      <span id="journal_overview_publications_range" class="block text-[11px] font-normal text-slate-400 leading-tight"></span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody id="journal_overview_body" class="bg-white"></tbody>
@@ -1456,73 +1459,65 @@ applyLanguage('zh');
 
 const numberFormatter = new Intl.NumberFormat('zh-CN');
 
-const JOURNAL_OVERVIEW_DATA = [
-  { name: 'NEW MEDIA & SOCIETY', citations: 13552, quartile: 'Q1', publications: 471 },
-  { name: 'JOURNAL OF COMMUNICATION', citations: 9922, quartile: 'Q1', publications: 82 },
-  { name: 'HEALTH COMMUNICATION', citations: 8268, quartile: 'Q1', publications: 445 },
-  { name: 'Information Communication & Society', citations: 8179, quartile: 'Q1', publications: 268 },
-  { name: 'PUBLIC OPINION QUARTERLY', citations: 6865, quartile: 'Q1', publications: 102 },
-  { name: 'JOURNAL OF ADVERTISING', citations: 6506, quartile: 'Q1', publications: 68 },
-  { name: 'PUBLIC RELATIONS REVIEW', citations: 6031, quartile: 'Q1', publications: 154 },
-  { name: 'JOURNAL OF HEALTH COMMUNICATION', citations: 6013, quartile: 'Q1', publications: 169 },
-  { name: 'Social Media + Society', citations: 5995, quartile: 'Q1', publications: 302 },
-  { name: 'JOURNAL OF SOCIAL AND PERSONAL RELATIONSHIPS', citations: 5982, quartile: 'Q1', publications: 260 },
-  { name: 'COMMUNICATION RESEARCH', citations: 5867, quartile: 'Q1', publications: 98 },
-  { name: 'Journal of Computer-Mediated Communication', citations: 5343, quartile: 'Q1', publications: 84 },
-  { name: 'Digital Journalism', citations: 4601, quartile: 'Q1', publications: 50 },
-  { name: 'HUMAN COMMUNICATION RESEARCH', citations: 4388, quartile: 'Q1', publications: 77 },
-  { name: 'Journalism', citations: 4335, quartile: 'Q1', publications: 265 },
-  { name: 'TELECOMMUNICATIONS POLICY', citations: 4301, quartile: 'Q1', publications: 198 },
-  { name: 'Journalism Studies', citations: 4156, quartile: 'Q1', publications: 205 },
-  { name: 'COMMUNICATION MONOGRAPHS', citations: 4103, quartile: 'Q1', publications: 56 },
-  { name: 'International Journal of Advertising', citations: 4060, quartile: 'Q1', publications: 99 },
-  { name: 'MEDIA CULTURE & SOCIETY', citations: 3813, quartile: 'Q1', publications: 196 },
-  { name: 'PUBLIC UNDERSTANDING OF SCIENCE', citations: 3675, quartile: 'Q1', publications: 128 },
-  { name: 'POLITICAL COMMUNICATION', citations: 3664, quartile: 'Q1', publications: 107 },
-  { name: 'COMMUNICATION THEORY', citations: 3648, quartile: 'Q1', publications: 36 },
-  { name: 'JOURNALISM & MASS COMMUNICATION QUARTERLY', citations: 3501, quartile: 'Q1', publications: 145 },
-  { name: 'Profesional de la Informacion', citations: 2801, quartile: 'Q1', publications: 181 },
-  { name: 'MEDIA PSYCHOLOGY', citations: 2784, quartile: 'Q1', publications: 71 },
-  { name: 'DISCOURSE & SOCIETY', citations: 2624, quartile: 'Q1', publications: 120 },
-  { name: 'Mass Communication and Society', citations: 2472, quartile: 'Q1', publications: 105 },
-  { name: 'SCIENCE COMMUNICATION', citations: 2456, quartile: 'Q1', publications: 75 },
-  { name: 'International Journal of Press-Politics', citations: 2303, quartile: 'Q1', publications: 81 },
-  { name: 'Environmental Communication-A Journal of Nature and Culture', citations: 2266, quartile: 'Q1', publications: 160 },
-  { name: 'Communication Methods and Measures', citations: 2189, quartile: 'Q1', publications: 41 },
-  { name: 'Journal of Public Relations Research', citations: 2178, quartile: 'Q1', publications: 54 },
-  { name: 'Media and Communication', citations: 2120, quartile: 'Q1', publications: 220 },
-  { name: 'RESEARCH ON LANGUAGE AND SOCIAL INTERACTION', citations: 2010, quartile: 'Q1', publications: 36 },
-  { name: 'Comunicar', citations: 1995, quartile: 'Q1', publications: 60 },
-  { name: 'Convergence-The International Journal of Research into New Media Technologies', citations: 1781, quartile: 'Q1', publications: 67 },
-  { name: 'INFORMATION SOCIETY', citations: 1731, quartile: 'Q1', publications: 45 },
-  { name: 'Television & New Media', citations: 1534, quartile: 'Q1', publications: 109 },
-  { name: 'INTERNATIONAL JOURNAL OF CONFLICT MANAGEMENT', citations: 1506, quartile: 'Q1', publications: 88 },
-  { name: 'Games and Culture', citations: 1501, quartile: 'Q1', publications: 160 },
-  { name: 'Communication & Sport', citations: 1280, quartile: 'Q1', publications: 112 },
-  { name: 'Policy and Internet', citations: 1201, quartile: 'Q1', publications: 83 },
-  { name: 'Journal of Information Technology & Politics', citations: 1093, quartile: 'Q1', publications: 74 },
-  { name: 'Cyberpsychology-Journal of Psychosocial Research on Cyberspace', citations: 1052, quartile: 'Q1', publications: 64 },
-  { name: 'International Journal of Business Communication', citations: 983, quartile: 'Q1', publications: 73 },
-  { name: 'Mobile Media & Communication', citations: 977, quartile: 'Q1', publications: 78 },
-  { name: 'Discourse Context & Media', citations: 958, quartile: 'Q1', publications: 49 }
-];
+let JOURNAL_OVERVIEW_DATA = [];
+let JOURNAL_OVERVIEW_SUMMARY = {
+  listed_journals: 0,
+  unique_journals: 0,
+  total_citations: 0,
+  total_publications: 0,
+  year_min: null,
+  year_max: null,
+  year_column: '',
+  source_column: '',
+  citations_column: '',
+  quartile_column: '',
+};
+
+function updateJournalOverviewMetaDisplays(){
+  const rangeEl = document.getElementById('journal_overview_year_range');
+  const headerRangeEl = document.getElementById('journal_overview_publications_range');
+  const { year_min: yearMin, year_max: yearMax, year_column: yearColumn } = JOURNAL_OVERVIEW_SUMMARY;
+  const hasMin = Number.isFinite(yearMin);
+  const hasMax = Number.isFinite(yearMax);
+  let rangeText = '数据范围：未提供年份信息';
+  if(hasMin && hasMax){
+    const sameYear = yearMin === yearMax;
+    const rangeLabel = sameYear ? `${yearMin}` : `${yearMin} – ${yearMax}`;
+    rangeText = yearColumn ? `数据范围：${rangeLabel}（基于 ${yearColumn}）` : `数据范围：${rangeLabel}`;
+    if(headerRangeEl){
+      headerRangeEl.textContent = sameYear ? `(${yearMin})` : `(${yearMin}–${yearMax})`;
+      headerRangeEl.classList.remove('hidden');
+    }
+  }else{
+    if(yearColumn){
+      rangeText = `数据范围：未提供 ${yearColumn}`;
+    }
+    if(headerRangeEl){
+      headerRangeEl.textContent = '';
+      headerRangeEl.classList.add('hidden');
+    }
+  }
+  if(rangeEl){
+    rangeEl.textContent = rangeText;
+  }
+}
 
 function renderJournalOverviewTable(){
   const tbody = document.getElementById('journal_overview_body');
-  const summary = document.getElementById('journal_overview_summary');
+  const summaryEl = document.getElementById('journal_overview_summary');
   if(!tbody){
     return;
   }
   if(!Array.isArray(JOURNAL_OVERVIEW_DATA) || JOURNAL_OVERVIEW_DATA.length === 0){
     tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-center text-sm text-slate-400">暂无数据</td></tr>';
-    if(summary){
-      summary.textContent = '当前没有可显示的期刊数据。';
+    if(summaryEl){
+      summaryEl.textContent = '当前没有可显示的期刊数据。';
     }
     return;
   }
-  const rows = JOURNAL_OVERVIEW_DATA.map((item, index)=>{
+  const rowsHtml = JOURNAL_OVERVIEW_DATA.map((item, index)=>{
     const rank = index + 1;
-    const name = escapeHtml(item.name || '未命名期刊');
+    const name = escapeHtml(item.name || `期刊 ${rank}`);
     const citations = numberFormatter.format(safeNumber(item.citations));
     const quartile = escapeHtml(item.quartile || '—');
     const publications = numberFormatter.format(safeNumber(item.publications));
@@ -1535,16 +1530,79 @@ function renderJournalOverviewTable(){
       <td class="px-4 py-3 text-right font-mono text-slate-700">${publications}</td>
     </tr>`;
   }).join('');
-  tbody.innerHTML = rows;
+  tbody.innerHTML = rowsHtml;
 
-  if(summary){
-    const totalCitations = JOURNAL_OVERVIEW_DATA.reduce((acc, item)=>acc + safeNumber(item.citations), 0);
-    const totalPublications = JOURNAL_OVERVIEW_DATA.reduce((acc, item)=>acc + safeNumber(item.publications), 0);
-    summary.textContent = `共 ${numberFormatter.format(JOURNAL_OVERVIEW_DATA.length)} 种期刊，Times Cited 合计 ${numberFormatter.format(totalCitations)}，1965-2024 年发表量共 ${numberFormatter.format(totalPublications)} 篇。`;
+  if(summaryEl){
+    const listed = JOURNAL_OVERVIEW_SUMMARY.listed_journals || JOURNAL_OVERVIEW_DATA.length;
+    const unique = JOURNAL_OVERVIEW_SUMMARY.unique_journals || listed;
+    const totalCitations = JOURNAL_OVERVIEW_SUMMARY.total_citations || JOURNAL_OVERVIEW_DATA.reduce((acc, item)=>acc + safeNumber(item.citations), 0);
+    const totalPublications = JOURNAL_OVERVIEW_SUMMARY.total_publications || JOURNAL_OVERVIEW_DATA.reduce((acc, item)=>acc + safeNumber(item.publications), 0);
+    let summaryText = `已展示 ${numberFormatter.format(listed)} 种期刊，Times Cited 合计 ${numberFormatter.format(totalCitations)}，发表量共 ${numberFormatter.format(totalPublications)} 篇。`;
+    if(unique > listed){
+      summaryText += `（共收录 ${numberFormatter.format(unique)} 种期刊）`;
+    }
+    summaryEl.textContent = summaryText;
   }
 }
 
-renderJournalOverviewTable();
+function setJournalOverview(raw){
+  if(!raw || typeof raw !== 'object'){
+    JOURNAL_OVERVIEW_DATA = [];
+    JOURNAL_OVERVIEW_SUMMARY = {
+      listed_journals: 0,
+      unique_journals: 0,
+      total_citations: 0,
+      total_publications: 0,
+      year_min: null,
+      year_max: null,
+      year_column: '',
+      source_column: '',
+      citations_column: '',
+      quartile_column: '',
+    };
+    updateJournalOverviewMetaDisplays();
+    renderJournalOverviewTable();
+    return;
+  }
+
+  const rows = Array.isArray(raw.rows) ? raw.rows : [];
+  JOURNAL_OVERVIEW_DATA = rows.map((item, index)=>{
+    const rank = index + 1;
+    const name = String(item?.name ?? `期刊 ${rank}`).trim() || `期刊 ${rank}`;
+    const citations = safeNumber(item?.citations);
+    const quartile = String(item?.quartile ?? '—').trim() || '—';
+    const publications = Math.max(0, safeNumber(item?.publications));
+    return { name, citations, quartile, publications };
+  });
+
+  const summary = raw.summary || {};
+  const listed = safeNumber(summary.listed_journals) || JOURNAL_OVERVIEW_DATA.length;
+  const unique = safeNumber(summary.unique_journals) || Math.max(listed, JOURNAL_OVERVIEW_DATA.length);
+  const totalCitations = safeNumber(summary.total_citations) || JOURNAL_OVERVIEW_DATA.reduce((acc, item)=>acc + safeNumber(item.citations), 0);
+  const totalPublications = safeNumber(summary.total_publications) || JOURNAL_OVERVIEW_DATA.reduce((acc, item)=>acc + safeNumber(item.publications), 0);
+  const parseYear = value=>{
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  JOURNAL_OVERVIEW_SUMMARY = {
+    listed_journals: listed,
+    unique_journals: unique,
+    total_citations: totalCitations,
+    total_publications: totalPublications,
+    year_min: parseYear(summary.year_min),
+    year_max: parseYear(summary.year_max),
+    year_column: summary.year_column ? String(summary.year_column) : '',
+    source_column: summary.source_column ? String(summary.source_column) : '',
+    citations_column: summary.citations_column ? String(summary.citations_column) : '',
+    quartile_column: summary.quartile_column ? String(summary.quartile_column) : '',
+  };
+
+  updateJournalOverviewMetaDisplays();
+  renderJournalOverviewTable();
+}
+
+setJournalOverview(null);
 const TOAST_THEMES = {
   info: "bg-slate-900/90 text-white",
   success: "bg-emerald-600 text-white",
@@ -1602,6 +1660,7 @@ function renderSessionMeta(meta){
   summary.classList.toggle('opacity-60', !meta);
   if(!meta){
     resetSamplingState();
+    setJournalOverview(null);
     primary.textContent = '暂无会话';
     secondary.textContent = '请上传或载入数据集';
     LAST_EXPORT_URL = '';
@@ -5936,6 +5995,7 @@ async function refreshStats(){
   qs('total_msg').textContent=`行数：${d.total}`;
   renderTimelineCharts(d.timeline);
   setJournalSourceAvailability(!!d.journal_source_available);
+  setJournalOverview(d.journal_overview || null);
   setJournalData('topic', d.journal_topic_adj);
   setJournalData('field', d.journal_field_adj);
   setJournalData('topic_orig', d.journal_topic_orig);
