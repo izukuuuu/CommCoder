@@ -506,6 +506,127 @@ FIELD_LIST = [
     "传播理论","广告学","传播研究方法","媒介史","媒介技术","言语传播",
     "教育传播","计算传播","网络与新媒体","其他领域"
 ]
+
+LABEL_MAPPING_LOCK = Lock()
+LABEL_MAPPING_FILE = os.path.join(OUTPUT_DIR, "label_mappings.json")
+
+DEFAULT_TOPIC_LABEL_MAP: Dict[str, str] = {
+    "文化议题": "Cultural Issues",
+    "经济议题": "Economic Issues",
+    "环境议题": "Environmental Issues",
+    "健康议题": "Health Issues",
+    "媒介制度与平台治理": "Media Systems",
+    "政治议题": "Political Issues",
+    "宗教议题": "Religious Issues",
+    "科技议题": "Technological Issues",
+    "传播模式与行为": "Communication Behaviors",
+    "其他议题": "Other Issues",
+    "未分类": "Uncategorized",
+}
+
+DEFAULT_FIELD_LABEL_MAP: Dict[str, str] = {
+    "广告学": "Advertising",
+    "传播心理学": "Communication & Psychology",
+    "传播研究方法": "Communication Research Methods",
+    "传播伦理": "Communication Ethics",
+    "健康传播": "Health Communications",
+    "跨文化传播": "Intercultural Communications",
+    "人际传播": "Interpersonal Communications",
+    "新闻学": "Journalism",
+    "法律与政策": "Law & Policy",
+    "大众传播": "Mass Communication",
+    "媒介效果": "Media Effects",
+    "媒介史": "Media History",
+    "媒介产业": "Media Industries",
+    "媒介生产与传播": "Media Production & Distribution",
+    "媒介技术": "Media Technology",
+    "媒介理论": "Media Theory",
+    "组织传播": "Organizational Communications",
+    "政治传播": "Political Communications",
+    "公共关系": "Public Relations",
+    "科学传播": "Science Communications",
+    "言语传播": "Speech Communications",
+    "其他领域": "Others",
+    "未分类": "Uncategorized",
+}
+
+TOPIC_LABEL_OVERRIDES: Dict[str, str] = {}
+FIELD_LABEL_OVERRIDES: Dict[str, str] = {}
+TOPIC_LABEL_MAP: Dict[str, str] = {}
+FIELD_LABEL_MAP: Dict[str, str] = {}
+
+
+def _sanitize_label_mapping_payload(payload: Any) -> Dict[str, str]:
+    if not payload:
+        return {}
+    if isinstance(payload, dict):
+        items = payload.items()
+    else:
+        try:
+            items = dict(payload).items()
+        except Exception:
+            return {}
+    result: Dict[str, str] = {}
+    for key, value in items:
+        if not isinstance(key, str):
+            continue
+        name = key.strip()
+        if not name:
+            continue
+        text = "" if value is None else str(value)
+        result[name] = text.strip()
+    return result
+
+
+def _compose_label_map(overrides: Dict[str, str], defaults: Dict[str, str]) -> Dict[str, str]:
+    merged = defaults.copy()
+    merged.update(overrides)
+    return merged
+
+
+def _load_label_mapping_file() -> Tuple[Dict[str, str], Dict[str, str]]:
+    if not os.path.exists(LABEL_MAPPING_FILE):
+        return {}, {}
+    try:
+        with open(LABEL_MAPPING_FILE, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        return {}, {}
+    topic_raw = data.get("topic") if isinstance(data, dict) else {}
+    field_raw = data.get("field") if isinstance(data, dict) else {}
+    return _sanitize_label_mapping_payload(topic_raw), _sanitize_label_mapping_payload(field_raw)
+
+
+def _save_label_mapping_file(topic_overrides: Dict[str, str], field_overrides: Dict[str, str]) -> None:
+    os.makedirs(os.path.dirname(LABEL_MAPPING_FILE), exist_ok=True)
+    with open(LABEL_MAPPING_FILE, "w", encoding="utf-8") as fh:
+        json.dump({"topic": topic_overrides, "field": field_overrides}, fh, ensure_ascii=False, indent=2)
+
+
+def _update_label_mappings(topic_overrides: Dict[str, str], field_overrides: Dict[str, str]) -> None:
+    global TOPIC_LABEL_OVERRIDES, FIELD_LABEL_OVERRIDES, TOPIC_LABEL_MAP, FIELD_LABEL_MAP
+    TOPIC_LABEL_OVERRIDES = topic_overrides
+    FIELD_LABEL_OVERRIDES = field_overrides
+    TOPIC_LABEL_MAP = _compose_label_map(TOPIC_LABEL_OVERRIDES, DEFAULT_TOPIC_LABEL_MAP)
+    FIELD_LABEL_MAP = _compose_label_map(FIELD_LABEL_OVERRIDES, DEFAULT_FIELD_LABEL_MAP)
+
+
+def _initialize_label_mappings() -> None:
+    topic_overrides, field_overrides = _load_label_mapping_file()
+    _update_label_mappings(topic_overrides, field_overrides)
+
+
+def _label_display(label: str, mapping: Dict[str, str]) -> str:
+    if not isinstance(label, str):
+        return ""
+    key = label.strip()
+    if not key:
+        return ""
+    value = mapping.get(key)
+    return value.strip() if isinstance(value, str) else ""
+
+
+_initialize_label_mappings()
 REQUIRED_COLS = [
     "Article Title","Abstract","结构化总结",
     "研究主题（议题）分类","研究领域分类",
@@ -591,12 +712,23 @@ def safe_get(row: pd.Series, col: str) -> str:
     v = row.get(col, "")
     return "" if pd.isna(v) else str(v)
 
-def _counts(ser: pd.Series) -> List[Dict[str,Any]]:
+def _counts(ser: pd.Series, mapping: Optional[Dict[str, str]] = None) -> List[Dict[str,Any]]:
     s = ser.fillna("").astype(str).str.strip()
     s = s[s!=""]
     total = int(s.shape[0]) if s.shape[0] else 1
     vc = s.value_counts()
-    return [{"label":str(k),"count":int(v),"percent":round(v*100.0/total,2)} for k,v in vc.items()]
+    result: List[Dict[str, Any]] = []
+    mapping = mapping or {}
+    for k, v in vc.items():
+        label = str(k)
+        item = {
+            "label": label,
+            "count": int(v),
+            "percent": round(v * 100.0 / total, 2),
+        }
+        item["display_label"] = _label_display(label, mapping)
+        result.append(item)
+    return result
 
 
 def _invalidate_topic_viz(sid: str):
@@ -639,6 +771,7 @@ def _category_keywords(
     column: str,
     fallback_label: str,
     top_n: int = 80,
+    label_mapping: Optional[Dict[str, str]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[str], List[int], List[str]]:
     if column not in df.columns or df.empty:
         return [], [], [], []
@@ -650,6 +783,7 @@ def _category_keywords(
     texts: List[str] = []
     labels: List[str] = []
     counts: List[int] = []
+    mapping = label_mapping or {}
     for label, group in work.groupby(column):
         label_str = str(label).strip() or fallback_label
         total = int(group.shape[0])
@@ -672,6 +806,7 @@ def _category_keywords(
                 "count": total,
                 "top_words": top_words,
                 "total_tokens": int(total_tokens),
+                "display_label": _label_display(label_str, mapping),
             }
         )
         labels.append(label_str)
@@ -686,6 +821,7 @@ def _category_scatter(
     labels: List[str],
     counts: List[int],
     slug: str,
+    label_mapping: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     n = len(labels)
     if n == 0:
@@ -775,6 +911,7 @@ def _category_scatter(
             cluster_count = 0
             cluster_algo = None
 
+    mapping = label_mapping or {}
     points = []
     for i in range(n):
         points.append(
@@ -784,6 +921,7 @@ def _category_scatter(
                 "y": float(coords[i, 1]),
                 "count": int(counts[i]),
                 "cluster": int(cluster_labels[i]) if cluster_count else 0,
+                "display_label": _label_display(labels[i], mapping),
             }
         )
 
@@ -831,13 +969,17 @@ def _category_scatter(
 
 def _topic_visual_payload(df: pd.DataFrame) -> Dict[str, Any]:
     topic_categories, topic_texts, topic_counts, topic_labels = _category_keywords(
-        df, ADJUST_TOPIC_COL, "未分类"
+        df, ADJUST_TOPIC_COL, "未分类", label_mapping=TOPIC_LABEL_MAP
     )
     field_categories, field_texts, field_counts, field_labels = _category_keywords(
-        df, ADJUST_FIELD_COL, "未分类"
+        df, ADJUST_FIELD_COL, "未分类", label_mapping=FIELD_LABEL_MAP
     )
-    topic_scatter = _category_scatter(topic_texts, topic_labels, topic_counts, "topic_adj")
-    field_scatter = _category_scatter(field_texts, field_labels, field_counts, "field_adj")
+    topic_scatter = _category_scatter(
+        topic_texts, topic_labels, topic_counts, "topic_adj", label_mapping=TOPIC_LABEL_MAP
+    )
+    field_scatter = _category_scatter(
+        field_texts, field_labels, field_counts, "field_adj", label_mapping=FIELD_LABEL_MAP
+    )
     return {
         "topic_adj": {
             "categories": topic_categories,
@@ -1011,6 +1153,7 @@ def _top_sources_by_category(
     fallback_source: str = "未提供期刊",
     top_n: int = 5,
     max_categories: int = 24,
+    label_mapping: Optional[Dict[str, str]] = None,
 ) -> List[Dict[str, Any]]:
     """统计每个分类下按 Source Title 排名前 N 的期刊列表。"""
 
@@ -1052,6 +1195,7 @@ def _top_sources_by_category(
     if max_categories > 0:
         ordered_categories = ordered_categories[:max_categories]
 
+    mapping = label_mapping or {}
     result: List[Dict[str, Any]] = []
     for cat in ordered_categories:
         cat_total = int(totals.get(cat, 0))
@@ -1080,6 +1224,7 @@ def _top_sources_by_category(
         result.append(
             {
                 "category": str(cat),
+                "category_display": _label_display(str(cat), mapping),
                 "total": cat_total,
                 "unique_sources": int(sub_df.shape[0]),
                 "items": items,
@@ -1634,6 +1779,14 @@ def frontend_config():
         "adj_field_key": ADJUST_FIELD_COL,
         "app_version": APP_VERSION,
         "sampling_default_rate": SAMPLING_DEFAULT_RATE,
+        "label_mapping": {
+            "topic": dict(TOPIC_LABEL_MAP),
+            "field": dict(FIELD_LABEL_MAP),
+        },
+        "label_mapping_defaults": {
+            "topic": dict(DEFAULT_TOPIC_LABEL_MAP),
+            "field": dict(DEFAULT_FIELD_LABEL_MAP),
+        },
     })
 
 # ================== 上传 / 统计 / 分页 ==================
@@ -1761,7 +1914,7 @@ def _timeline(df: pd.DataFrame, bin_years: int) -> Dict[str, Any]:
             "cumulative_percent": round(min(cumulative_percent, 100.0), 4),
         })
 
-    def _build_stack(column: str, empty_label: str) -> Dict[str, Any]:
+    def _build_stack(column: str, empty_label: str, label_mapping: Dict[str, str]) -> Dict[str, Any]:
         cat_series = timeline_df[column].fillna("").astype(str).str.strip()
         cat_series = cat_series.replace("", empty_label)
         stack_df = timeline_df.assign(stack_category=cat_series)
@@ -1787,6 +1940,7 @@ def _timeline(df: pd.DataFrame, bin_years: int) -> Dict[str, Any]:
             counts = pivot[cat].tolist() if cat in pivot.columns else [0] * len(labels)
             series.append({
                 "label": str(cat),
+                "display_label": _label_display(str(cat), label_mapping),
                 "counts": [int(v) for v in counts],
                 "total": int(total_count),
             })
@@ -1803,8 +1957,8 @@ def _timeline(df: pd.DataFrame, bin_years: int) -> Dict[str, Any]:
         "min_year": min_year,
         "max_year": max_year,
         "bins": bins,
-        "stack_topic": _build_stack(ADJUST_TOPIC_COL, "未分类"),
-        "stack_field": _build_stack(ADJUST_FIELD_COL, "未分类"),
+        "stack_topic": _build_stack(ADJUST_TOPIC_COL, "未分类", TOPIC_LABEL_MAP),
+        "stack_field": _build_stack(ADJUST_FIELD_COL, "未分类", FIELD_LABEL_MAP),
     }
 
 
@@ -1904,6 +2058,7 @@ def stats(session_id: str = Query(...), bin_years: int = Query(5, ge=1, le=50)):
         source_col=source_col,
         fallback_category="未分类",
         fallback_source="未提供期刊",
+        label_mapping=TOPIC_LABEL_MAP,
     )
     journal_field = _top_sources_by_category(
         df,
@@ -1911,14 +2066,15 @@ def stats(session_id: str = Query(...), bin_years: int = Query(5, ge=1, le=50)):
         source_col=source_col,
         fallback_category="未分类",
         fallback_source="未提供期刊",
+        label_mapping=FIELD_LABEL_MAP,
     )
 
     return JSONResponse({
         "total": int(df.shape[0]),
-        "topic_orig": _counts(df["研究主题（议题）分类"]),
-        "field_orig": _counts(df["研究领域分类"]),
-        "topic_adj": _counts(df[ADJUST_TOPIC_COL]),
-        "field_adj": _counts(df[ADJUST_FIELD_COL]),
+        "topic_orig": _counts(df["研究主题（议题）分类"], TOPIC_LABEL_MAP),
+        "field_orig": _counts(df["研究领域分类"], FIELD_LABEL_MAP),
+        "topic_adj": _counts(df[ADJUST_TOPIC_COL], TOPIC_LABEL_MAP),
+        "field_adj": _counts(df[ADJUST_FIELD_COL], FIELD_LABEL_MAP),
         "timeline": _timeline(df, bin_years),
         "journal_source_available": bool(source_col in df.columns),
         "journal_topic_adj": journal_topic,
@@ -2003,6 +2159,7 @@ def word_cloud_assets(
     if not categories:
         return JSONResponse({"ok": False, "message": "暂无词云数据"})
 
+    mapping = TOPIC_LABEL_MAP if dim_key == "topic" else FIELD_LABEL_MAP
     target = None
     if label:
         label_str = str(label)
@@ -2023,6 +2180,7 @@ def word_cloud_assets(
         return JSONResponse({"ok": False, "message": "词云生成失败"})
 
     category_label = str(target.get("label") or "未分类")
+    category_display = str(target.get("display_label") or _label_display(category_label, mapping))
     slug = _slugify_filename(category_label)
     png_filename = f"{dim_key}_wordcloud_{slug}.png"
     svg_filename = f"{dim_key}_wordcloud_{slug}.svg"
@@ -2031,6 +2189,7 @@ def word_cloud_assets(
         {
             "ok": True,
             "category": category_label,
+            "category_display": category_display,
             "dimension": dim_key,
             "document_count": int(target.get("count", 0) or 0),
             "total_tokens": int(target.get("total_tokens", 0) or 0),
@@ -2062,6 +2221,7 @@ def keyword_chart_assets(
     if not categories:
         return JSONResponse({"ok": False, "message": "暂无关键词数据"})
 
+    mapping = TOPIC_LABEL_MAP if dim_key == "topic" else FIELD_LABEL_MAP
     target = None
     if label:
         label_str = str(label)
@@ -2082,6 +2242,7 @@ def keyword_chart_assets(
         return JSONResponse({"ok": False, "message": "关键词图生成失败"})
 
     category_label = str(target.get("label") or "未分类")
+    category_display = str(target.get("display_label") or _label_display(category_label, mapping))
     slug = _slugify_filename(category_label)
     png_filename = f"{dim_key}_keywords_{slug}.png"
     svg_filename = f"{dim_key}_keywords_{slug}.svg"
@@ -2090,6 +2251,7 @@ def keyword_chart_assets(
         {
             "ok": True,
             "category": category_label,
+            "category_display": category_display,
             "dimension": dim_key,
             "document_count": int(target.get("count", 0) or 0),
             "total_tokens": int(target.get("total_tokens", 0) or 0),
@@ -3013,6 +3175,33 @@ def save_env(payload: Dict[str,Any]):
         return JSONResponse({"ok": True})
     except Exception as e:
         return PlainTextResponse(f".env 写入失败：{e}", 500)
+
+
+@app.post("/label_mappings")
+def update_label_mappings(payload: Dict[str, Any]):
+    try:
+        topic_overrides = _sanitize_label_mapping_payload(payload.get("topic"))
+        field_overrides = _sanitize_label_mapping_payload(payload.get("field"))
+        with LABEL_MAPPING_LOCK:
+            _save_label_mapping_file(topic_overrides, field_overrides)
+            _update_label_mappings(topic_overrides, field_overrides)
+        TOPIC_VIZ_CACHE.clear()
+        return JSONResponse(
+            {
+                "ok": True,
+                "label_mapping": {
+                    "topic": dict(TOPIC_LABEL_MAP),
+                    "field": dict(FIELD_LABEL_MAP),
+                },
+                "label_mapping_defaults": {
+                    "topic": dict(DEFAULT_TOPIC_LABEL_MAP),
+                    "field": dict(DEFAULT_FIELD_LABEL_MAP),
+                },
+            }
+        )
+    except Exception as e:
+        traceback.print_exc()
+        return PlainTextResponse(f"保存失败：{e}", status_code=500)
 
 @app.get("/healthz")
 def healthz():

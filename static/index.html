@@ -779,6 +779,32 @@
             </div>
             <p class="text-xs text-slate-400">提示：黑名单仅影响智能建议的提示词，手动调整仍可选择全部分类。</p>
           </div>
+          <div class="bg-white rounded-2xl shadow p-6 space-y-5">
+            <div class="space-y-1">
+              <h3 class="text-base font-semibold text-slate-900">分类英文映射</h3>
+              <p class="text-sm text-slate-500">为研究议题与研究领域配置英文展示名称，未映射的分类将在可视化中标记为 Unmapped。</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <h4 class="text-sm font-semibold text-slate-800">议题映射</h4>
+                  <button id="btn_add_topic_mapping" class="text-xs text-slate-500 hover:text-slate-700" type="button">新增条目</button>
+                </div>
+                <div id="topic_label_table" class="label-mapping-table"></div>
+              </div>
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <h4 class="text-sm font-semibold text-slate-800">领域映射</h4>
+                  <button id="btn_add_field_mapping" class="text-xs text-slate-500 hover:text-slate-700" type="button">新增条目</button>
+                </div>
+                <div id="field_label_table" class="label-mapping-table"></div>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <button id="btn_save_label_mapping" class="px-4 py-2 rounded bg-slate-800 text-white" type="button">保存映射</button>
+              <span id="label_mapping_hint" class="text-sm text-slate-500"></span>
+            </div>
+          </div>
         </section>
       </main>
     </div>
@@ -873,6 +899,8 @@ const JOURNAL_DATA={ topic:[], field:[] };
 const JOURNAL_RENDER_STATE={ topic:[], field:[] };
 const JOURNAL_CHARTS=new Map();
 const JOURNAL_COLORS=['#2563eb','#1d4ed8','#38bdf8','#60a5fa','#93c5fd'];
+const LABEL_MAPPING={ topic:new Map(), field:new Map() };
+const LABEL_MAPPING_DEFAULTS={ topic:new Map(), field:new Map() };
 let JOURNAL_DIM='topic';
 let JOURNAL_SOURCE_AVAILABLE=true;
 const CATEGORY_DATA={};
@@ -881,8 +909,8 @@ const CATEGORY_VIEW_STATE={
   field_adj:'treemap'
 };
 const CATEGORY_CHART_CONFIG={
-  topic_adj:{ treemapId:'treemap_topic_adj', treemapKey:'chart_topic_adj', barId:'barchart_topic_adj', barKey:'bar_topic_adj' },
-  field_adj:{ treemapId:'treemap_field_adj', treemapKey:'chart_field_adj', barId:'barchart_field_adj', barKey:'bar_field_adj' }
+  topic_adj:{ treemapId:'treemap_topic_adj', treemapKey:'chart_topic_adj', barId:'barchart_topic_adj', barKey:'bar_topic_adj', kind:'topic' },
+  field_adj:{ treemapId:'treemap_field_adj', treemapKey:'chart_field_adj', barId:'barchart_field_adj', barKey:'bar_field_adj', kind:'field' }
 };
 let RANK_VIS_EXPANDED=false;
 const SCATTER_DEFAULT_HEIGHT=420;
@@ -988,6 +1016,33 @@ function formatPercentText(percent){
   if(!Number.isFinite(num)) return '';
   return `${num.toFixed(2)}%`;
 }
+function getDisplayFromSource(source){
+  if(source===undefined||source===null) return '';
+  if(typeof source==='string') return source.trim();
+  if(typeof source==='object'){
+    if(typeof source.display_label==='string') return source.display_label.trim();
+    if(typeof source.displayLabel==='string') return source.displayLabel.trim();
+    if(typeof source.category_display==='string') return source.category_display.trim();
+    if(typeof source.categoryDisplay==='string') return source.categoryDisplay.trim();
+  }
+  return '';
+}
+function resolveDisplayText(rawLabel, displaySource, kind=''){
+  const normalizedKind=(kind||'').toLowerCase();
+  const labelText = String(rawLabel??'').trim();
+  if(labelText){
+    const map = normalizedKind.startsWith('field') ? LABEL_MAPPING.field : LABEL_MAPPING.topic;
+    if(map && map instanceof Map){
+      const mapped=map.get(labelText);
+      if(typeof mapped==='string' && mapped.trim()){ return mapped.trim(); }
+    }
+  }
+  const candidate=getDisplayFromSource(displaySource);
+  if(candidate) return candidate;
+  if(normalizedKind.startsWith('field')) return 'Unmapped Field';
+  if(normalizedKind.startsWith('topic')) return 'Unmapped Topic';
+  return 'Unmapped';
+}
 function cloneDeep(value){
   if(value===undefined||value===null){
     return value;
@@ -1011,12 +1066,14 @@ function normalizeStatItems(rawList){
     if(!label) label=`未命名${idx+1}`;
     const count=safeNumber(item.count);
     const percent=parsePercentValue(item.percent);
+    const displayRaw=getDisplayFromSource(item);
     if(!entryMap.has(label)){
-      entryMap.set(label,{label,count:0,percent:percent,order:order++});
+      entryMap.set(label,{label,count:0,percent:percent,order:order++,display_label:displayRaw});
     }
     const entry=entryMap.get(label);
     entry.count+=count;
     if(percent!==null){ entry.percent=percent; }
+    if(displayRaw){ entry.display_label=displayRaw; }
   });
   const merged=Array.from(entryMap.values()).filter(item=>safeNumber(item.count)>0);
   return merged.sort((a,b)=>a.order-b.order);
@@ -1030,7 +1087,7 @@ function buildBarChartEntries(primaryRaw, overlayRaw){
   let order=0;
   const ensureEntry=label=>{
     if(entryMap.has(label)) return entryMap.get(label);
-    const entry={label,primary:0,overlay:0,order:order++};
+    const entry={label,primary:0,overlay:0,order:order++,display_label:''};
     entryMap.set(label,entry);
     return entry;
   };
@@ -1043,6 +1100,12 @@ function buildBarChartEntries(primaryRaw, overlayRaw){
     entry.overlay+=safeNumber(item.count);
   });
   const entries=Array.from(entryMap.values()).sort((a,b)=>a.order-b.order);
+  entries.forEach(entry=>{
+    const primaryItem=primaryMap.get(entry.label);
+    const overlayItem=overlayMap.get(entry.label);
+    const display=primaryItem?.display_label||overlayItem?.display_label||'';
+    entry.display_label=display;
+  });
   return { entries, primaryMap, overlayMap };
 }
 function limitBarEntries(entries, limit=TREEMAP_CATEGORY_LIMIT){
@@ -1638,6 +1701,46 @@ if(samplingPagerZone){
 /* ---- 默认兜底表 ---- */
 const DEF_TOPICS = ["健康议题","经济议题","政治议题","环境议题","传播模式与行为","媒介制度与平台治理","科技议题","文化议题","宗教议题","其他议题"];
 const DEF_FIELDS = ["政治传播","健康传播","大众传播","新闻学","跨文化传播","人际传播","科学传播","法律与政策","公共关系","组织传播","媒介效果","传播心理学","传播伦理","传播理论","广告学","传播研究方法","媒介史","媒介技术","言语传播","教育传播","计算传播","网络与新媒体","其他领域"];
+const DEF_TOPIC_LABEL_MAP = {
+  "文化议题":"Cultural Issues",
+  "经济议题":"Economic Issues",
+  "环境议题":"Environmental Issues",
+  "健康议题":"Health Issues",
+  "媒介制度与平台治理":"Media Systems",
+  "政治议题":"Political Issues",
+  "宗教议题":"Religious Issues",
+  "科技议题":"Technological Issues",
+  "传播模式与行为":"Communication Behaviors",
+  "其他议题":"Other Issues",
+  "未分类":"Uncategorized"
+};
+const DEF_FIELD_LABEL_MAP = {
+  "广告学":"Advertising",
+  "传播心理学":"Communication & Psychology",
+  "传播研究方法":"Communication Research Methods",
+  "传播伦理":"Communication Ethics",
+  "健康传播":"Health Communications",
+  "跨文化传播":"Intercultural Communications",
+  "人际传播":"Interpersonal Communications",
+  "新闻学":"Journalism",
+  "法律与政策":"Law & Policy",
+  "大众传播":"Mass Communication",
+  "媒介效果":"Media Effects",
+  "媒介史":"Media History",
+  "媒介产业":"Media Industries",
+  "媒介生产与传播":"Media Production & Distribution",
+  "媒介技术":"Media Technology",
+  "媒介理论":"Media Theory",
+  "组织传播":"Organizational Communications",
+  "政治传播":"Political Communications",
+  "公共关系":"Public Relations",
+  "科学传播":"Science Communications",
+  "言语传播":"Speech Communications",
+  "其他领域":"Others",
+  "未分类":"Uncategorized"
+};
+const LABEL_MAPPING_STATE={ topic:[], field:[] };
+let LABEL_MAPPING_DIRTY=false;
 
 /* ===================== 配置加载 ===================== */
 async function fetchFrontendConfig(){
@@ -1653,11 +1756,13 @@ async function fetchFrontendConfig(){
       SAMPLING_DEFAULT_RATE = 0.03;
     }
     qs('app_ver').textContent="v"+(j.app_version||"");
+    applyLabelMappingConfig(j.label_mapping||{}, j.label_mapping_defaults||{});
   }catch(e){
     ADJ_TOPIC_COL="研究主题（议题）分类_调整";
     ADJ_FIELD_COL="研究领域分类_调整";
     TOPIC_LIST=[...DEF_TOPICS]; FIELD_LIST=[...DEF_FIELDS];
     SAMPLING_DEFAULT_RATE = 0.03;
+    applyLabelMappingConfig({ topic:DEF_TOPIC_LABEL_MAP, field:DEF_FIELD_LABEL_MAP }, { topic:DEF_TOPIC_LABEL_MAP, field:DEF_FIELD_LABEL_MAP });
   }
   updateSamplingDefaultRateHint();
   setBlacklistSelections(TOPIC_BLACKLIST, FIELD_BLACKLIST);
@@ -1692,6 +1797,335 @@ function setBlacklistSelections(topicList=[], fieldList=[]){
   TOPIC_BLACKLIST = Array.isArray(topicList)?topicList.filter(it=>TOPIC_LIST.includes(it)):[];
   FIELD_BLACKLIST = Array.isArray(fieldList)?fieldList.filter(it=>FIELD_LIST.includes(it)):[];
   renderBlacklistOptions(TOPIC_BLACKLIST, FIELD_BLACKLIST);
+}
+
+/* ===================== 标签映射配置 ===================== */
+function sanitizeLabelMappingObject(raw){
+  const result={};
+  if(!raw) return result;
+  let entries=[];
+  if(raw instanceof Map){
+    entries=Array.from(raw.entries());
+  }else if(Array.isArray(raw)){
+    entries=raw;
+  }else if(typeof raw==='object'){
+    entries=Object.entries(raw);
+  }
+  entries.forEach(entry=>{
+    if(!entry) return;
+    const keyRaw = Array.isArray(entry) ? entry[0] : entry.key ?? entry.label ?? entry.name;
+    const valueRaw = Array.isArray(entry) ? entry[1] : entry.value ?? entry.display ?? entry.display_label ?? entry.displayLabel ?? entry.text;
+    const key = String(keyRaw??'').trim();
+    if(!key) return;
+    const value = valueRaw===undefined || valueRaw===null ? '' : String(valueRaw).trim();
+    result[key]=value;
+  });
+  return result;
+}
+
+function createLabelMappingEntry(kind, label, display, options={}){
+  return {
+    id:`${kind}_${Math.random().toString(36).slice(2,10)}_${Date.now().toString(36)}`,
+    label:typeof label==='string'?label.trim(): (label??'').toString().trim(),
+    display:typeof display==='string'?display.trim(): (display??'').toString().trim(),
+    isDefault:!!options.isDefault,
+    locked:!!options.locked
+  };
+}
+
+function sortLabelMappingState(kind){
+  const list=LABEL_MAPPING_STATE[kind];
+  if(!Array.isArray(list)) return;
+  list.sort((a,b)=>{
+    if(!!a.isDefault !== !!b.isDefault){ return a.isDefault? -1 : 1; }
+    const hasLabelA=!!(a.label&&a.label.trim());
+    const hasLabelB=!!(b.label&&b.label.trim());
+    if(hasLabelA!==hasLabelB){ return hasLabelA? -1 : 1; }
+    const labelA=(a.label||'').trim();
+    const labelB=(b.label||'').trim();
+    return labelA.localeCompare(labelB,'zh-Hans-CN',{numeric:true,sensitivity:'base'});
+  });
+}
+
+function rebuildLabelMappingMaps(){
+  ['topic','field'].forEach(kind=>{
+    const map=LABEL_MAPPING[kind];
+    if(map instanceof Map){ map.clear(); }
+    else{ LABEL_MAPPING[kind]=new Map(); }
+    LABEL_MAPPING_STATE[kind].forEach(entry=>{
+      const label=(entry.label||'').trim();
+      if(!label) return;
+      const display=(entry.display||'').trim();
+      LABEL_MAPPING[kind].set(label, display);
+    });
+  });
+}
+
+function setLabelMappingHint(text='', tone='info'){
+  const hint=document.getElementById('label_mapping_hint');
+  if(!hint) return;
+  const classes=['text-slate-500','text-red-600','text-emerald-600'];
+  classes.forEach(cls=>hint.classList.remove(cls));
+  if(tone==='error'){ hint.classList.add('text-red-600'); }
+  else if(tone==='success'){ hint.classList.add('text-emerald-600'); }
+  else { hint.classList.add('text-slate-500'); }
+  hint.textContent=text||'';
+}
+
+function markLabelMappingDirty(dirty, message=''){
+  LABEL_MAPPING_DIRTY=!!dirty;
+  if(dirty){
+    setLabelMappingHint(message||'有未保存的映射修改','error');
+  }else{
+    setLabelMappingHint(message||'', message? 'success':'info');
+    if(message){
+      setTimeout(()=>{ if(!LABEL_MAPPING_DIRTY) setLabelMappingHint('', 'info'); }, 3200);
+    }
+  }
+}
+
+function findLabelMappingEntry(kind, entryId){
+  return LABEL_MAPPING_STATE[kind]?.find(entry=>entry.id===entryId) || null;
+}
+
+function updateLabelMappingSource(kind, entryId, value, inputEl, titleEl){
+  const entry=findLabelMappingEntry(kind, entryId);
+  if(!entry || entry.locked) return;
+  const nextLabel=String(value||'').trim();
+  if(nextLabel){
+    const duplicate=LABEL_MAPPING_STATE[kind].some(item=>item!==entry && item.label===nextLabel);
+    if(duplicate){
+      if(inputEl){ inputEl.value=entry.label; }
+      showToast(`分类「${nextLabel}」已存在，请勿重复添加。`,'warning');
+      return;
+    }
+  }
+  const prevLabel=entry.label;
+  entry.label=nextLabel;
+  if(titleEl){ titleEl.textContent=nextLabel||'（未命名）'; }
+  if(prevLabel){ LABEL_MAPPING[kind].delete(prevLabel); }
+  if(nextLabel){ LABEL_MAPPING[kind].set(nextLabel, (entry.display||'').trim()); }
+  markLabelMappingDirty(true);
+}
+
+function updateLabelMappingDisplay(kind, entryId, value){
+  const entry=findLabelMappingEntry(kind, entryId);
+  if(!entry) return;
+  entry.display=String(value??'').trim();
+  const label=(entry.label||'').trim();
+  if(label){ LABEL_MAPPING[kind].set(label, entry.display); }
+  markLabelMappingDirty(true);
+}
+
+function removeLabelMappingEntry(kind, entryId){
+  const list=LABEL_MAPPING_STATE[kind];
+  if(!Array.isArray(list)) return;
+  const idx=list.findIndex(entry=>entry.id===entryId);
+  if(idx===-1) return;
+  const entry=list[idx];
+  if(entry.locked) return;
+  if(entry.label){ LABEL_MAPPING[kind].delete(entry.label); }
+  list.splice(idx,1);
+  markLabelMappingDirty(true);
+  renderLabelMappingTable(kind);
+}
+
+function focusLabelMappingInput(kind, entryId, role='display'){
+  const container=document.getElementById(kind==='field'?'field_label_table':'topic_label_table');
+  if(!container) return;
+  const row=container.querySelector(`[data-entry-id="${CSS.escape(entryId)}"]`);
+  if(!row) return;
+  const target=row.querySelector(role==='source'?"input[data-role='source']":"input[data-role='display']");
+  if(target){ target.focus(); target.select(); }
+}
+
+function renderLabelMappingTable(kind){
+  const container=document.getElementById(kind==='field'?'field_label_table':'topic_label_table');
+  if(!container) return;
+  container.innerHTML='';
+  const entries=LABEL_MAPPING_STATE[kind]||[];
+  if(!entries.length){
+    const empty=document.createElement('div');
+    empty.className='label-mapping-empty';
+    empty.textContent='暂无映射，点击“新增条目”添加';
+    container.appendChild(empty);
+    return;
+  }
+  entries.forEach(entry=>{
+    const row=document.createElement('div');
+    row.className='label-mapping-row';
+    row.dataset.entryId=entry.id;
+    const header=document.createElement('div');
+    header.className='label-mapping-label';
+    const title=document.createElement('span');
+    title.className='label-mapping-title';
+    title.textContent=entry.label||'（未命名）';
+    header.appendChild(title);
+    if(entry.locked){
+      const badge=document.createElement('span');
+      badge.className='text-xs text-slate-400';
+      badge.textContent='默认';
+      header.appendChild(badge);
+    }else{
+      const removeBtn=document.createElement('button');
+      removeBtn.type='button';
+      removeBtn.className='label-mapping-remove';
+      removeBtn.textContent='移除';
+      removeBtn.addEventListener('click',()=>removeLabelMappingEntry(kind, entry.id));
+      header.appendChild(removeBtn);
+    }
+    row.appendChild(header);
+    if(!entry.locked){
+      const sourceWrap=document.createElement('div');
+      sourceWrap.className='label-mapping-input';
+      const sourceInput=document.createElement('input');
+      sourceInput.type='text';
+      sourceInput.placeholder='中文分类名称';
+      sourceInput.value=entry.label||'';
+      sourceInput.dataset.role='source';
+      sourceInput.addEventListener('change',e=>updateLabelMappingSource(kind, entry.id, e.target.value, sourceInput, title));
+      sourceWrap.appendChild(sourceInput);
+      row.appendChild(sourceWrap);
+    }
+    const displayWrap=document.createElement('div');
+    displayWrap.className='label-mapping-input';
+    const displayInput=document.createElement('input');
+    displayInput.type='text';
+    const defaultPlaceholder=LABEL_MAPPING_DEFAULTS[kind].get(entry.label||'')||'英文展示名称';
+    displayInput.placeholder=defaultPlaceholder||'英文展示名称';
+    displayInput.value=entry.display||'';
+    displayInput.dataset.role='display';
+    displayInput.addEventListener('input',e=>updateLabelMappingDisplay(kind, entry.id, e.target.value));
+    displayWrap.appendChild(displayInput);
+    row.appendChild(displayWrap);
+    container.appendChild(row);
+  });
+}
+
+function renderLabelMappingTables(){
+  renderLabelMappingTable('topic');
+  renderLabelMappingTable('field');
+}
+
+function addLabelMappingRow(kind){
+  const entry=createLabelMappingEntry(kind,'','', { isDefault:false, locked:false });
+  LABEL_MAPPING_STATE[kind].push(entry);
+  renderLabelMappingTable(kind);
+  markLabelMappingDirty(true);
+  focusLabelMappingInput(kind, entry.id, 'source');
+}
+
+function applyLabelMappingConfig(mappingPayload={}, defaultPayload={}){
+  ['topic','field'].forEach(kind=>{
+    const defaultsRaw = sanitizeLabelMappingObject(defaultPayload[kind]);
+    const fallbackDefaults = kind==='field'? DEF_FIELD_LABEL_MAP : DEF_TOPIC_LABEL_MAP;
+    const defaultsSource = Object.keys(defaultsRaw).length ? defaultsRaw : fallbackDefaults;
+    LABEL_MAPPING_DEFAULTS[kind].clear();
+    Object.entries(defaultsSource).forEach(([label,value])=>{
+      const key=String(label||'').trim();
+      if(!key) return;
+      const text=value===undefined||value===null?'':String(value).trim();
+      LABEL_MAPPING_DEFAULTS[kind].set(key,text);
+    });
+    const finalRaw = sanitizeLabelMappingObject(mappingPayload[kind]);
+    const mergedEntries={};
+    LABEL_MAPPING_DEFAULTS[kind].forEach((value,label)=>{ mergedEntries[label]=value; });
+    Object.entries(finalRaw).forEach(([label,value])=>{
+      const key=String(label||'').trim();
+      if(!key) return;
+      const text=value===undefined||value===null?'':String(value).trim();
+      mergedEntries[key]=text;
+    });
+    LABEL_MAPPING_STATE[kind]=Object.entries(mergedEntries).map(([label,value])=>{
+      const isDefault=LABEL_MAPPING_DEFAULTS[kind].has(label);
+      return createLabelMappingEntry(kind,label,value,{ isDefault, locked:isDefault });
+    });
+    sortLabelMappingState(kind);
+  });
+  rebuildLabelMappingMaps();
+  renderLabelMappingTables();
+  markLabelMappingDirty(false);
+}
+
+function ingestLabelMappingCandidates(kind, labels){
+  if(!Array.isArray(labels) || !labels.length) return false;
+  const existing=new Set((LABEL_MAPPING_STATE[kind]||[]).map(entry=>entry.label).filter(Boolean));
+  let added=false;
+  labels.forEach(label=>{
+    const key=String(label||'').trim();
+    if(!key || existing.has(key)) return;
+    const defaultDisplay=LABEL_MAPPING_DEFAULTS[kind].get(key)||'';
+    const entry=createLabelMappingEntry(kind, key, LABEL_MAPPING[kind].get(key)||defaultDisplay, { isDefault: LABEL_MAPPING_DEFAULTS[kind].has(key), locked: LABEL_MAPPING_DEFAULTS[kind].has(key) });
+    LABEL_MAPPING_STATE[kind].push(entry);
+    existing.add(key);
+    if(!LABEL_MAPPING[kind].has(key)){
+      LABEL_MAPPING[kind].set(key, entry.display||'');
+    }
+    added=true;
+  });
+  if(added){
+    sortLabelMappingState(kind);
+    renderLabelMappingTable(kind);
+  }
+  return added;
+}
+
+function buildLabelMappingOverrides(kind){
+  const defaults=LABEL_MAPPING_DEFAULTS[kind];
+  const overrides={};
+  const errors=[];
+  const seen=new Set();
+  LABEL_MAPPING_STATE[kind].forEach(entry=>{
+    const label=String(entry.label||'').trim();
+    const display=String(entry.display||'').trim();
+    if(!label){
+      if(display){ errors.push('存在缺少中文分类名称的映射条目'); }
+      return;
+    }
+    if(seen.has(label)){
+      errors.push(`分类「${label}」出现重复，请检查后再保存`);
+      return;
+    }
+    seen.add(label);
+    const hasDefault=defaults.has(label);
+    const defaultValue=hasDefault ? (defaults.get(label)||'').trim() : '';
+    if(!hasDefault || display!==defaultValue){
+      overrides[label]=display;
+    }
+  });
+  return { overrides, errors };
+}
+
+async function saveLabelMapping(){
+  const topicResult=buildLabelMappingOverrides('topic');
+  const fieldResult=buildLabelMappingOverrides('field');
+  const allErrors=[...topicResult.errors,...fieldResult.errors];
+  if(allErrors.length){
+    setLabelMappingHint(allErrors[0],'error');
+    showToast(allErrors[0],'warning');
+    return;
+  }
+  setLabelMappingHint('保存中…','info');
+  try{
+    const payload={ topic:topicResult.overrides, field:fieldResult.overrides };
+    const r=await fetch('/label_mappings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(!r.ok){
+      const text=await r.text();
+      throw new Error(text||'保存失败');
+    }
+    const data=await r.json();
+    applyLabelMappingConfig(data.label_mapping||{}, data.label_mapping_defaults||{});
+    setLabelMappingHint('映射已保存','success');
+    if(SESSION_ID){
+      try{ await refreshStats(); }
+      catch(e){ console.error('刷新统计失败', e); }
+    }
+  }catch(e){
+    markLabelMappingDirty(true);
+    const msg=e?.message||e||'保存失败';
+    setLabelMappingHint(`保存失败：${msg}`,'error');
+    showToast(`保存失败：${msg}`,'error');
+  }
 }
 
 
@@ -2271,6 +2705,8 @@ function renderChips(elId,primaryRaw,targetKey,options={}){
     const overlayItem=overlayMap.get(label);
     const btn=document.createElement('button');
     btn.className='chip text-sm';
+    const kind=targetKey.startsWith('field')?'field':'topic';
+    const displayLabel=resolveDisplayText(label, entry.display_label, kind);
     const primaryParts=[`${primaryPrefix}${safeNumber(primaryItem?.count??0)}`];
     const primaryPercent=formatPercentText(primaryItem?.percent);
     if(primaryPercent) primaryParts.push(primaryPercent);
@@ -2283,7 +2719,7 @@ function renderChips(elId,primaryRaw,targetKey,options={}){
         displayParts.push(overlayParts.join(' | '));
       }
     }
-    btn.textContent=`${label}（${displayParts.join(' · ')}）`;
+    btn.textContent=`${displayLabel}（${displayParts.join(' · ')}）`;
     btn.onclick=()=>quickFilter(targetKey,label);
     el.appendChild(btn);
   });
@@ -2336,6 +2772,7 @@ function renderTreemap(containerId,primaryRaw,key,options={},internal=false){
     return;
   }
   const optionClone=cloneTreemapOptions(options);
+  const configEntry=Object.values(CATEGORY_CHART_CONFIG).find(cfg=>cfg.treemapKey===key) || null;
   const primaryClone=cloneStatList(primaryRaw);
   if(!internal){
     TREEMAP_STATE[key]={containerId, primaryRaw:primaryClone, options:optionClone};
@@ -2370,7 +2807,7 @@ function renderTreemap(containerId,primaryRaw,key,options={},internal=false){
     }
   });
   if(otherPrimary>0){
-    limitedEntries=[...limitedEntries,{label:'其他',primary:otherPrimary,overlay:otherOverlay,isOther:true,order:entries.length+1}];
+    limitedEntries=[...limitedEntries,{label:'其他',display_label:'Other',primary:otherPrimary,overlay:otherOverlay,isOther:true,order:entries.length+1}];
   }
   if(!limitedEntries.length){
     destroyTreemap(key);
@@ -2391,13 +2828,16 @@ function renderTreemap(containerId,primaryRaw,key,options={},internal=false){
     return;
   }
   const rootLabel=optionClone.rootLabel||optionClone.primaryLabel||'分类';
+  const inferredKind=optionClone.kind || configEntry?.kind || (String(key||'').includes('field')?'field':'topic');
   const labels=[rootLabel];
+  const ids=['root'];
   const parents=[''];
   const values=[displayedTotal];
   const text=[''];
   const hovers=[''];
   limitedEntries.forEach((entry,idx)=>{
     const label=entry.label;
+    const displayLabel=resolveDisplayText(label, entry.display_label, inferredKind);
     const primaryValue=safeNumber(entry.primary);
     const overlayValue=safeNumber(entry.overlay);
     const primaryPercentRaw=primaryMap.get(label)?.percent;
@@ -2410,13 +2850,14 @@ function renderTreemap(containerId,primaryRaw,key,options={},internal=false){
     if(!overlayPercent && overlayTotal>0 && overlayValue>0){
       overlayPercent=`${((overlayValue/overlayTotal)*100).toFixed(2)}%`;
     }
-    labels.push(label);
+    labels.push(displayLabel);
+    ids.push(label);
     parents.push(rootLabel);
     values.push(primaryValue);
     const displayParts=[String(primaryValue)];
     if(primaryPercent) displayParts.push(primaryPercent);
-    text.push(`${label}<br>${displayParts.join(' · ')}`);
-    const hoverLines=[`<b>${label}</b>`, `${optionClone.primaryLabel||'数量'}：${primaryValue}${primaryPercent?`（${primaryPercent}）`:''}`];
+    text.push(`${escapeHtml(displayLabel)}<br>${displayParts.join(' · ')}`);
+    const hoverLines=[`<b>${escapeHtml(displayLabel)}</b>`, `${optionClone.primaryLabel||'数量'}：${primaryValue}${primaryPercent?`（${primaryPercent}）`:''}`];
     if(hasOverlay && (overlayValue>0 || overlayPercent)){
       hoverLines.push(`${optionClone.overlayLabel||'对比'}：${overlayValue}${overlayPercent?`（${overlayPercent}）`:''}`);
     }
@@ -2430,6 +2871,7 @@ function renderTreemap(containerId,primaryRaw,key,options={},internal=false){
   const trace={
     type:'treemap',
     labels,
+    ids,
     parents,
     values,
     branchvalues:'total',
@@ -2512,6 +2954,7 @@ function renderBarChart(containerId,primaryRaw,key,options={},internal=false){
     return;
   }
   const optionClone=cloneTreemapOptions(options);
+  const configEntry=Object.values(CATEGORY_CHART_CONFIG).find(cfg=>cfg.barKey===key) || null;
   const primaryClone=cloneStatList(primaryRaw);
   if(!internal){
     BAR_CHART_STATE[key]={containerId, primaryRaw:primaryClone, options:optionClone};
@@ -2545,7 +2988,7 @@ function renderBarChart(containerId,primaryRaw,key,options={},internal=false){
     }
   });
   if(otherPrimary>0){
-    limitedEntries=[...limitedEntries,{label:'其他',primary:otherPrimary,overlay:otherOverlay,isOther:true,order:entries.length+1}];
+    limitedEntries=[...limitedEntries,{label:'其他',display_label:'Other',primary:otherPrimary,overlay:otherOverlay,isOther:true,order:entries.length+1}];
   }
   if(!limitedEntries.length){
     destroyBarChart(key);
@@ -2564,12 +3007,15 @@ function renderBarChart(containerId,primaryRaw,key,options={},internal=false){
     if(Math.abs(diff)>0.0001) return diff;
     return a.order-b.order;
   });
-  const yLabels=sortedEntries.map(entry=>entry.label);
+  const inferredKind=optionClone.kind || configEntry?.kind || (String(key||'').includes('field')?'field':'topic');
+  const rawLabels=sortedEntries.map(entry=>entry.label);
+  const displayLabels=sortedEntries.map(entry=>resolveDisplayText(entry.label, entry.display_label, inferredKind));
+  const yLabels=displayLabels;
   const primaryValues=sortedEntries.map(entry=>safeNumber(entry.primary));
   const overlayValues=sortedEntries.map(entry=>safeNumber(entry.overlay));
   const colors=sortedEntries.map((entry,idx)=>entry.isOther?'rgba(148,163,184,0.45)':TREEMAP_COLORS[idx%TREEMAP_COLORS.length]);
-  const primaryPercents=sortedEntries.map(entry=>{
-    const label=entry.label;
+  const primaryPercents=sortedEntries.map((entry,idx)=>{
+    const label=rawLabels[idx];
     const value=safeNumber(entry.primary);
     const primaryPercentRaw=primaryMap.get(label)?.percent;
     let percent=formatPercentText(primaryPercentRaw);
@@ -2578,8 +3024,8 @@ function renderBarChart(containerId,primaryRaw,key,options={},internal=false){
     }
     return percent;
   });
-  const overlayPercents=sortedEntries.map(entry=>{
-    const label=entry.label;
+  const overlayPercents=sortedEntries.map((entry,idx)=>{
+    const label=rawLabels[idx];
     const value=safeNumber(entry.overlay);
     const overlayPercentRaw=overlayMap.get(label)?.percent;
     let percent=formatPercentText(overlayPercentRaw);
@@ -2589,10 +3035,11 @@ function renderBarChart(containerId,primaryRaw,key,options={},internal=false){
     return percent;
   });
   const hoverTexts=sortedEntries.map((entry,idx)=>{
-    const label=entry.label;
+    const label=rawLabels[idx];
+    const displayLabel=displayLabels[idx];
     const primaryValue=primaryValues[idx];
     const overlayValue=overlayValues[idx];
-    const lines=[`<b>${label}</b>`, `${optionClone.primaryLabel||'数量'}：${primaryValue}${primaryPercents[idx]?`（${primaryPercents[idx]}）`:''}`];
+    const lines=[`<b>${escapeHtml(displayLabel)}</b>`, `${optionClone.primaryLabel||'数量'}：${primaryValue}${primaryPercents[idx]?`（${primaryPercents[idx]}）`:''}`];
     if(hasOverlay && (overlayValue>0 || overlayPercents[idx])){
       lines.push(`${optionClone.overlayLabel||'对比'}：${overlayValue}${overlayPercents[idx]?`（${overlayPercents[idx]}）`:''}`);
     }
@@ -2625,9 +3072,9 @@ function renderBarChart(containerId,primaryRaw,key,options={},internal=false){
   const traces=[primaryTrace];
   if(hasOverlay){
     const overlayHover=sortedEntries.map((entry,idx)=>{
-      const label=entry.label;
+      const displayLabel=displayLabels[idx];
       const overlayValue=overlayValues[idx];
-      const lines=[`<b>${label}</b>`, `${optionClone.overlayLabel||'对比'}：${overlayValue}${overlayPercents[idx]?`（${overlayPercents[idx]}）`:''}`];
+      const lines=[`<b>${escapeHtml(displayLabel)}</b>`, `${optionClone.overlayLabel||'对比'}：${overlayValue}${overlayPercents[idx]?`（${overlayPercents[idx]}）`:''}`];
       if(primaryValues[idx]>0 || primaryPercents[idx]){
         lines.push(`${optionClone.primaryLabel||'数量'}：${primaryValues[idx]}${primaryPercents[idx]?`（${primaryPercents[idx]}）`:''}`);
       }
@@ -2717,11 +3164,12 @@ function setJournalSourceAvailability(available){
   }
 }
 
-function normalizeJournalData(rawList){
+function normalizeJournalData(rawList, kind='topic'){
   if(!Array.isArray(rawList)) return [];
   return rawList.map((entry, idx)=>{
     const categoryRaw=entry?.category;
     const category=String(categoryRaw??`分类 ${idx+1}`).trim()||`分类 ${idx+1}`;
+    const displayLabel=resolveDisplayText(category, entry?.category_display??entry?.categoryDisplay, kind);
     const total=safeNumber(entry?.total);
     const uniqueRaw = entry?.unique_sources ?? entry?.uniqueSources ?? entry?.unique;
     const unique=Math.max(0, safeNumber(uniqueRaw));
@@ -2735,13 +3183,13 @@ function normalizeJournalData(rawList){
       return { label, count, percent };
     }).filter(Boolean);
     if(!items.length) return null;
-    return { category, total, unique, items };
+    return { category, category_display:displayLabel, total, unique, items };
   }).filter(Boolean);
 }
 
 function setJournalData(dim, rawList){
   const key = dim==='field' ? 'field' : 'topic';
-  JOURNAL_DATA[key]=normalizeJournalData(rawList);
+  JOURNAL_DATA[key]=normalizeJournalData(rawList, key);
 }
 
 function clearJournalChartsForDim(dim){
@@ -2881,7 +3329,7 @@ function renderJournalPanel(dim){
   }
   const cards=data.map((entry,idx)=>{
     const chartId=`journal_chart_${key}_${idx}`;
-    const category=escapeHtml(entry.category||`分类 ${idx+1}`);
+    const category=escapeHtml(entry.category_display||entry.category||`分类 ${idx+1}`);
     const metaParts=[];
     if(entry.total>0){ metaParts.push(`共 ${numberFormatter.format(entry.total)} 篇`); }
     if(entry.unique>0){ metaParts.push(`期刊数 ${numberFormatter.format(entry.unique)}`); }
@@ -3271,7 +3719,8 @@ function renderTimelineStackChart(timeline){
       return;
     }
     const color = TIMELINE_STACK_COLORS[idx % TIMELINE_STACK_COLORS.length];
-    const yLabel = serie.label || `分类 ${idx+1}`;
+    const yLabelRaw = serie.label || `分类 ${idx+1}`;
+    const yDisplay = resolveDisplayText(yLabelRaw, serie.display_label, stackKey==='stack_field'?'field':'topic');
     const markerSizes = points.map(point=>{
       const size = Math.sqrt(Math.max(point.percent, 0));
       return Math.max(12, Math.min(58, size*6));
@@ -3286,9 +3735,9 @@ function renderTimelineStackChart(timeline){
     traces.push({
       type:'scatter',
       mode:'markers+text',
-      name:yLabel,
+      name:yDisplay,
       x:points.map(point=>point.label),
-      y:points.map(()=>yLabel),
+      y:points.map(()=>yDisplay),
       marker:{
         size:markerSizes,
         color,
@@ -3658,7 +4107,7 @@ async function renderTopicVizKeywords(dim, category){
     return;
   }
 
-  const labelText=(category?.label||'未分类').toString();
+  const displayLabel=resolveDisplayText(category?.label||'', getDisplayFromSource(category), dim==='field'?'field':'topic');
   chartEl.innerHTML='';
 
   const imageWrapper=document.createElement('div');
@@ -3667,7 +4116,7 @@ async function renderTopicVizKeywords(dim, category){
   img.className='topic-viz-keyword-image';
   img.loading='lazy';
   img.src=pngUrl;
-  img.alt=`${labelText} keyword frequency chart`;
+  img.alt=`${displayLabel||'Unmapped'} keyword frequency chart`;
   imageWrapper.appendChild(img);
   chartEl.appendChild(imageWrapper);
 
@@ -3779,6 +4228,8 @@ function renderTopicVizScatter(dim){
   const labelSet = new Set(sortedIndices.slice(0,labelCount));
   const showClusters = clusterCount>1;
   const counts = points.map(p=>Math.max(0, safeNumber(p?.count||0)));
+  const kind = dim==='field' ? 'field' : 'topic';
+  const displayLabels = points.map(p=>resolveDisplayText(p?.label||'', p?.display_label||getDisplayFromSource(p), kind));
   const sqrtCounts = counts.map(cnt=>Math.sqrt(cnt));
   const MIN_MARKER_SIZE = 12;
   const MAX_MARKER_SIZE = 64;
@@ -3799,7 +4250,7 @@ function renderTopicVizScatter(dim){
     mode: points.length<=labelCount ? 'markers+text' : 'markers',
     x: points.map(p=>safeNumber(p?.x||0)),
     y: points.map(p=>safeNumber(p?.y||0)),
-    text: points.map((p,idx)=> labelSet.has(idx) ? (p?.label||'') : ''),
+    text: points.map((p,idx)=> labelSet.has(idx) ? displayLabels[idx] : ''),
     textposition:'top center',
     marker:{
       size: markerSizes,
@@ -3811,8 +4262,8 @@ function renderTopicVizScatter(dim){
       opacity:0.9,
       line:{width:1,color:'rgba(15,23,42,0.4)'}
     },
-    hovertemplate: points.map(p=>{
-      const label = escapeHtml(p?.label||'未命名');
+    hovertemplate: points.map((p,idx)=>{
+      const label = escapeHtml(displayLabels[idx]||'Unmapped');
       const cnt = safeNumber(p?.count||0);
       const cluster = p?.cluster;
       const clusterText = showClusters ? `<br>簇：${cluster}` : '';
@@ -3867,7 +4318,8 @@ function renderTopicVizList(dim){
     btn.className='topic-viz-item';
     btn.dataset.topicvizItem=dim;
     btn.dataset.label=cat.label||'';
-    btn.innerHTML=`<span class="truncate flex-1 text-left">${escapeHtml(cat.label||'未分类')}</span><span class="topic-viz-item-count">${safeNumber(cat.count||0)}</span>`;
+    const displayLabel=resolveDisplayText(cat.label||'', getDisplayFromSource(cat), dim==='field'?'field':'topic');
+    btn.innerHTML=`<span class="truncate flex-1 text-left">${escapeHtml(displayLabel)}</span><span class="topic-viz-item-count">${safeNumber(cat.count||0)}</span>`;
     btn.addEventListener('click',()=>selectTopicVizCategory(dim, cat.label));
     listEl.appendChild(btn);
   });
@@ -3899,7 +4351,8 @@ function renderWordCloudList(dim){
     btn.className='word-cloud-item';
     btn.dataset.wordcloudDim=dim;
     btn.dataset.label=cat.label||'';
-    btn.innerHTML=`<span class="word-cloud-item-label">${escapeHtml(cat.label||'未分类')}</span><span class="word-cloud-item-count">${safeNumber(cat.count||0)}</span>`;
+    const displayLabel=resolveDisplayText(cat.label||'', getDisplayFromSource(cat), dim==='field'?'field':'topic');
+    btn.innerHTML=`<span class="word-cloud-item-label">${escapeHtml(displayLabel)}</span><span class="word-cloud-item-count">${safeNumber(cat.count||0)}</span>`;
     btn.addEventListener('click',()=>openWordCloudDialog(dim, cat.label));
     list.appendChild(btn);
   });
@@ -4012,8 +4465,9 @@ async function renderWordCloudVisual(dim, category){
     return;
   }
   if(imgEl && pngUrl){
+    const displayLabel=resolveDisplayText(category?.label||'', getDisplayFromSource(category), dim==='field'?'field':'topic');
     imgEl.src=pngUrl;
-    imgEl.alt=`${category.label||'词云'} 词云图`;
+    imgEl.alt=`${displayLabel||'Unmapped'} word cloud`;
     imgEl.classList.remove('hidden');
   }
   if(msgEl){
@@ -4068,8 +4522,8 @@ function openWordCloudDialog(dim, label){
   }
   const titleEl=qs('word_cloud_dialog_title');
   if(titleEl){
-    const labelText=(target?.label||'未分类').toString();
-    titleEl.textContent=`${labelText} · ${cfg.label}`;
+    const displayLabel=resolveDisplayText(target?.label||'', getDisplayFromSource(target), dim==='field'?'field':'topic');
+    titleEl.textContent=`${displayLabel} · ${cfg.label}`;
   }
   const metaEl=qs('word_cloud_dialog_meta');
   if(metaEl){
@@ -4224,8 +4678,8 @@ async function refreshStats(){
   const d=await r.json();
   renderChips("chips_topic_adj", d.topic_adj, "topic_adj", { primaryLabel:'篇数' });
   renderChips("chips_field_adj", d.field_adj, "field_adj", { primaryLabel:'篇数' });
-  setCategoryData('topic_adj', d.topic_adj, { primaryLabel:'篇数', rootLabel:'研究主题（调整）', limit:24 });
-  setCategoryData('field_adj', d.field_adj, { primaryLabel:'篇数', rootLabel:'研究领域（调整）', limit:24 });
+  setCategoryData('topic_adj', d.topic_adj, { primaryLabel:'篇数', rootLabel:'研究主题（调整）', limit:24, kind:'topic' });
+  setCategoryData('field_adj', d.field_adj, { primaryLabel:'篇数', rootLabel:'研究领域（调整）', limit:24, kind:'field' });
   qs('total_msg').textContent=`行数：${d.total}`;
   renderTimelineCharts(d.timeline);
   setJournalSourceAvailability(!!d.journal_source_available);
@@ -4235,6 +4689,8 @@ async function refreshStats(){
   const collectLabels=arr=>Array.isArray(arr)?arr.map(x=>x.label).filter(Boolean):[];
   const topicLabels=[...collectLabels(d.topic_orig), ...collectLabels(d.topic_adj)];
   const fieldLabels=[...collectLabels(d.field_orig), ...collectLabels(d.field_adj)];
+  ingestLabelMappingCandidates('topic', topicLabels);
+  ingestLabelMappingCandidates('field', fieldLabels);
   TOPIC_LIST=topicLabels.length?Array.from(new Set(topicLabels)):[...DEF_TOPICS];
   FIELD_LIST=fieldLabels.length?Array.from(new Set(fieldLabels)):[...DEF_FIELDS];
   populateFilterOptions();
@@ -5174,6 +5630,9 @@ function bindEvents(){
   qs('btn_save_session').onclick=saveSession;
   qs('btn_load_session').onclick=openLoadDialog;
   qs('btn_save_excel').onclick=saveExcelServer;
+  const btnAddTopicMapping=qs('btn_add_topic_mapping'); if(btnAddTopicMapping) btnAddTopicMapping.onclick=()=>addLabelMappingRow('topic');
+  const btnAddFieldMapping=qs('btn_add_field_mapping'); if(btnAddFieldMapping) btnAddFieldMapping.onclick=()=>addLabelMappingRow('field');
+  const btnSaveLabelMapping=qs('btn_save_label_mapping'); if(btnSaveLabelMapping) btnSaveLabelMapping.onclick=saveLabelMapping;
   const btnExportBatch=qs('btn_export_batch'); if(btnExportBatch) btnExportBatch.onclick=openBatchExportDialog;
   const dlgExportBatch=qs('dlg_export_batch');
   if(dlgExportBatch){
