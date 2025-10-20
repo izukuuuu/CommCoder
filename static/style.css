@@ -2,6 +2,8 @@
 .cell-diff-field { background-color:#CDEAFE; } /* 蓝：领域调整变更 */
 .cell-outlier    { background-color:#FFDAD6; } /* 淡红：离群 */
 .chip{ padding:2px 8px; border-radius:9999px; background:#f1f5f9; }
+.action-btn.is-disabled,
+button.is-disabled{ cursor:not-allowed; }
 .chip:hover{ background:#e2e8f0; }
 .treemap-box{ position:relative; min-height:260px; height:100%; width:100%; max-width:100%; overflow:hidden; }
 @media (max-width:768px){ .treemap-box{ min-height:220px; } }
