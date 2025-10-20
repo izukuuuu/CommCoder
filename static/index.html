@@ -467,82 +467,26 @@
               <h3 class="font-semibold">分类概览（点击类别即可筛选）</h3>
               <div class="text-sm text-gray-500" id="total_msg">—</div>
             </div>
-            <div class="vis-tab-toggle" role="tablist">
-              <button id="btn_vis_tab_orig" class="vis-tab-btn" role="tab" aria-selected="true" data-vis-tab="orig">原始分类</button>
-              <button id="btn_vis_tab_adj" class="vis-tab-btn" role="tab" aria-selected="false" data-vis-tab="adj">调整后分类</button>
-            </div>
-            <div id="vis_panel_orig" class="vis-tab-panel" data-vis-panel="orig">
-              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="space-y-4">
-                  <div class="flex flex-wrap items-center justify-between gap-2">
-                    <h4 class="text-sm font-semibold">研究主题（原）</h4>
-                    <div class="flex items-center gap-2">
-                      <div class="chart-type-toggle" role="group" aria-label="图表展示方式" data-chart-toggle="topic_orig">
-                        <button type="button" class="chart-type-btn chart-type-btn-active" aria-pressed="true" data-chart-toggle-target="treemap">树状图</button>
-                        <button type="button" class="chart-type-btn" aria-pressed="false" data-chart-toggle-target="bar">条形图</button>
-                      </div>
-                      <button class="text-xs text-sky-700" id="btn_only_other_topic_orig">只看『其他议题』</button>
-                    </div>
-                  </div>
-                  <div id="chips_topic_orig" class="flex flex-wrap gap-2 mt-2"></div>
-                  <div class="space-y-4">
-                    <div id="treemap_topic_orig" class="treemap-box" data-category-chart="topic_orig" data-chart-type="treemap" data-treemap-key="chart_topic_orig"></div>
-                    <div id="barchart_topic_orig" class="bar-chart-box hidden" data-category-chart="topic_orig" data-chart-type="bar" data-bar-key="bar_topic_orig"></div>
-                  </div>
-                </div>
-                <div class="space-y-4">
-                  <div class="flex flex-wrap items-center justify-between gap-2">
-                    <h4 class="text-sm font-semibold">研究领域（原）</h4>
-                    <div class="flex items-center gap-2">
-                      <div class="chart-type-toggle" role="group" aria-label="图表展示方式" data-chart-toggle="field_orig">
-                        <button type="button" class="chart-type-btn chart-type-btn-active" aria-pressed="true" data-chart-toggle-target="treemap">树状图</button>
-                        <button type="button" class="chart-type-btn" aria-pressed="false" data-chart-toggle-target="bar">条形图</button>
-                      </div>
-                      <button class="text-xs text-sky-700" id="btn_only_other_field_orig">只看『其他领域』</button>
-                    </div>
-                  </div>
-                  <div id="chips_field_orig" class="flex flex-wrap gap-2 mt-2"></div>
-                  <div class="space-y-4">
-                    <div id="treemap_field_orig" class="treemap-box" data-category-chart="field_orig" data-chart-type="treemap" data-treemap-key="chart_field_orig"></div>
-                    <div id="barchart_field_orig" class="bar-chart-box hidden" data-category-chart="field_orig" data-chart-type="bar" data-bar-key="bar_field_orig"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div id="vis_panel_adj" class="vis-tab-panel hidden" data-vis-panel="adj">
+            <div id="vis_panel_adj" class="vis-tab-panel" data-vis-panel="adj">
               <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="space-y-4">
                   <div class="flex flex-wrap items-center justify-between gap-2">
                     <h4 class="text-sm font-semibold">研究主题（调整后）</h4>
-                    <div class="flex items-center gap-2">
-                      <div class="chart-type-toggle" role="group" aria-label="图表展示方式" data-chart-toggle="topic_adj">
-                        <button type="button" class="chart-type-btn chart-type-btn-active" aria-pressed="true" data-chart-toggle-target="treemap">树状图</button>
-                        <button type="button" class="chart-type-btn" aria-pressed="false" data-chart-toggle-target="bar">条形图</button>
-                      </div>
-                      <button class="text-xs text-sky-700" id="btn_only_other_topic_adj">只看『其他议题』</button>
-                    </div>
+                    <button class="text-xs text-sky-700" id="btn_only_other_topic_adj">只看『其他议题』</button>
                   </div>
                   <div id="chips_topic_adj" class="flex flex-wrap gap-2 mt-2"></div>
                   <div class="space-y-4">
                     <div id="treemap_topic_adj" class="treemap-box" data-category-chart="topic_adj" data-chart-type="treemap" data-treemap-key="chart_topic_adj"></div>
-                    <div id="barchart_topic_adj" class="bar-chart-box hidden" data-category-chart="topic_adj" data-chart-type="bar" data-bar-key="bar_topic_adj"></div>
                   </div>
                 </div>
                 <div class="space-y-4">
                   <div class="flex flex-wrap items-center justify-between gap-2">
                     <h4 class="text-sm font-semibold">研究领域（调整后）</h4>
-                    <div class="flex items-center gap-2">
-                      <div class="chart-type-toggle" role="group" aria-label="图表展示方式" data-chart-toggle="field_adj">
-                        <button type="button" class="chart-type-btn chart-type-btn-active" aria-pressed="true" data-chart-toggle-target="treemap">树状图</button>
-                        <button type="button" class="chart-type-btn" aria-pressed="false" data-chart-toggle-target="bar">条形图</button>
-                      </div>
-                      <button class="text-xs text-sky-700" id="btn_only_other_field_adj">只看『其他领域』</button>
-                    </div>
+                    <button class="text-xs text-sky-700" id="btn_only_other_field_adj">只看『其他领域』</button>
                   </div>
                   <div id="chips_field_adj" class="flex flex-wrap gap-2 mt-2"></div>
                   <div class="space-y-4">
                     <div id="treemap_field_adj" class="treemap-box" data-category-chart="field_adj" data-chart-type="treemap" data-treemap-key="chart_field_adj"></div>
-                    <div id="barchart_field_adj" class="bar-chart-box hidden" data-category-chart="field_adj" data-chart-type="bar" data-bar-key="bar_field_adj"></div>
                   </div>
                 </div>
               </div>
@@ -933,14 +877,10 @@ let JOURNAL_DIM='topic';
 let JOURNAL_SOURCE_AVAILABLE=true;
 const CATEGORY_DATA={};
 const CATEGORY_VIEW_STATE={
-  topic_orig:'treemap',
-  field_orig:'treemap',
   topic_adj:'treemap',
   field_adj:'treemap'
 };
 const CATEGORY_CHART_CONFIG={
-  topic_orig:{ treemapId:'treemap_topic_orig', treemapKey:'chart_topic_orig', barId:'barchart_topic_orig', barKey:'bar_topic_orig' },
-  field_orig:{ treemapId:'treemap_field_orig', treemapKey:'chart_field_orig', barId:'barchart_field_orig', barKey:'bar_field_orig' },
   topic_adj:{ treemapId:'treemap_topic_adj', treemapKey:'chart_topic_adj', barId:'barchart_topic_adj', barKey:'bar_topic_adj' },
   field_adj:{ treemapId:'treemap_field_adj', treemapKey:'chart_field_adj', barId:'barchart_field_adj', barKey:'bar_field_adj' }
 };
@@ -1078,7 +1018,8 @@ function normalizeStatItems(rawList){
     entry.count+=count;
     if(percent!==null){ entry.percent=percent; }
   });
-  return Array.from(entryMap.values()).sort((a,b)=>a.order-b.order);
+  const merged=Array.from(entryMap.values()).filter(item=>safeNumber(item.count)>0);
+  return merged.sort((a,b)=>a.order-b.order);
 }
 function buildBarChartEntries(primaryRaw, overlayRaw){
   const primary=normalizeStatItems(primaryRaw);
@@ -1124,7 +1065,7 @@ function limitBarEntries(entries, limit=TREEMAP_CATEGORY_LIMIT){
 let AUTO_SAVE_MINUTES=5;
 let IS_BATCH_SAVING=false;
 let HAS_RANKING_DATA=false;
-let VISUAL_TAB='orig';
+let VISUAL_TAB='adj';
 
 const SORT_VALUE_DEFAULT='default';
 const SORT_VALUE_RANK_ASC='rank_asc';
@@ -4262,14 +4203,10 @@ async function refreshStats(){
   const bin=Number.isFinite(TIMELINE_BIN_SIZE)?TIMELINE_BIN_SIZE:5;
   const r=await fetch(`/stats?session_id=${encodeURIComponent(SESSION_ID)}&bin_years=${encodeURIComponent(bin)}`,{cache:"no-store"}); if(!r.ok) return;
   const d=await r.json();
-  renderChips("chips_topic_orig", d.topic_orig, "topic_orig");
-  renderChips("chips_field_orig", d.field_orig, "field_orig");
-  renderChips("chips_topic_adj", d.topic_adj, "topic_adj", { overlay:d.topic_orig, primaryLabel:'调整后', overlayLabel:'原始' });
-  renderChips("chips_field_adj", d.field_adj, "field_adj", { overlay:d.field_orig, primaryLabel:'调整后', overlayLabel:'原始' });
-  setCategoryData('topic_orig', d.topic_orig, { primaryLabel:'原始分类', rootLabel:'研究主题（原）', limit:24 });
-  setCategoryData('field_orig', d.field_orig, { primaryLabel:'原始分类', rootLabel:'研究领域（原）', limit:24 });
-  setCategoryData('topic_adj', d.topic_adj, { overlay:d.topic_orig, primaryLabel:'调整后', overlayLabel:'原始', rootLabel:'研究主题（调整）', limit:24 });
-  setCategoryData('field_adj', d.field_adj, { overlay:d.field_orig, primaryLabel:'调整后', overlayLabel:'原始', rootLabel:'研究领域（调整）', limit:24 });
+  renderChips("chips_topic_adj", d.topic_adj, "topic_adj", { primaryLabel:'篇数' });
+  renderChips("chips_field_adj", d.field_adj, "field_adj", { primaryLabel:'篇数' });
+  setCategoryData('topic_adj', d.topic_adj, { primaryLabel:'篇数', rootLabel:'研究主题（调整）', limit:24 });
+  setCategoryData('field_adj', d.field_adj, { primaryLabel:'篇数', rootLabel:'研究领域（调整）', limit:24 });
   qs('total_msg').textContent=`行数：${d.total}`;
   renderTimelineCharts(d.timeline);
   setJournalSourceAvailability(!!d.journal_source_available);
@@ -4284,7 +4221,7 @@ async function refreshStats(){
   populateFilterOptions();
   await fetchTopicVisuals({force:true});
   setJournalTab(JOURNAL_DIM||'topic');
-  setVisualTab(VISUAL_TAB||'orig');
+  setVisualTab();
 }
 
 function getRankPlotElement(){
@@ -4362,8 +4299,8 @@ function clearScatterPlot(message){
   const msg=qs('rank_vis_msg'); if(msg) msg.textContent=message||'等待计算后展示。';
 }
 
-function setVisualTab(tab){
-  const target = tab==='adj' ? 'adj' : 'orig';
+function setVisualTab(){
+  const target='adj';
   VISUAL_TAB = target;
   document.querySelectorAll('[data-vis-panel]').forEach(panel=>{
     const active = panel.dataset?.visPanel===target;
@@ -5252,8 +5189,6 @@ function bindEvents(){
   const autoInterval=qs('auto_save_interval'); if(autoInterval) autoInterval.addEventListener('change', applyAutoSaveSettings);
 
   // 筛选
-  const btnOtherTopicOrig=qs('btn_only_other_topic_orig'); if(btnOtherTopicOrig) btnOtherTopicOrig.onclick=()=>quickFilter('topic_orig','其他议题');
-  const btnOtherFieldOrig=qs('btn_only_other_field_orig'); if(btnOtherFieldOrig) btnOtherFieldOrig.onclick=()=>quickFilter('field_orig','其他领域');
   const btnOtherTopicAdj=qs('btn_only_other_topic_adj'); if(btnOtherTopicAdj) btnOtherTopicAdj.onclick=()=>quickFilter('topic_adj','其他议题');
   const btnOtherFieldAdj=qs('btn_only_other_field_adj'); if(btnOtherFieldAdj) btnOtherFieldAdj.onclick=()=>quickFilter('field_adj','其他领域');
   qs('btn_apply_filter').onclick=()=>{
@@ -5309,12 +5244,10 @@ function bindEvents(){
   qs('btn_do_ranking').onclick=doRanking;
   const btnRefreshVis=qs('btn_refresh_vis'); if(btnRefreshVis) btnRefreshVis.onclick=()=>fetchScatterAndRender(true);
   const btnToggleVis=qs('btn_toggle_vis'); if(btnToggleVis) btnToggleVis.onclick=toggleRankVis;
-  const tabOrig=qs('btn_vis_tab_orig'); if(tabOrig) tabOrig.onclick=()=>setVisualTab('orig');
-  const tabAdj=qs('btn_vis_tab_adj'); if(tabAdj) tabAdj.onclick=()=>setVisualTab('adj');
   const journalTopicBtn=qs('btn_journal_topic'); if(journalTopicBtn) journalTopicBtn.onclick=()=>setJournalTab('topic');
   const journalFieldBtn=qs('btn_journal_field'); if(journalFieldBtn) journalFieldBtn.onclick=()=>setJournalTab('field');
   setRankVisExpanded(false);
-  setVisualTab('orig');
+  setVisualTab();
   setJournalTab('topic');
   document.querySelectorAll('[data-chart-toggle]').forEach(wrapper=>{
     const category=wrapper?.dataset?.chartToggle;
