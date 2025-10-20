@@ -598,8 +598,13 @@
                 <div class="topic-viz-content">
                   <div class="topic-viz-card">
                     <div class="topic-viz-card-header">
-                      <h4 class="topic-viz-card-title">高频关键词</h4>
-                      <div class="topic-viz-hint" data-topicviz-keyword-hint="topic"></div>
+                      <div class="topic-viz-card-heading">
+                        <h4 class="topic-viz-card-title">高频关键词</h4>
+                        <div class="topic-viz-hint" data-topicviz-keyword-hint="topic"></div>
+                      </div>
+                      <div class="topic-viz-card-actions">
+                        <button type="button" class="topic-viz-gallery-btn" data-topicviz-gallery="topic" title="新标签页打开期刊展示版">期刊展示版</button>
+                      </div>
                     </div>
                     <div id="topic_viz_words_topic" class="topic-viz-chart" data-topicviz-chart="words" data-topicviz-dim="topic"></div>
                   </div>
@@ -626,8 +631,13 @@
                 <div class="topic-viz-content">
                   <div class="topic-viz-card">
                     <div class="topic-viz-card-header">
-                      <h4 class="topic-viz-card-title">高频关键词</h4>
-                      <div class="topic-viz-hint" data-topicviz-keyword-hint="field"></div>
+                      <div class="topic-viz-card-heading">
+                        <h4 class="topic-viz-card-title">高频关键词</h4>
+                        <div class="topic-viz-hint" data-topicviz-keyword-hint="field"></div>
+                      </div>
+                      <div class="topic-viz-card-actions">
+                        <button type="button" class="topic-viz-gallery-btn" data-topicviz-gallery="field" title="新标签页打开期刊展示版">期刊展示版</button>
+                      </div>
                     </div>
                     <div id="topic_viz_words_field" class="topic-viz-chart" data-topicviz-chart="words" data-topicviz-dim="field"></div>
                   </div>
@@ -3823,6 +3833,7 @@ function openJournalDetail(dim,index){
 }
 
 let JOURNAL_OPEN_HANDLER_BOUND=false;
+let KEYWORD_GALLERY_HANDLER_BOUND=false;
 function handleJournalOpenClick(event){
   const rawTarget = event.target;
   const target = rawTarget && typeof rawTarget.closest==='function' ? rawTarget.closest('[data-journal-open]') : null;
@@ -3831,6 +3842,15 @@ function handleJournalOpenClick(event){
   const dim = target.dataset?.journalOpen==='field'?'field':'topic';
   const index = parseInt(target.dataset?.journalIndex||'0',10);
   openJournalDetail(dim, Number.isFinite(index)?index:0);
+}
+
+function handleKeywordGalleryClick(event){
+  const rawTarget = event.target;
+  const trigger = rawTarget && typeof rawTarget.closest==='function' ? rawTarget.closest('[data-topicviz-gallery]') : null;
+  if(!trigger) return;
+  event.preventDefault();
+  const dim = trigger.dataset?.topicvizGallery==='field' ? 'field' : 'topic';
+  openKeywordGallery(dim);
 }
 
 function renderDeferredJournalCharts(){
@@ -4784,6 +4804,217 @@ function renderTopicVizKeywords(dim, category){
       targetCard.scrollIntoView({ behavior:'smooth', block:'nearest' });
     }
   }
+}
+
+function openKeywordGallery(dim){
+  const key = dim==='field' ? 'field' : 'topic';
+  const entries = getKeywordDashboardData(key);
+  if(!entries.length){
+    alert('暂无关键词数据。');
+    return;
+  }
+  const galleryWindow = window.open('', '_blank');
+  if(!galleryWindow){
+    alert('无法打开新标签页，请检查浏览器的弹出窗口设置。');
+    return;
+  }
+  const dimLabel = TOPIC_VIZ_LABELS[key] || '高频关键词';
+  const totalDocs = entries.reduce((sum,item)=>sum+safeNumber(item.documentCount||0),0);
+  const totalTokens = entries.reduce((sum,item)=>sum+safeNumber(item.totalTokens||0),0);
+  const summaryParts=[`分类 ${entries.length} 个`];
+  if(totalDocs>0){ summaryParts.push(`覆盖文献 ${numberFormatter.format(totalDocs)}`); }
+  if(totalTokens>0){ summaryParts.push(`总词频 ${numberFormatter.format(totalTokens)}`); }
+  const summaryText = summaryParts.join(' · ');
+  const locale = (()=>{
+    try{
+      const resolved=numberFormatter.resolvedOptions();
+      if(resolved && resolved.locale){
+        return resolved.locale;
+      }
+    }catch(e){}
+    return 'zh-CN';
+  })();
+  const doc = galleryWindow.document;
+  doc.open();
+  doc.write(`<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <title>高频关键词期刊展示版</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    *,*::before,*::after{box-sizing:border-box;}
+    html,body{height:100%;}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:#fff;color:#0f172a;}
+    .gallery-page{max-width:1280px;margin:0 auto;padding:2.5rem 1.75rem 3rem;display:flex;flex-direction:column;gap:2rem;}
+    .gallery-header{display:flex;flex-direction:column;gap:0.6rem;text-align:center;}
+    .gallery-dimension{font-size:0.85rem;font-weight:600;color:#475569;letter-spacing:0.08em;text-transform:uppercase;margin:0;}
+    .gallery-dimension.hidden{display:none!important;}
+    .gallery-title{margin:0;font-size:2rem;font-weight:700;color:#0f172a;}
+    .gallery-summary{margin:0;font-size:0.95rem;color:#475569;}
+    .gallery-summary.hidden{display:none!important;}
+    .gallery-grid{display:grid;gap:1.5rem;grid-template-columns:repeat(1,minmax(0,1fr));}
+    @media (min-width:900px){.gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+    @media (min-width:1280px){.gallery-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
+    .gallery-card{border:1px solid #e2e8f0;border-radius:0.9rem;padding:1.25rem;background:#fff;display:flex;flex-direction:column;gap:0.85rem;}
+    .gallery-card-title{margin:0;font-size:1.1rem;font-weight:600;line-height:1.35;color:#0f172a;}
+    .gallery-card-meta{margin:0;font-size:0.85rem;color:#64748b;}
+    .gallery-keyword-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:0.55rem;}
+    .gallery-keyword-item{display:grid;grid-template-columns:auto 1fr auto auto;gap:0.5rem;align-items:center;font-size:0.85rem;color:#0f172a;}
+    .gallery-keyword-rank{font-weight:600;color:#1e3a8a;min-width:1.75rem;text-align:right;font-family:'JetBrains Mono','Fira Code',monospace;}
+    .gallery-keyword-label{min-width:0;word-break:break-word;}
+    .gallery-keyword-weight{font-family:'JetBrains Mono','Fira Code',monospace;color:#334155;}
+    .gallery-keyword-count{font-family:'JetBrains Mono','Fira Code',monospace;color:#475569;}
+    .gallery-keyword-count.hidden{display:none!important;}
+    .gallery-keyword-empty{font-size:0.82rem;color:#94a3b8;}
+    .gallery-empty{font-size:0.9rem;color:#64748b;text-align:center;padding:2rem 1rem;border:1px dashed rgba(148,163,184,0.5);border-radius:0.9rem;background:rgba(248,250,252,0.5);}
+    .gallery-footer{margin-top:auto;text-align:center;font-size:0.75rem;color:#94a3b8;}
+  </style>
+</head>
+<body>
+  <main class="gallery-page" id="keyword_gallery_root">
+    <header class="gallery-header">
+      <p class="gallery-dimension" id="keyword_gallery_dimension"></p>
+      <h1 class="gallery-title" id="keyword_gallery_title">高频关键词期刊展示版</h1>
+      <p class="gallery-summary" id="keyword_gallery_summary"></p>
+    </header>
+    <section class="gallery-grid" id="keyword_gallery_grid"></section>
+    <footer class="gallery-footer">CommCoder Studio · 高频关键词期刊展示版</footer>
+  </main>
+</body>
+</html>`);
+  doc.close();
+  galleryWindow.__KEYWORD_GALLERY_PAYLOAD__={
+    dim:key,
+    dimLabel,
+    summary:summaryText,
+    entries,
+    locale
+  };
+  const bootstrap=doc.createElement('script');
+  bootstrap.type='module';
+  bootstrap.textContent=`(() => {
+    const payload = window.__KEYWORD_GALLERY_PAYLOAD__ || {};
+    delete window.__KEYWORD_GALLERY_PAYLOAD__;
+    const root = document.getElementById('keyword_gallery_root');
+    if(!root){
+      return;
+    }
+    const entries = Array.isArray(payload.entries) ? payload.entries : [];
+    const dimensionEl = document.getElementById('keyword_gallery_dimension');
+    const titleEl = document.getElementById('keyword_gallery_title');
+    const summaryEl = document.getElementById('keyword_gallery_summary');
+    const grid = document.getElementById('keyword_gallery_grid');
+    const locale = typeof payload.locale === 'string' && payload.locale ? payload.locale : 'zh-CN';
+    let formatter;
+    try{
+      formatter = new Intl.NumberFormat(locale);
+    }catch(err){
+      formatter = new Intl.NumberFormat('zh-CN');
+    }
+    if(dimensionEl){
+      const text = typeof payload.dimLabel === 'string' ? payload.dimLabel : '';
+      dimensionEl.textContent = text;
+      if(!text){ dimensionEl.classList.add('hidden'); }
+    }
+    const titleText = (payload.dimLabel ? payload.dimLabel + ' · ' : '') + '高频关键词期刊展示版';
+    if(titleEl){
+      titleEl.textContent = titleText;
+    }
+    document.title = titleText;
+    if(summaryEl){
+      if(payload.summary){
+        summaryEl.textContent = payload.summary;
+        summaryEl.classList.remove('hidden');
+      }else{
+        summaryEl.textContent = '';
+        summaryEl.classList.add('hidden');
+      }
+    }
+    if(!grid){
+      return;
+    }
+    grid.innerHTML='';
+    if(!entries.length){
+      const empty=document.createElement('p');
+      empty.className='gallery-empty';
+      empty.textContent='暂无关键词数据。';
+      grid.appendChild(empty);
+      return;
+    }
+    entries.forEach((entry, idx)=>{
+      const card=document.createElement('article');
+      card.className='gallery-card';
+      const title=document.createElement('h2');
+      title.className='gallery-card-title';
+      const heading = typeof entry.displayLabel === 'string' && entry.displayLabel ? entry.displayLabel : (typeof entry.label === 'string' && entry.label ? entry.label : '分类 ' + (idx+1));
+      title.textContent = heading;
+      card.appendChild(title);
+      const metaParts=[];
+      const docCount = Number.isFinite(entry.documentCount) ? entry.documentCount : Number(entry.documentCount);
+      if(Number.isFinite(docCount) && docCount>0){
+        metaParts.push('文献 ' + formatter.format(docCount) + ' 篇');
+      }
+      const tokenCount = Number.isFinite(entry.totalTokens) ? entry.totalTokens : Number(entry.totalTokens);
+      if(Number.isFinite(tokenCount) && tokenCount>0){
+        metaParts.push('词频 ' + formatter.format(tokenCount));
+      }
+      if(metaParts.length){
+        const meta=document.createElement('p');
+        meta.className='gallery-card-meta';
+        meta.textContent=metaParts.join(' · ');
+        card.appendChild(meta);
+      }
+      const keywords = Array.isArray(entry.keywords) ? entry.keywords : [];
+      const weights = Array.isArray(entry.weights) ? entry.weights : [];
+      const counts = Array.isArray(entry.counts) ? entry.counts : [];
+      if(!keywords.length){
+        const empty=document.createElement('p');
+        empty.className='gallery-keyword-empty';
+        empty.textContent='暂无关键词数据。';
+        card.appendChild(empty);
+      }else{
+        const list=document.createElement('ol');
+        list.className='gallery-keyword-list';
+        keywords.forEach((keyword, kIdx)=>{
+          const item=document.createElement('li');
+          item.className='gallery-keyword-item';
+          const rank=document.createElement('span');
+          rank.className='gallery-keyword-rank';
+          rank.textContent=String(kIdx+1).padStart(2,'0');
+          const label=document.createElement('span');
+          label.className='gallery-keyword-label';
+          label.textContent=String(keyword||'');
+          const weight=document.createElement('span');
+          weight.className='gallery-keyword-weight';
+          const weightVal=Number(weights[kIdx]);
+          if(Number.isFinite(weightVal) && weightVal>0){
+            const percent=weightVal*100;
+            weight.textContent=percent>=10?percent.toFixed(1)+'%':percent.toFixed(2)+'%';
+          }else{
+            weight.textContent='—';
+          }
+          const count=document.createElement('span');
+          count.className='gallery-keyword-count';
+          const countVal=Number(counts[kIdx]);
+          if(Number.isFinite(countVal) && countVal>0){
+            count.textContent='词频 '+formatter.format(countVal);
+          }else{
+            count.textContent='';
+            count.classList.add('hidden');
+          }
+          item.appendChild(rank);
+          item.appendChild(label);
+          item.appendChild(weight);
+          item.appendChild(count);
+          list.appendChild(item);
+        });
+        card.appendChild(list);
+      }
+      grid.appendChild(card);
+    });
+  })();`;
+  doc.body.appendChild(bootstrap);
 }
 
 function renderTopicVizScatter(dim){
@@ -6385,6 +6616,10 @@ function bindEvents(){
   if(!JOURNAL_OPEN_HANDLER_BOUND){
     document.addEventListener('click', handleJournalOpenClick);
     JOURNAL_OPEN_HANDLER_BOUND=true;
+  }
+  if(!KEYWORD_GALLERY_HANDLER_BOUND){
+    document.addEventListener('click', handleKeywordGalleryClick);
+    KEYWORD_GALLERY_HANDLER_BOUND=true;
   }
   document.querySelectorAll('[data-chart-toggle]').forEach(wrapper=>{
     const category=wrapper?.dataset?.chartToggle;
