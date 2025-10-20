@@ -6104,15 +6104,24 @@ async function openLoadDialog(){
     if(!arr.length){ zone.innerHTML='<div class="text-slate-600">暂无会话</div>'; return; }
     let html='<table class="w-full text-sm"><thead><tr class="border-b bg-slate-50"><th class="text-left p-2">SessionID</th><th class="text-left p-2">来源文件</th><th class="text-left p-2">行数</th><th class="text-left p-2">最近保存</th><th class="text-left p-2 sess-table-actions">操作</th></tr></thead><tbody>';
     arr.forEach(s=>{
+      const sidAttr = escapeAttr(s.session_id||'');
       html+=`<tr class="border-b">
-        <td class="p-2 font-mono text-xs">${s.session_id}</td>
+        <td class="p-2 font-mono text-xs">${escapeHtml(s.session_id||'')}</td>
         <td class="p-2">${escapeHtml(s.origin_filename||"")}</td>
         <td class="p-2">${s.rows||0}</td>
         <td class="p-2">${escapeHtml(s.updated_text||"")}</td>
-        <td class="p-2 sess-table-actions"><button class="px-2 py-1 rounded bg-slate-800 text-white whitespace-nowrap" onclick="loadSession('${s.session_id}')">加载</button></td>
+        <td class="p-2 sess-table-actions"><button class="px-2 py-1 rounded bg-slate-800 text-white whitespace-nowrap" data-session-id="${sidAttr}">加载</button></td>
       </tr>`;
     });
-    html+='</tbody></table>'; zone.innerHTML=html;
+    html+='</tbody></table>';
+    zone.innerHTML=html;
+    zone.querySelectorAll('button[data-session-id]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const sid=btn.dataset.sessionId;
+        if(!sid){ return; }
+        loadSession(sid);
+      });
+    });
   }catch(e){
     zone.innerHTML="加载失败："+e.message;
   }
