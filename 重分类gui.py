@@ -1344,6 +1344,229 @@ def _top_sources_by_category(
     return result
 
 
+def _quartile_rank(label: str) -> int:
+    match = re.search(r"Q\s*([1-4])", str(label), re.IGNORECASE)
+    if match:
+        try:
+            return int(match.group(1))
+        except (TypeError, ValueError):
+            return 99
+    return 99
+
+
+def _normalise_quartile_label(label: str) -> str:
+    text = str(label or "").strip()
+    if not text:
+        return ""
+    match = re.search(r"Q\s*([1-4])", text, re.IGNORECASE)
+    if match:
+        return f"Q{match.group(1)}"
+    return text.upper()
+
+
+def _journal_overview_table(
+    df: pd.DataFrame,
+    source_col: str = "Source Title",
+    limit: int = 48,
+    *,
+    citation_candidates: Optional[List[str]] = None,
+    quartile_candidates: Optional[List[str]] = None,
+    year_candidates: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Aggregate journal metrics for the overview table shown on the dashboard."""
+
+    # Determine which columns are available in the dataset.
+    source_candidates = [
+        source_col,
+        "Source Title",
+        "Journal",
+        "Journal Title",
+    ]
+    source_candidates = [col for col in source_candidates if col]
+    source_name = next((col for col in source_candidates if col in df.columns), None)
+    if not source_name:
+        return {
+            "rows": [],
+            "summary": {
+                "listed_journals": 0,
+                "unique_journals": 0,
+                "total_citations": 0,
+                "total_publications": 0,
+                "year_min": None,
+                "year_max": None,
+                "year_column": None,
+                "source_column": None,
+                "citations_column": None,
+                "quartile_column": None,
+            },
+        }
+
+    citation_candidates = list(
+        dict.fromkeys(
+            (citation_candidates or [])
+            + [
+                "Times Cited, All Databases",
+                "Times Cited",
+                "Times Cited, All Databases ",
+            ]
+        )
+    )
+    quartile_candidates = list(
+        dict.fromkeys(
+            (quartile_candidates or [])
+            + [
+                "JIF Quartile",
+                "JCR Quartile",
+                "Journal Quartile",
+            ]
+        )
+    )
+    year_candidates = list(
+        dict.fromkeys(
+            (year_candidates or [])
+            + [
+                "Publication Year",
+                "Year",
+                "Year Published",
+            ]
+        )
+    )
+
+    citation_name = next((col for col in citation_candidates if col in df.columns), None)
+    quartile_name = next((col for col in quartile_candidates if col in df.columns), None)
+    year_name = next((col for col in year_candidates if col in df.columns), None)
+
+    columns = [source_name]
+    if citation_name:
+        columns.append(citation_name)
+    if quartile_name:
+        columns.append(quartile_name)
+    if year_name:
+        columns.append(year_name)
+
+    work = df[columns].copy()
+    work.rename(
+        columns={
+            source_name: "source",
+            **({citation_name: "citations"} if citation_name else {}),
+            **({quartile_name: "quartile"} if quartile_name else {}),
+            **({year_name: "year"} if year_name else {}),
+        },
+        inplace=True,
+    )
+
+    work["source"] = work["source"].fillna("").astype(str).str.strip()
+    work = work[work["source"] != ""]
+    if work.empty:
+        return {
+            "rows": [],
+            "summary": {
+                "listed_journals": 0,
+                "unique_journals": 0,
+                "total_citations": 0,
+                "total_publications": 0,
+                "year_min": None,
+                "year_max": None,
+                "year_column": year_name,
+                "source_column": source_name,
+                "citations_column": citation_name,
+                "quartile_column": quartile_name,
+            },
+        }
+
+    if "citations" not in work.columns:
+        work["citations"] = 0.0
+    else:
+        work["citations"] = (
+            pd.to_numeric(work["citations"], errors="coerce").fillna(0.0)
+        )
+
+    if "quartile" not in work.columns:
+        work["quartile"] = ""
+    else:
+        work["quartile"] = work["quartile"].fillna("").astype(str).str.strip()
+
+    year_min: Optional[int] = None
+    year_max: Optional[int] = None
+    if "year" in work.columns:
+        years = pd.to_numeric(work["year"], errors="coerce")
+        valid_years = years.dropna()
+        if not valid_years.empty:
+            year_min = int(valid_years.min())
+            year_max = int(valid_years.max())
+
+    grouped = work.groupby("source", sort=False)
+    counts = grouped.size().astype(int)
+    citations_sum = grouped["citations"].sum()
+
+    def _resolve_quartile(series: pd.Series) -> str:
+        values = [
+            _normalise_quartile_label(val)
+            for val in series
+            if str(val or "").strip()
+        ]
+        if not values:
+            return "—"
+        occurrences = Counter(values)
+        best_label, _ = min(
+            occurrences.items(),
+            key=lambda item: (
+                -item[1],
+                _quartile_rank(item[0]),
+                item[0],
+            ),
+        )
+        return best_label or "—"
+
+    quartiles = grouped["quartile"].apply(_resolve_quartile)
+
+    records: List[Dict[str, Any]] = []
+    for source, publication_count in counts.items():
+        citation_value = citations_sum.get(source, 0.0)
+        try:
+            citations_int = int(round(float(citation_value)))
+        except (TypeError, ValueError):
+            citations_int = 0
+        quartile_value = quartiles.get(source, "—") or "—"
+        records.append(
+            {
+                "name": str(source),
+                "citations": citations_int,
+                "quartile": quartile_value,
+                "publications": int(publication_count),
+            }
+        )
+
+    records.sort(
+        key=lambda item: (
+            -item["citations"],
+            -item["publications"],
+            item["name"].lower(),
+        )
+    )
+
+    limit = max(int(limit or 0), 0)
+    listed = records[:limit] if limit else records
+
+    total_citations = int(sum(item["citations"] for item in listed))
+    total_publications = int(sum(item["publications"] for item in listed))
+
+    summary = {
+        "listed_journals": len(listed),
+        "unique_journals": len(records),
+        "total_citations": total_citations,
+        "total_publications": total_publications,
+        "year_min": year_min,
+        "year_max": year_max,
+        "year_column": year_name,
+        "source_column": source_name,
+        "citations_column": citation_name,
+        "quartile_column": quartile_name,
+    }
+
+    return {"rows": listed, "summary": summary}
+
+
 def _sanitize_blacklist(raw, allowed: List[str]) -> List[str]:
     """清理来自前端的黑名单，过滤非法值并保持顺序。"""
     if not raw:
@@ -2179,6 +2402,14 @@ def stats(session_id: str = Query(...), bin_years: int = Query(5, ge=1, le=50)):
         label_mapping=FIELD_LABEL_MAP,
     )
 
+    journal_overview = _journal_overview_table(
+        df,
+        source_col=source_col,
+        citation_candidates=["Times Cited, All Databases"],
+        quartile_candidates=["JIF Quartile"],
+        year_candidates=["Publication Year"],
+    )
+
     return JSONResponse({
         "total": int(df.shape[0]),
         "topic_orig": _counts(df["研究主题（议题）分类"], TOPIC_LABEL_MAP),
@@ -2189,6 +2420,7 @@ def stats(session_id: str = Query(...), bin_years: int = Query(5, ge=1, le=50)):
         "journal_source_available": bool(source_col in df.columns),
         "journal_topic_adj": journal_topic,
         "journal_field_adj": journal_field,
+        "journal_overview": journal_overview,
     })
 
 
