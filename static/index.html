@@ -464,9 +464,15 @@
           </div>
 
           <div class="bg-white rounded-2xl shadow p-6">
-            <div class="flex items-center justify-between mb-4">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
               <h3 class="font-semibold">分类概览（点击类别即可筛选）</h3>
-              <div class="text-sm text-gray-500" id="total_msg">—</div>
+              <div class="flex flex-wrap items-center gap-3 text-sm text-gray-500">
+                <div id="total_msg">—</div>
+                <div class="vis-tab-toggle" role="tablist" aria-label="分类视图切换">
+                  <button type="button" class="vis-tab-btn vis-tab-btn-active" data-vis-tab="adj" aria-selected="true">调整后视图</button>
+                  <button type="button" class="vis-tab-btn" data-vis-tab="orig" aria-selected="false">原始视图</button>
+                </div>
+              </div>
             </div>
             <div id="vis_panel_adj" class="vis-tab-panel" data-vis-panel="adj">
               <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -505,6 +511,45 @@
                 <p id="journal_hint" class="journal-hint">Top 5 按篇数排序，括号内为分类内占比。</p>
                 <div id="journal_panel_topic" class="journal-grid" data-journal-panel="topic"></div>
                 <div id="journal_panel_field" class="journal-grid hidden" data-journal-panel="field"></div>
+              </div>
+            </div>
+            <div id="vis_panel_orig" class="vis-tab-panel hidden" data-vis-panel="orig">
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="space-y-4">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h4 class="text-sm font-semibold">研究主题（原始）</h4>
+                    <button class="text-xs text-sky-700" id="btn_only_other_topic_orig">只看『其他议题』</button>
+                  </div>
+                  <div id="chips_topic_orig" class="flex flex-wrap gap-2 mt-2"></div>
+                  <div class="space-y-4">
+                    <div id="treemap_topic_orig" class="treemap-box" data-category-chart="topic_orig" data-chart-type="treemap" data-treemap-key="chart_topic_orig"></div>
+                  </div>
+                </div>
+                <div class="space-y-4">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h4 class="text-sm font-semibold">研究领域（原始）</h4>
+                    <button class="text-xs text-sky-700" id="btn_only_other_field_orig">只看『其他领域』</button>
+                  </div>
+                  <div id="chips_field_orig" class="flex flex-wrap gap-2 mt-2"></div>
+                  <div class="space-y-4">
+                    <div id="treemap_field_orig" class="treemap-box" data-category-chart="field_orig" data-chart-type="treemap" data-treemap-key="chart_field_orig"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="journal-section mt-8">
+                <div class="journal-header">
+                  <div>
+                    <h4 class="journal-title">期刊分布（原始）</h4>
+                    <p class="journal-subtitle">根据 Source Title 统计各分类的 Top 5 期刊。</p>
+                  </div>
+                  <div class="journal-toggle" role="group" aria-label="期刊统计维度切换">
+                    <button class="journal-toggle-btn journal-toggle-active" type="button" data-journal-toggle="topic_orig" aria-pressed="true">研究主题（原始）</button>
+                    <button class="journal-toggle-btn" type="button" data-journal-toggle="field_orig" aria-pressed="false">研究领域（原始）</button>
+                  </div>
+                </div>
+                <p id="journal_hint_orig" class="journal-hint">Top 5 按篇数排序，括号内为分类内占比。</p>
+                <div id="journal_panel_topic_orig" class="journal-grid" data-journal-panel="topic_orig"></div>
+                <div id="journal_panel_field_orig" class="journal-grid hidden" data-journal-panel="field_orig"></div>
               </div>
             </div>
           </div>
@@ -896,22 +941,36 @@ const TREEMAP_COLORS=[
 ];
 const BAR_CHART_PLOTS={};
 const BAR_CHART_STATE={};
-const JOURNAL_DATA={ topic:[], field:[] };
-const JOURNAL_RENDER_STATE={ topic:[], field:[] };
+const JOURNAL_KEYS=['topic','field','topic_orig','field_orig'];
+const JOURNAL_KIND_BY_KEY={ topic:'topic', field:'field', topic_orig:'topic', field_orig:'field' };
+const JOURNAL_CONTAINER_IDS={
+  topic:'journal_panel_topic',
+  field:'journal_panel_field',
+  topic_orig:'journal_panel_topic_orig',
+  field_orig:'journal_panel_field_orig'
+};
+const JOURNAL_HINT_IDS=['journal_hint','journal_hint_orig'];
+const JOURNAL_DATA=Object.fromEntries(JOURNAL_KEYS.map(key=>[key,[]]));
+const JOURNAL_RENDER_STATE=Object.fromEntries(JOURNAL_KEYS.map(key=>[key,[]]));
 const JOURNAL_CHARTS=new Map();
 const JOURNAL_COLORS=['#2563eb','#1d4ed8','#38bdf8','#60a5fa','#93c5fd'];
 const LABEL_MAPPING={ topic:new Map(), field:new Map() };
 const LABEL_MAPPING_DEFAULTS={ topic:new Map(), field:new Map() };
 let JOURNAL_DIM='topic';
+const JOURNAL_TAB_MEMORY={ adj:'topic', orig:'topic_orig' };
 let JOURNAL_SOURCE_AVAILABLE=true;
 const CATEGORY_DATA={};
 const CATEGORY_VIEW_STATE={
   topic_adj:'treemap',
-  field_adj:'treemap'
+  field_adj:'treemap',
+  topic_orig:'treemap',
+  field_orig:'treemap'
 };
 const CATEGORY_CHART_CONFIG={
   topic_adj:{ treemapId:'treemap_topic_adj', treemapKey:'chart_topic_adj', barId:'barchart_topic_adj', barKey:'bar_topic_adj', kind:'topic' },
-  field_adj:{ treemapId:'treemap_field_adj', treemapKey:'chart_field_adj', barId:'barchart_field_adj', barKey:'bar_field_adj', kind:'field' }
+  field_adj:{ treemapId:'treemap_field_adj', treemapKey:'chart_field_adj', barId:'barchart_field_adj', barKey:'bar_field_adj', kind:'field' },
+  topic_orig:{ treemapId:'treemap_topic_orig', treemapKey:'chart_topic_orig', barId:'barchart_topic_orig', barKey:'bar_topic_orig', kind:'topic' },
+  field_orig:{ treemapId:'treemap_field_orig', treemapKey:'chart_field_orig', barId:'barchart_field_orig', barKey:'bar_field_orig', kind:'field' }
 };
 let RANK_VIS_EXPANDED=false;
 const SCATTER_DEFAULT_HEIGHT=420;
@@ -3203,21 +3262,34 @@ function renderDeferredBarCharts(){
   });
 }
 
+function normalizeJournalKey(dim){
+  if(JOURNAL_KEYS.includes(dim)) return dim;
+  return (dim && String(dim).startsWith('field')) ? 'field' : 'topic';
+}
+
+function getJournalKind(dim){
+  return JOURNAL_KIND_BY_KEY[dim] || 'topic';
+}
+
+function updateJournalHintText(text){
+  JOURNAL_HINT_IDS.forEach(id=>{
+    const hint=qs(id);
+    if(!hint) return;
+    hint.textContent=text;
+    hint.classList.remove('hidden');
+  });
+}
+
 function setJournalSourceAvailability(available){
   JOURNAL_SOURCE_AVAILABLE=!!available;
-  const hint=qs('journal_hint');
-  if(!hint) return;
   if(!SESSION_ID){
-    hint.textContent='Top 5 按篇数排序，括号内为分类内占比。';
-    hint.classList.remove('hidden');
+    updateJournalHintText('Top 5 按篇数排序，括号内为分类内占比。');
     return;
   }
   if(!JOURNAL_SOURCE_AVAILABLE){
-    hint.textContent='数据集中缺少 Source Title 列，无法统计期刊分布。';
-    hint.classList.remove('hidden');
+    updateJournalHintText('数据集中缺少 Source Title 列，无法统计期刊分布。');
   }else{
-    hint.textContent='Top 5 按篇数排序，括号内为分类内占比。';
-    hint.classList.remove('hidden');
+    updateJournalHintText('Top 5 按篇数排序，括号内为分类内占比。');
   }
 }
 
@@ -3245,8 +3317,9 @@ function normalizeJournalData(rawList, kind='topic'){
 }
 
 function setJournalData(dim, rawList){
-  const key = dim==='field' ? 'field' : 'topic';
-  JOURNAL_DATA[key]=normalizeJournalData(rawList, key);
+  const key = normalizeJournalKey(dim);
+  const kind = getJournalKind(key);
+  JOURNAL_DATA[key]=normalizeJournalData(rawList, kind);
 }
 
 function clearJournalChartsForDim(dim){
@@ -3369,8 +3442,8 @@ function renderJournalChart(dim, index, entry){
 }
 
 function renderJournalPanel(dim){
-  const key = dim==='field' ? 'field' : 'topic';
-  const containerId = key==='field' ? 'journal_panel_field' : 'journal_panel_topic';
+  const key = normalizeJournalKey(dim);
+  const containerId = JOURNAL_CONTAINER_IDS[key] || JOURNAL_CONTAINER_IDS[normalizeJournalKey(key)] || 'journal_panel_topic';
   const container=qs(containerId);
   if(!container) return;
   clearJournalChartsForDim(key);
@@ -3384,20 +3457,20 @@ function renderJournalPanel(dim){
     container.innerHTML='<div class="journal-empty">暂无期刊统计数据</div>';
     return;
   }
-    const cards=data.map((entry,idx)=>{
-      const chartId=`journal_chart_${key}_${idx}`;
-      const category=escapeHtml(entry.category_display||entry.category||`分类 ${idx+1}`);
-      const metaParts=[];
-      if(entry.total>0){ metaParts.push(`共 ${numberFormatter.format(entry.total)} 篇`); }
-      if(entry.unique>0){ metaParts.push(`期刊数 ${numberFormatter.format(entry.unique)}`); }
-      const metaText=metaParts.length?escapeHtml(metaParts.join(' · ')):'';
-      const metaHtml=metaText?`<p class="journal-card-meta">${metaText}</p>`:'';
-      const tableRows=Array.isArray(entry.items)?entry.items.map((item,itemIdx)=>{
-        const label=escapeHtml(item?.label||`期刊 ${itemIdx+1}`);
-        const countText=numberFormatter.format(safeNumber(item?.count));
-        const percentVal=Number.isFinite(item?.percent)?Number(item.percent):null;
-        const percentText=percentVal!==null?`${percentVal>=10?percentVal.toFixed(1):percentVal.toFixed(2)}%`:'—';
-        return `
+  const cards=data.map((entry,idx)=>{
+    const chartId=`journal_chart_${key}_${idx}`;
+    const category=escapeHtml(entry.category_display||entry.category||`分类 ${idx+1}`);
+    const metaParts=[];
+    if(entry.total>0){ metaParts.push(`共 ${numberFormatter.format(entry.total)} 篇`); }
+    if(entry.unique>0){ metaParts.push(`期刊数 ${numberFormatter.format(entry.unique)}`); }
+    const metaText=metaParts.length?escapeHtml(metaParts.join(' · ')):'';
+    const metaHtml=metaText?`<p class="journal-card-meta">${metaText}</p>`:'';
+    const tableRows=Array.isArray(entry.items)?entry.items.map((item,itemIdx)=>{
+      const label=escapeHtml(item?.label||`期刊 ${itemIdx+1}`);
+      const countText=numberFormatter.format(safeNumber(item?.count));
+      const percentVal=Number.isFinite(item?.percent)?Number(item.percent):null;
+      const percentText=percentVal!==null?`${percentVal>=10?percentVal.toFixed(1):percentVal.toFixed(2)}%`:'—';
+      return `
           <tr>
             <td class="journal-table-rank">${itemIdx+1}</td>
             <td class="journal-table-label" title="${label}">${label}</td>
@@ -3405,8 +3478,8 @@ function renderJournalPanel(dim){
             <td class="journal-table-percent">${percentText}</td>
           </tr>
         `;
-      }).join('') : '';
-      const tableSection=tableRows?`
+    }).join('') : '';
+    const tableSection=tableRows?`
         <div class="journal-table-wrapper">
           <table class="journal-table" aria-label="${category} Top 5 期刊明细">
             <thead>
@@ -3452,7 +3525,7 @@ function renderJournalPanel(dim){
 }
 
 function openJournalDetail(dim,index){
-  const key = dim==='field' ? 'field' : 'topic';
+  const key = normalizeJournalKey(dim);
   const safeIndex = Number.isFinite(index)?index:parseInt(index,10)||0;
   const dataList = (JOURNAL_RENDER_STATE[key] && JOURNAL_RENDER_STATE[key].length ? JOURNAL_RENDER_STATE[key] : JOURNAL_DATA[key]) || [];
   const entry = dataList && dataList[safeIndex];
@@ -3487,7 +3560,13 @@ function openJournalDetail(dim,index){
     category:categoryTitle,
     meta:metaParts,
     items,
-    dimension:key==='field'?'研究领域（调整后）':'研究主题（调整后）',
+    dimension:(()=>{
+      if(key==='field') return '研究领域（调整后）';
+      if(key==='topic') return '研究主题（调整后）';
+      if(key==='field_orig') return '研究领域（原始）';
+      if(key==='topic_orig') return '研究主题（原始）';
+      return key.startsWith('field')?'研究领域':'研究主题';
+    })(),
     total:safeNumber(entry.total),
     unique:safeNumber(entry.unique),
     locale:resolvedLocale,
@@ -3828,14 +3907,14 @@ function handleJournalOpenClick(event){
   const target = rawTarget && typeof rawTarget.closest==='function' ? rawTarget.closest('[data-journal-open]') : null;
   if(!target) return;
   event.preventDefault();
-  const dim = target.dataset?.journalOpen==='field'?'field':'topic';
+  const dim = normalizeJournalKey(target.dataset?.journalOpen);
   const index = parseInt(target.dataset?.journalIndex||'0',10);
   openJournalDetail(dim, Number.isFinite(index)?index:0);
 }
 
 function renderDeferredJournalCharts(){
   document.querySelectorAll('[data-journal-deferred="1"]').forEach(el=>{
-    const dim = el.dataset.journalDim==='field' ? 'field' : 'topic';
+    const dim = normalizeJournalKey(el.dataset.journalDim);
     const index = parseInt(el.dataset.journalIndex||'0',10);
     const entry = JOURNAL_RENDER_STATE[dim] && JOURNAL_RENDER_STATE[dim][index];
     if(!entry) return;
@@ -5326,13 +5405,19 @@ async function refreshStats(){
   const d=await r.json();
   renderChips("chips_topic_adj", d.topic_adj, "topic_adj", { primaryLabel:'篇数' });
   renderChips("chips_field_adj", d.field_adj, "field_adj", { primaryLabel:'篇数' });
+  renderChips("chips_topic_orig", d.topic_orig, "topic_orig", { primaryLabel:'篇数' });
+  renderChips("chips_field_orig", d.field_orig, "field_orig", { primaryLabel:'篇数' });
   setCategoryData('topic_adj', d.topic_adj, { primaryLabel:'篇数', rootLabel:'研究主题（调整）', limit:24, kind:'topic' });
   setCategoryData('field_adj', d.field_adj, { primaryLabel:'篇数', rootLabel:'研究领域（调整）', limit:24, kind:'field' });
+  setCategoryData('topic_orig', d.topic_orig, { primaryLabel:'篇数', rootLabel:'研究主题（原始）', limit:24, kind:'topic' });
+  setCategoryData('field_orig', d.field_orig, { primaryLabel:'篇数', rootLabel:'研究领域（原始）', limit:24, kind:'field' });
   qs('total_msg').textContent=`行数：${d.total}`;
   renderTimelineCharts(d.timeline);
   setJournalSourceAvailability(!!d.journal_source_available);
   setJournalData('topic', d.journal_topic_adj);
   setJournalData('field', d.journal_field_adj);
+  setJournalData('topic_orig', d.journal_topic_orig);
+  setJournalData('field_orig', d.journal_field_orig);
 
   const collectLabels=arr=>Array.isArray(arr)?arr.map(x=>x.label).filter(Boolean):[];
   const topicLabels=[...collectLabels(d.topic_orig), ...collectLabels(d.topic_adj)];
@@ -5343,8 +5428,7 @@ async function refreshStats(){
   FIELD_LIST=fieldLabels.length?Array.from(new Set(fieldLabels)):[...DEF_FIELDS];
   populateFilterOptions();
   await fetchTopicVisuals({force:true});
-  setJournalTab(JOURNAL_DIM||'topic');
-  setVisualTab();
+  setVisualTab(VISUAL_TAB);
 }
 
 function getRankPlotElement(){
@@ -5422,15 +5506,28 @@ function clearScatterPlot(message){
   const msg=qs('rank_vis_msg'); if(msg) msg.textContent=message||'等待计算后展示。';
 }
 
-function setVisualTab(){
-  const target='adj';
-  VISUAL_TAB = target;
-  document.querySelectorAll('[data-vis-panel]').forEach(panel=>{
-    const active = panel.dataset?.visPanel===target;
+function setVisualTab(target){
+  const panels=Array.from(document.querySelectorAll('[data-vis-panel]'));
+  if(!panels.length) return;
+  const available=panels.map(panel=>panel.dataset?.visPanel).filter(Boolean);
+  let normalized = typeof target==='string' && target ? target : VISUAL_TAB;
+  if(!normalized || !available.includes(normalized)){
+    normalized = available.includes('adj') ? 'adj' : (available[0] || 'adj');
+  }
+  VISUAL_TAB = normalized;
+  panels.forEach(panel=>{
+    const active = panel.dataset?.visPanel===normalized;
     panel.classList.toggle('hidden', !active);
     if(active){ panel.classList.remove('opacity-0'); }
   });
-  const activePanel=document.querySelector(`[data-vis-panel="${target}"]`);
+  const journalAvailable=Array.from(document.querySelectorAll('[data-journal-panel]')).map(panel=>panel.dataset?.journalPanel).filter(Boolean);
+  const memoryKey = normalized==='orig' ? 'orig' : 'adj';
+  let desiredJournalDim = JOURNAL_TAB_MEMORY[memoryKey] || (memoryKey==='orig'?'topic_orig':'topic');
+  if(!journalAvailable.includes(desiredJournalDim)){
+    desiredJournalDim = journalAvailable.includes(JOURNAL_DIM) ? JOURNAL_DIM : (journalAvailable[0] || desiredJournalDim);
+  }
+  setJournalTab(desiredJournalDim);
+  const activePanel=document.querySelector(`[data-vis-panel="${normalized}"]`);
   if(activePanel){
     activePanel.querySelectorAll('[data-treemap-key]').forEach(div=>{
       if(window.Plotly){
@@ -5442,16 +5539,12 @@ function setVisualTab(){
         try{ Plotly.Plots.resize(div); }catch(e){}
       }
     });
-    if(target==='adj'){
-      renderDeferredJournalCharts();
-      resizeVisibleJournalCharts();
-    }
     resizeTimelineCharts();
   }
   renderDeferredTreemaps();
   renderDeferredBarCharts();
   document.querySelectorAll('[data-vis-tab]').forEach(btn=>{
-    const active = btn.dataset?.visTab===target;
+    const active = btn.dataset?.visTab===normalized;
     btn.classList.toggle('vis-tab-btn-active', active);
     btn.setAttribute('aria-selected', active? 'true':'false');
     btn.tabIndex = active?0:-1;
@@ -5459,14 +5552,27 @@ function setVisualTab(){
 }
 
 function setJournalTab(dim){
-  const target = dim==='field' ? 'field' : 'topic';
+  const panels=Array.from(document.querySelectorAll('[data-journal-panel]'));
+  const available=panels.map(panel=>panel.dataset?.journalPanel).filter(Boolean);
+  if(!available.length){ return; }
+  let target=normalizeJournalKey(dim);
+  if(!available.includes(target)){
+    target=available.includes(JOURNAL_DIM)?JOURNAL_DIM:available[0];
+  }
+  target=normalizeJournalKey(target);
   JOURNAL_DIM = target;
-  document.querySelectorAll('[data-journal-panel]').forEach(panel=>{
+  if(target.endsWith('_orig')){
+    JOURNAL_TAB_MEMORY.orig = target;
+  }else{
+    JOURNAL_TAB_MEMORY.adj = target;
+  }
+  panels.forEach(panel=>{
     const active = panel.dataset?.journalPanel===target;
     panel.classList.toggle('hidden', !active);
   });
   document.querySelectorAll('[data-journal-toggle]').forEach(btn=>{
-    const active = btn.dataset?.journalToggle===target;
+    const toggleTarget = normalizeJournalKey(btn.dataset?.journalToggle);
+    const active = toggleTarget===target;
     btn.classList.toggle('journal-toggle-active', active);
     btn.setAttribute('aria-pressed', active?'true':'false');
   });
@@ -6323,6 +6429,8 @@ function bindEvents(){
   // 筛选
   bindClick('btn_only_other_topic_adj', ()=>quickFilter('topic_adj','其他议题'));
   bindClick('btn_only_other_field_adj', ()=>quickFilter('field_adj','其他领域'));
+  bindClick('btn_only_other_topic_orig', ()=>quickFilter('topic_orig','其他议题'));
+  bindClick('btn_only_other_field_orig', ()=>quickFilter('field_orig','其他领域'));
   bindClick('btn_apply_filter', ()=>{
     CURRENT_FILTER={ target:qs('filter_target').value, value:qs('filter_value').value };
     PAGER.page=1;
@@ -6377,11 +6485,18 @@ function bindEvents(){
   bindClick('btn_do_ranking', doRanking);
   bindClick('btn_refresh_vis', ()=>fetchScatterAndRender(true));
   bindClick('btn_toggle_vis', toggleRankVis);
-  bindClick('btn_journal_topic', ()=>setJournalTab('topic'));
-  bindClick('btn_journal_field', ()=>setJournalTab('field'));
+  document.querySelectorAll('[data-vis-tab]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      setVisualTab(btn.dataset?.visTab);
+    });
+  });
+  document.querySelectorAll('[data-journal-toggle]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      setJournalTab(btn.dataset?.journalToggle);
+    });
+  });
   setRankVisExpanded(false);
-  setVisualTab();
-  setJournalTab('topic');
+  setVisualTab(VISUAL_TAB);
   if(!JOURNAL_OPEN_HANDLER_BOUND){
     document.addEventListener('click', handleJournalOpenClick);
     JOURNAL_OPEN_HANDLER_BOUND=true;
