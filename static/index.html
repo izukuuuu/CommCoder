@@ -622,35 +622,35 @@
           <div class="bg-white rounded-2xl shadow p-6 space-y-6" id="topic_viz_container">
             <div class="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h3 class="font-semibold text-slate-900">语义主题探索（调整后）</h3>
-                <p class="text-sm text-slate-500">查看每个分类的高频关键词，并在二维空间中观察主题之间的语义距离。</p>
+                <h3 class="font-semibold text-slate-900" data-i18n-key="topicViz.title">语义主题探索（调整后）</h3>
+                <p class="text-sm text-slate-500" data-i18n-key="topicViz.subtitle">查看每个分类的高频关键词，并在二维空间中观察主题之间的语义距离。</p>
               </div>
-              <div class="topic-viz-tab-toggle" role="tablist" aria-label="语义探索维度切换">
-                <button class="topic-viz-tab topic-viz-tab-active" type="button" data-topicviz-tab="topic" aria-selected="true">研究主题（调整后）</button>
-                <button class="topic-viz-tab" type="button" data-topicviz-tab="field" aria-selected="false">研究领域（调整后）</button>
+              <div class="topic-viz-tab-toggle" id="topic_viz_tablist" role="tablist" aria-label="语义探索维度切换">
+                <button class="topic-viz-tab topic-viz-tab-active" type="button" data-topicviz-tab="topic" aria-selected="true" data-i18n-key="topicViz.tab.topic">研究主题（调整后）</button>
+                <button class="topic-viz-tab" type="button" data-topicviz-tab="field" aria-selected="false" data-i18n-key="topicViz.tab.field">研究领域（调整后）</button>
               </div>
             </div>
             <div class="topic-viz-panel" data-topicviz-panel="topic">
-              <div class="topic-viz-message" data-topicviz-message="topic">请先上传或载入会话以加载语义可视化。</div>
+              <div class="topic-viz-message" data-topicviz-message="topic" data-topicviz-message-key="requireSession">请先上传或载入会话以加载语义可视化。</div>
               <div class="topic-viz-layout">
                 <div class="topic-viz-sidebar">
                   <div class="topic-viz-sidebar-header">
-                    <h4 class="topic-viz-sidebar-title">分类列表</h4>
-                    <p class="topic-viz-sidebar-hint">点击查看对应的高频关键词</p>
+                    <h4 class="topic-viz-sidebar-title" data-i18n-key="topicViz.sidebar.title">分类列表</h4>
+                    <p class="topic-viz-sidebar-hint" data-i18n-key="topicViz.sidebar.hint">点击查看对应的高频关键词</p>
                   </div>
                   <div class="topic-viz-list" data-topicviz-list="topic"></div>
                 </div>
                 <div class="topic-viz-content">
                   <div class="topic-viz-card">
                     <div class="topic-viz-card-header">
-                      <h4 class="topic-viz-card-title">高频关键词</h4>
+                      <h4 class="topic-viz-card-title" data-i18n-key="topicViz.card.keywords">高频关键词</h4>
                       <div class="topic-viz-hint" data-topicviz-keyword-hint="topic"></div>
                     </div>
                     <div id="topic_viz_words_topic" class="topic-viz-chart" data-topicviz-chart="words" data-topicviz-dim="topic"></div>
                   </div>
                   <div class="topic-viz-card">
                     <div class="topic-viz-card-header">
-                      <h4 class="topic-viz-card-title">语义二维映射</h4>
+                      <h4 class="topic-viz-card-title" data-i18n-key="topicViz.card.scatter">语义二维映射</h4>
                       <div class="topic-viz-hint" data-topicviz-scatter-hint="topic"></div>
                     </div>
                     <div id="topic_viz_scatter_topic" class="topic-viz-scatter" data-topicviz-chart="scatter" data-topicviz-dim="topic"></div>
@@ -659,26 +659,26 @@
               </div>
             </div>
             <div class="topic-viz-panel hidden" data-topicviz-panel="field">
-              <div class="topic-viz-message" data-topicviz-message="field">请先上传或载入会话以加载语义可视化。</div>
+              <div class="topic-viz-message" data-topicviz-message="field" data-topicviz-message-key="requireSession">请先上传或载入会话以加载语义可视化。</div>
               <div class="topic-viz-layout">
                 <div class="topic-viz-sidebar">
                   <div class="topic-viz-sidebar-header">
-                    <h4 class="topic-viz-sidebar-title">分类列表</h4>
-                    <p class="topic-viz-sidebar-hint">点击查看对应的高频关键词</p>
+                    <h4 class="topic-viz-sidebar-title" data-i18n-key="topicViz.sidebar.title">分类列表</h4>
+                    <p class="topic-viz-sidebar-hint" data-i18n-key="topicViz.sidebar.hint">点击查看对应的高频关键词</p>
                   </div>
                   <div class="topic-viz-list" data-topicviz-list="field"></div>
                 </div>
                 <div class="topic-viz-content">
                   <div class="topic-viz-card">
                     <div class="topic-viz-card-header">
-                      <h4 class="topic-viz-card-title">高频关键词</h4>
+                      <h4 class="topic-viz-card-title" data-i18n-key="topicViz.card.keywords">高频关键词</h4>
                       <div class="topic-viz-hint" data-topicviz-keyword-hint="field"></div>
                     </div>
                     <div id="topic_viz_words_field" class="topic-viz-chart" data-topicviz-chart="words" data-topicviz-dim="field"></div>
                   </div>
                   <div class="topic-viz-card">
                     <div class="topic-viz-card-header">
-                      <h4 class="topic-viz-card-title">语义二维映射</h4>
+                      <h4 class="topic-viz-card-title" data-i18n-key="topicViz.card.scatter">语义二维映射</h4>
                       <div class="topic-viz-hint" data-topicviz-scatter-hint="field"></div>
                     </div>
                     <div id="topic_viz_scatter_field" class="topic-viz-scatter" data-topicviz-chart="scatter" data-topicviz-dim="field"></div>
@@ -1009,7 +1009,12 @@ const TIMELINE_LINE_DOWNLOAD_URLS={ png:'', svg:'' };
 let AUTO_SAVE_TIMER=null;
 let AUTO_SAVE_ENABLED=false;
 const TOPIC_VIZ_DIMENSIONS=['topic','field'];
-const TOPIC_VIZ_LABELS={ topic:'研究主题（调整后）', field:'研究领域（调整后）' };
+const TOPIC_VIZ_MESSAGE_KEY_MAP={
+  requireSession:'topicViz.message.requireSession',
+  loading:'topicViz.message.loading',
+  noCategories:'topicViz.message.noCategories',
+  noKeywords:'topicViz.message.noKeywords'
+};
 const TOPIC_VIZ_COLORS=['#2563eb','#1d4ed8','#0ea5e9','#10b981','#f97316','#f43f5e'];
 const TOPIC_VIZ_CONFIG={
   topic:{
@@ -1229,7 +1234,36 @@ const I18N_STRINGS = {
     'flow.outlier': '离群值识别',
     'flow.review': '人工覆核调整',
     'flow.integrate': '多通道结果整合',
-    'flow.validation': '抽样验证可靠性'
+    'flow.validation': '抽样验证可靠性',
+    'topicViz.title': '语义主题探索（调整后）',
+    'topicViz.subtitle': '查看每个分类的高频关键词，并在二维空间中观察主题之间的语义距离。',
+    'topicViz.tab.topic': '研究主题（调整后）',
+    'topicViz.tab.field': '研究领域（调整后）',
+    'topicViz.sidebar.title': '分类列表',
+    'topicViz.sidebar.hint': '点击查看对应的高频关键词',
+    'topicViz.card.keywords': '高频关键词',
+    'topicViz.card.scatter': '语义二维映射',
+    'topicViz.message.requireSession': '请先上传或载入会话以加载语义可视化。',
+    'topicViz.message.loading': '语义可视化数据加载中…',
+    'topicViz.message.noCategories': '暂无可展示的分类数据。',
+    'topicViz.message.noKeywords': '暂无关键词数据。',
+    'topicViz.scatter.noClustering': '未进一步聚类',
+    'topicViz.scatter.clusterFallback': '聚类',
+    'topicViz.scatter.explained': '方差解释',
+    'topicViz.scatter.pipeline': '语义管线',
+    'topicViz.scatter.coverage': '覆盖文献',
+    'topicViz.scatter.insufficient': '语料不足，暂无法生成二维映射。',
+    'topicViz.scatter.plotlyMissing': 'Plotly 未加载',
+    'topicViz.scatter.renderFailed': '可视化渲染失败',
+    'topicViz.scatter.clusterUnit': '簇',
+    'topicViz.hover.cluster': '簇',
+    'topicViz.hover.documents': '文献',
+    'topicViz.download.png': '下载 PNG',
+    'topicViz.download.svg': '下载 SVG',
+    'topicViz.chart.echartsMissing': 'ECharts 未加载',
+    'topicViz.error.prefix': '加载失败：',
+    'topicViz.error.unknown': '加载失败：未知错误',
+    'topicViz.tablist': '语义探索维度切换'
   },
   en: {
     'hero.eyebrow': 'CommCoder Studio',
@@ -1249,18 +1283,75 @@ const I18N_STRINGS = {
     'flow.outlier': 'Outlier detection',
     'flow.review': 'Human review & adjustment',
     'flow.integrate': 'Multi-channel result integration',
-    'flow.validation': 'Sample-based reliability validation'
+    'flow.validation': 'Sample-based reliability validation',
+    'topicViz.title': 'Semantic Topic Explorer',
+    'topicViz.subtitle': 'Review frequent keywords per category and inspect distances in the semantic scatter.',
+    'topicViz.tab.topic': 'Adjusted Topics',
+    'topicViz.tab.field': 'Adjusted Fields',
+    'topicViz.sidebar.title': 'Category List',
+    'topicViz.sidebar.hint': 'Select a category to view top keywords.',
+    'topicViz.card.keywords': 'Top Keywords',
+    'topicViz.card.scatter': 'Semantic Scatter Map',
+    'topicViz.message.requireSession': 'Upload or load a session to view the semantic visuals.',
+    'topicViz.message.loading': 'Loading semantic visuals…',
+    'topicViz.message.noCategories': 'No categories available for display.',
+    'topicViz.message.noKeywords': 'No keyword data available.',
+    'topicViz.scatter.noClustering': 'No additional clustering',
+    'topicViz.scatter.clusterFallback': 'Clustering',
+    'topicViz.scatter.explained': 'Explained variance',
+    'topicViz.scatter.pipeline': 'Semantic pipeline',
+    'topicViz.scatter.coverage': 'Documents covered',
+    'topicViz.scatter.insufficient': 'Insufficient corpus to render the scatter.',
+    'topicViz.scatter.plotlyMissing': 'Plotly not loaded',
+    'topicViz.scatter.renderFailed': 'Visualization rendering failed',
+    'topicViz.scatter.clusterUnit': 'clusters',
+    'topicViz.hover.cluster': 'Cluster',
+    'topicViz.hover.documents': 'Documents',
+    'topicViz.download.png': 'Download PNG',
+    'topicViz.download.svg': 'Download SVG',
+    'topicViz.chart.echartsMissing': 'ECharts not loaded',
+    'topicViz.error.prefix': 'Load failed: ',
+    'topicViz.error.unknown': 'Load failed: Unknown error',
+    'topicViz.tablist': 'Semantic dimension toggle'
   }
 };
 const I18N_ATTR_MAP = {
   zh: {
-    '#hero_flow_diagram': { 'aria-label': '编码流程图' }
+    '#hero_flow_diagram': { 'aria-label': '编码流程图' },
+    '#topic_viz_tablist': { 'aria-label': '语义探索维度切换' }
   },
   en: {
-    '#hero_flow_diagram': { 'aria-label': 'Coding workflow diagram' }
+    '#hero_flow_diagram': { 'aria-label': 'Coding workflow diagram' },
+    '#topic_viz_tablist': { 'aria-label': 'Semantic dimension toggle' }
   }
 };
 let CURRENT_LANG = 'zh';
+
+function getI18nText(key){
+  if(!key) return '';
+  const langMap = I18N_STRINGS[CURRENT_LANG] || {};
+  if(Object.prototype.hasOwnProperty.call(langMap, key)){
+    return langMap[key];
+  }
+  const zhMap = I18N_STRINGS.zh || {};
+  if(Object.prototype.hasOwnProperty.call(zhMap, key)){
+    return zhMap[key];
+  }
+  return '';
+}
+
+function getTopicVizLabel(dim){
+  return dim==='field' ? getI18nText('topicViz.tab.field') || '研究领域（调整后）' : getI18nText('topicViz.tab.topic') || '研究主题（调整后）';
+}
+
+function getTopicVizMessageTextByKey(key){
+  if(!key) return '';
+  const mapKey = TOPIC_VIZ_MESSAGE_KEY_MAP[key];
+  if(mapKey){
+    return getI18nText(mapKey);
+  }
+  return '';
+}
 
 function applyLanguage(lang){
   const target = SUPPORTED_LANGS.includes(lang) ? lang : 'zh';
@@ -1280,6 +1371,21 @@ function applyLanguage(lang){
     Object.entries(attrs || {}).forEach(([attr, value]) => {
       el.setAttribute(attr, value);
     });
+  });
+  document.querySelectorAll('[data-topicviz-message-key]').forEach(el=>{
+    const key = el.dataset.topicvizMessageKey || '';
+    const text = getTopicVizMessageTextByKey(key);
+    if(key && text){
+      el.textContent = text;
+    }
+  });
+  document.querySelectorAll('[data-topicviz-download]').forEach(btn=>{
+    const type = btn.dataset.topicvizDownload;
+    if(type==='png'){
+      btn.textContent = getI18nText('topicViz.download.png') || '下载 PNG';
+    }else if(type==='svg'){
+      btn.textContent = getI18nText('topicViz.download.svg') || '下载 SVG';
+    }
   });
   if(LANGUAGE_TOGGLE_LABEL){
     LANGUAGE_TOGGLE_LABEL.textContent = target === 'zh' ? 'English' : '中文';
@@ -4495,11 +4601,21 @@ function resetWordCloudSection(){
   });
 }
 
-function setTopicVizMessage(dim, message){
+function setTopicVizMessage(dim, message, messageKey){
   const cfg = getTopicVizConfig(dim);
   if(!cfg) return;
   const el = document.querySelector(cfg.messageSelector);
   if(!el) return;
+  if(messageKey !== undefined){
+    if(messageKey === null || messageKey === ''){
+      el.removeAttribute('data-topicviz-message-key');
+    }else{
+      el.dataset.topicvizMessageKey = messageKey;
+      if(!message){
+        message = getTopicVizMessageTextByKey(messageKey) || message;
+      }
+    }
+  }
   if(message){
     el.textContent = message;
     el.classList.remove('hidden');
@@ -4684,8 +4800,8 @@ function resetTopicVizState(){
       const listEl=document.querySelector(cfg.listSelector);
       if(listEl){ listEl.innerHTML=''; }
     }
-    const message = SESSION_ID ? '语义可视化数据加载中…' : '请先上传或载入会话以加载语义可视化。';
-    setTopicVizMessage(dim, message);
+    const messageKey = SESSION_ID ? 'loading' : 'requireSession';
+    setTopicVizMessage(dim, '', messageKey);
   });
   resetWordCloudSection();
 }
@@ -4716,8 +4832,9 @@ function renderTopicVizKeywords(dim, category){
   chartEl.innerHTML='';
 
   if(!dashboard.length){
-    if(hintEl){ hintEl.textContent='暂无关键词数据。'; }
-    chartEl.innerHTML='<div class="topic-viz-empty">暂无关键词数据。</div>';
+    const emptyKeywords=getI18nText('topicViz.message.noKeywords')||'暂无关键词数据。';
+    if(hintEl){ hintEl.textContent=emptyKeywords; }
+    chartEl.innerHTML=`<div class="topic-viz-empty">${getI18nText('topicViz.message.noKeywords')||'暂无关键词数据。'}</div>`;
     return;
   }
 
@@ -4769,7 +4886,7 @@ function renderTopicVizKeywords(dim, category){
     grid.appendChild(card);
 
     if(!window.echarts){
-      chartContainer.innerHTML='<div class="topic-viz-empty">ECharts 未加载</div>';
+      chartContainer.innerHTML=`<div class="topic-viz-empty">${getI18nText('topicViz.chart.echartsMissing')||'ECharts 未加载'}</div>`;
       return;
     }
 
@@ -4881,18 +4998,26 @@ function renderTopicVizScatter(dim){
   const summaryText = (scatter.summary||'').toString();
   const fallbackSummaryParts=[];
   if(clusterCount>1){
-    fallbackSummaryParts.push(`${clusterAlgo||'聚类'} · ${clusterCount} 簇`);
+    const clusterLabel = clusterAlgo || getI18nText('topicViz.scatter.clusterFallback') || '聚类';
+    const unit = getI18nText('topicViz.scatter.clusterUnit') || '簇';
+    const unitText = CURRENT_LANG === 'en' && clusterCount === 1 ? '1 cluster' : `${clusterCount} ${unit}`;
+    fallbackSummaryParts.push(`${clusterLabel} · ${unitText}`);
   }else{
-    fallbackSummaryParts.push('未进一步聚类');
+    fallbackSummaryParts.push(getI18nText('topicViz.scatter.noClustering') || '未进一步聚类');
   }
   if(explained>0){
-    fallbackSummaryParts.push(`方差解释 ${explained.toFixed(1)}%`);
+    const explainedLabel = getI18nText('topicViz.scatter.explained') || '方差解释';
+    fallbackSummaryParts.push(`${explainedLabel} ${explained.toFixed(1)}%`);
   }
   if(pipelineText){
-    fallbackSummaryParts.push(`语义管线：${pipelineText}`);
+    const pipelineLabel = getI18nText('topicViz.scatter.pipeline') || '语义管线';
+    const separator = CURRENT_LANG === 'en' ? ': ' : '：';
+    fallbackSummaryParts.push(`${pipelineLabel}${separator}${pipelineText}`);
   }
   if(docTotal>0){
-    fallbackSummaryParts.push(`覆盖文献 ${docTotal}`);
+    const coverageLabel = getI18nText('topicViz.scatter.coverage') || '覆盖文献';
+    const separator = CURRENT_LANG === 'en' ? ': ' : ' ';
+    fallbackSummaryParts.push(`${coverageLabel}${separator}${docTotal}`);
   }
   if(hintEl){
     const text = summaryText || fallbackSummaryParts.filter(Boolean).join(' · ');
@@ -4913,8 +5038,9 @@ function renderTopicVizScatter(dim){
     img.className='topic-viz-scatter-image';
     img.loading='lazy';
     img.src=pngUrl;
-    const dimLabel=TOPIC_VIZ_LABELS[dim]||'语义二维映射';
-    img.alt=`${dimLabel} 语义二维映射`;
+    const dimLabel=getTopicVizLabel(dim)||'语义二维映射';
+    const scatterLabel=getI18nText('topicViz.card.scatter')||'语义二维映射';
+    img.alt=`${dimLabel} ${scatterLabel}`;
     wrapper.appendChild(img);
     chartEl.appendChild(wrapper);
 
@@ -4924,14 +5050,16 @@ function renderTopicVizScatter(dim){
     pngLink.className='topic-viz-keyword-download-btn';
     pngLink.href=pngUrl;
     pngLink.download=(scatter.png_filename||'semantic_map.png').toString();
-    pngLink.textContent='下载 PNG';
+    pngLink.dataset.topicvizDownload='png';
+    pngLink.textContent=getI18nText('topicViz.download.png')||'下载 PNG';
     downloads.appendChild(pngLink);
     if(svgUrl){
       const svgLink=document.createElement('a');
       svgLink.className='topic-viz-keyword-download-btn';
       svgLink.href=svgUrl;
       svgLink.download=(scatter.svg_filename||'semantic_map.svg').toString();
-      svgLink.textContent='下载 SVG';
+      svgLink.dataset.topicvizDownload='svg';
+      svgLink.textContent=getI18nText('topicViz.download.svg')||'下载 SVG';
       downloads.appendChild(svgLink);
     }
     chartEl.appendChild(downloads);
@@ -4939,13 +5067,14 @@ function renderTopicVizScatter(dim){
   }
 
   if(!window.Plotly){
-    chartEl.innerHTML='<div class="topic-viz-empty">Plotly 未加载</div>';
+    chartEl.innerHTML=`<div class="topic-viz-empty">${getI18nText('topicViz.scatter.plotlyMissing')||'Plotly 未加载'}</div>`;
     return;
   }
   if(!points.length){
     try{ Plotly.purge(chartEl); }catch(e){}
-    chartEl.innerHTML='<div class="topic-viz-empty">语料不足，暂无法生成二维映射。</div>';
-    if(hintEl){ hintEl.textContent='语料不足，暂无法生成二维映射。'; }
+    const emptyText=getI18nText('topicViz.scatter.insufficient')||'语料不足，暂无法生成二维映射。';
+    chartEl.innerHTML=`<div class="topic-viz-empty">${emptyText}</div>`;
+    if(hintEl){ hintEl.textContent=emptyText; }
     return;
   }
 
@@ -4992,8 +5121,11 @@ function renderTopicVizScatter(dim){
       const label = escapeHtml(displayLabels[idx]||'Unmapped');
       const cnt = safeNumber(p?.count||0);
       const cluster = p?.cluster;
-      const clusterText = showClusters ? `<br>簇：${cluster}` : '';
-      return `${label}<br>文献：${cnt}${clusterText}`;
+      const docLabel = getI18nText('topicViz.hover.documents')||'文献';
+      const clusterLabel = getI18nText('topicViz.hover.cluster')||'簇';
+      const separator = CURRENT_LANG === 'en' ? ': ' : '：';
+      const clusterText = showClusters ? `<br>${clusterLabel}${separator}${cluster}` : '';
+      return `${label}<br>${docLabel}${separator}${cnt}${clusterText}`;
     }),
     hoverinfo:'text',
   };
@@ -5014,7 +5146,7 @@ function renderTopicVizScatter(dim){
     plotPromise=Plotly.react(chartEl, [trace], layout, {...SCATTER_CONFIG});
   }catch(err){
     console.error('Plotly 渲染失败', err);
-    chartEl.innerHTML='<div class="topic-viz-empty">可视化渲染失败</div>';
+    chartEl.innerHTML=`<div class="topic-viz-empty">${getI18nText('topicViz.scatter.renderFailed')||'可视化渲染失败'}</div>`;
     SCATTER_STATE.hasData=false;
     return;
   }
@@ -5033,7 +5165,7 @@ function renderTopicVizList(dim){
   const data = TOPIC_VIZ_STATE.data[dim];
   const categories = Array.isArray(data?.categories) ? data.categories : [];
   if(!categories.length){
-    listEl.innerHTML='<div class="topic-viz-empty">暂无分类数据。</div>';
+    listEl.innerHTML=`<div class="topic-viz-empty">${getI18nText('topicViz.message.noCategories')||'暂无分类数据。'}</div>`;
     TOPIC_VIZ_STATE.selected[dim]=null;
     clearTopicVizCharts(dim);
     return;
@@ -5296,7 +5428,7 @@ async function fetchTopicVisuals(options={}){
   }
   const currentSession = SESSION_ID;
   TOPIC_VIZ_STATE.loading=true;
-  TOPIC_VIZ_DIMENSIONS.forEach(dim=>setTopicVizMessage(dim,'语义可视化数据加载中…'));
+  TOPIC_VIZ_DIMENSIONS.forEach(dim=>setTopicVizMessage(dim,'','loading'));
   WORD_CLOUD_DIMENSIONS.forEach(dim=>{
     clearWordCloudList(dim);
     setWordCloudMessage(dim,'词云数据加载中…');
@@ -5305,9 +5437,10 @@ async function fetchTopicVisuals(options={}){
     const r=await fetch(`/topic_visuals?session_id=${encodeURIComponent(currentSession)}&t=${Date.now()}`,{cache:'no-store'});
     if(!r.ok){
       const errText = await r.text();
-      const msg = errText ? `加载失败：${errText}` : `加载失败：${r.status}`;
+      const prefix = getI18nText('topicViz.error.prefix') || '加载失败：';
+      const msg = errText ? `${prefix}${errText}` : `${prefix}${r.status}`;
       TOPIC_VIZ_DIMENSIONS.forEach(dim=>{
-        setTopicVizMessage(dim, msg);
+        setTopicVizMessage(dim, msg, '');
         clearTopicVizCharts(dim);
       });
       TOPIC_VIZ_STATE.fetchedSession='';
@@ -5323,21 +5456,24 @@ async function fetchTopicVisuals(options={}){
     TOPIC_VIZ_DIMENSIONS.forEach(dim=>{
       const categories = Array.isArray(TOPIC_VIZ_STATE.data[dim]?.categories) ? TOPIC_VIZ_STATE.data[dim].categories : [];
       if(categories.length){
-        setTopicVizMessage(dim, '');
+        setTopicVizMessage(dim, '', null);
         setWordCloudMessage(dim, '点击任意分类查看词云。');
       }else{
-        setTopicVizMessage(dim, '暂无可展示的分类数据。');
+        const emptyCategories=getI18nText('topicViz.message.noCategories')||'暂无可展示的分类数据。';
+        setTopicVizMessage(dim, '', 'noCategories');
         clearWordCloudList(dim);
-        setWordCloudMessage(dim, '暂无可展示的分类数据。');
+        setWordCloudMessage(dim, emptyCategories);
       }
     });
     renderTopicVizPanel(TOPIC_VIZ_STATE.active);
     refreshWordCloudLists();
     resizeTopicVizCharts();
   }catch(err){
-    const msg = err?.message ? `加载失败：${err.message}` : '加载失败：未知错误';
+    const prefix = getI18nText('topicViz.error.prefix') || '加载失败：';
+    const fallbackError = getI18nText('topicViz.error.unknown') || '加载失败：未知错误';
+    const msg = err?.message ? `${prefix}${err.message}` : fallbackError;
     TOPIC_VIZ_DIMENSIONS.forEach(dim=>{
-      setTopicVizMessage(dim, msg);
+      setTopicVizMessage(dim, msg, '');
       clearTopicVizCharts(dim);
       clearWordCloudList(dim);
       setWordCloudMessage(dim, msg);
