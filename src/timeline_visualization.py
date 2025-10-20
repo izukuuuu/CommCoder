@@ -1,54 +1,26 @@
 """Standalone demo for generating publication timeline charts."""
 from __future__ import annotations
 
+import argparse
 import io
 import json
 
 import matplotlib.pyplot as plt
-import pandas as pd
 
-from utils import ensure_output_dir, load_backend
-
-
-SAMPLE_ROWS = [
-    {
-        "Publication Year": 2012,
-        "研究主题（议题）分类_调整": "教育技术创新",
-        "研究领域分类_调整": "教育信息化",
-    },
-    {
-        "Publication Year": 2015,
-        "研究主题（议题）分类_调整": "教育技术创新",
-        "研究领域分类_调整": "教育信息化",
-    },
-    {
-        "Publication Year": 2017,
-        "研究主题（议题）分类_调整": "社区治理",
-        "研究领域分类_调整": "社会治理",
-    },
-    {
-        "Publication Year": 2019,
-        "研究主题（议题）分类_调整": "社区治理",
-        "研究领域分类_调整": "社会治理",
-    },
-    {
-        "Publication Year": 2021,
-        "研究主题（议题）分类_调整": "数字政府",
-        "研究领域分类_调整": "数字治理",
-    },
-    {
-        "Publication Year": 2023,
-        "研究主题（议题）分类_调整": "绿色制造",
-        "研究领域分类_调整": "可持续发展",
-    },
-]
+from utils import DatasetContext, ensure_output_dir, load_backend, load_dataset
 
 
 def main() -> None:
-    backend = load_backend()
-    df = pd.DataFrame(SAMPLE_ROWS)
+    parser = argparse.ArgumentParser(description="导出时间轴折线图数据及图片")
+    parser.add_argument("--session", help="指定会话 ID，默认选择最近使用的会话")
+    parser.add_argument("--data-path", help="直接从文件加载数据 (.pkl/.xlsx/.csv)")
+    parser.add_argument("--bin-years", type=int, default=5, help="时间分组的跨度（年份），默认为 5 年")
+    args = parser.parse_args()
 
-    timeline = backend._timeline(df, bin_years=4)  # type: ignore[attr-defined]
+    backend = load_backend()
+    dataset: DatasetContext = load_dataset(backend, session_id=args.session, data_path=args.data_path)
+
+    timeline = backend._timeline(dataset.df, bin_years=args.bin_years)  # type: ignore[attr-defined]
 
     output_dir = ensure_output_dir()
     (output_dir / "timeline_data.json").write_text(json.dumps(timeline, ensure_ascii=False, indent=2))
@@ -61,7 +33,10 @@ def main() -> None:
     fig.savefig(output_dir / "timeline_overview.svg", bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
-    print(f"Timeline visualization assets exported to {output_dir}")
+    print(
+        "Timeline visualization assets exported to"
+        f" {output_dir} using {dataset.source} (bin_years={args.bin_years})"
+    )
 
 
 def fig_to_png(fig) -> bytes:

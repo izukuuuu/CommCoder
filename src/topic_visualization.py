@@ -1,61 +1,25 @@
 """Standalone demo for generating topic/field scatter visualizations."""
 from __future__ import annotations
-
+import argparse
 import json
 
-import pandas as pd
-
-from utils import decode_data_url, ensure_output_dir, load_backend
-
-
-SAMPLE_ROWS = [
-    {
-        "Article Title": "AI-Driven Personalised Learning Platforms",
-        "Abstract": "We explore artificial intelligence techniques applied to adaptive learning systems in higher education.",
-        "结构化总结": "研究高等教育场景中人工智能驱动的个性化学习平台，提出多维度评估框架。",
-        "研究主题（议题）分类": "人工智能应用",
-        "研究主题（议题）分类_调整": "教育技术创新",
-        "研究领域分类": "教育技术",
-        "研究领域分类_调整": "教育信息化",
-    },
-    {
-        "Article Title": "Community Resilience After Natural Disasters",
-        "Abstract": "Case studies describing community based interventions that accelerated recovery after major flooding events.",
-        "结构化总结": "总结洪灾后社区治理与公共服务体系协同的恢复路径。",
-        "研究主题（议题）分类": "社会治理",
-        "研究主题（议题）分类_调整": "社区治理",
-        "研究领域分类": "公共管理",
-        "研究领域分类_调整": "社会治理",
-    },
-    {
-        "Article Title": "Data Governance for Smart Cities",
-        "Abstract": "The article proposes an evaluation model for data governance maturity in smart city projects across Asia.",
-        "结构化总结": "提出智慧城市数据治理成熟度的量化指标体系。",
-        "研究主题（议题）分类": "智慧城市",
-        "研究主题（议题）分类_调整": "数字政府",
-        "研究领域分类": "信息科学",
-        "研究领域分类_调整": "数字治理",
-    },
-    {
-        "Article Title": "Sustainable Supply Chains in Manufacturing",
-        "Abstract": "Survey of sustainable procurement and emission reporting practices among manufacturing enterprises.",
-        "结构化总结": "分析制造业绿色供应链的采购策略与排放核算。",
-        "研究主题（议题）分类": "产业升级",
-        "研究主题（议题）分类_调整": "绿色制造",
-        "研究领域分类": "经济管理",
-        "研究领域分类_调整": "可持续发展",
-    },
-]
+from utils import DatasetContext, decode_data_url, ensure_output_dir, load_backend, load_dataset
 
 
 def main() -> None:
-    backend = load_backend()
-    if getattr(backend, "SentenceTransformer", None) is not None:
-        # Force TF-IDF fallback to avoid downloading large embedding models.
-        backend.SentenceTransformer = None  # type: ignore[attr-defined]
-    df = pd.DataFrame(SAMPLE_ROWS)
+    parser = argparse.ArgumentParser(description="Generate topic/field scatter assets from backend data")
+    parser.add_argument("--session", help="指定会话 ID，默认选择最近使用的会话")
+    parser.add_argument("--data-path", help="直接读取指定数据文件 (.pkl/.xlsx/.csv)")
+    args = parser.parse_args()
 
-    payload = backend._topic_visual_payload(df)  # type: ignore[attr-defined]
+    backend = load_backend()
+    dataset: DatasetContext = load_dataset(backend, session_id=args.session, data_path=args.data_path)
+
+    if getattr(backend, "SentenceTransformer", None) is not None:
+        # Avoid downloading large embedding models when running offline scripts.
+        backend.SentenceTransformer = None  # type: ignore[attr-defined]
+
+    payload = backend._topic_visual_payload(dataset.df)  # type: ignore[attr-defined]
 
     output_dir = ensure_output_dir()
     json_path = output_dir / "topic_visuals.json"
@@ -73,7 +37,7 @@ def main() -> None:
             filename = scatter.get(f"{ext}_filename") or f"{dimension}_scatter.{ext}"
             (output_dir / filename).write_bytes(binary)
 
-    print(f"Topic visualization data exported to {output_dir}")
+    print(f"Topic visualization data exported to {output_dir} using {dataset.source}")
 
 
 if __name__ == "__main__":
