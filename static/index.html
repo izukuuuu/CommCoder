@@ -4866,19 +4866,19 @@ function openKeywordShowcase(dim){
       meta.className='keyword-meta';
       const docCount=Math.max(0, Number(item.documentCount||0)||0);
       const docSpan=document.createElement('span');
-      docSpan.textContent=`文献 ${formatNumber(docCount)}`;
+      docSpan.textContent='文献 ' + formatNumber(docCount);
       meta.appendChild(docSpan);
       const tokenCount=Math.max(0, Number(item.totalTokens||0)||0);
       if(tokenCount>0){
         const tokenSpan=document.createElement('span');
-        tokenSpan.textContent=`词频 ${formatNumber(tokenCount)}`;
+        tokenSpan.textContent='词频 ' + formatNumber(tokenCount);
         meta.appendChild(tokenSpan);
       }
       header.appendChild(meta);
       card.appendChild(header);
       const chartEl=document.createElement('div');
       chartEl.className='keyword-chart';
-      chartEl.id=`keyword_chart_${index}`;
+      chartEl.id='keyword_chart_' + index;
       card.appendChild(chartEl);
       grid.appendChild(card);
       const keywordsRaw=Array.isArray(item.keywords)?item.keywords:[];
@@ -4919,8 +4919,8 @@ function openKeywordShowcase(dim){
             const base=percent>=10?percent.toFixed(1):percent.toFixed(2);
             const dataPoint=first.data||{};
             const countVal=Number(dataPoint.count||0);
-            const countText=countVal>0?` · 词频 ${formatNumber(countVal)}`:'';
-            return `${first.name}<br/>权重 ${base}%${countText}`;
+            const countText = countVal>0 ? ' · 词频 ' + formatNumber(countVal) : '';
+            return first.name + '<br/>权重 ' + base + '%' + countText;
           }
         },
         xAxis:{
@@ -4938,7 +4938,7 @@ function openKeywordShowcase(dim){
             formatter:value=>{
               const num=Number(value)||0;
               const percent=num*100;
-              return percent>=10?`${percent.toFixed(0)}%`:`${percent.toFixed(1)}%`;
+              return percent>=10 ? percent.toFixed(0) + '%' : percent.toFixed(1) + '%';
             }
           },
           splitLine:{ lineStyle:{ color:'#e2e8f0' } }
@@ -4959,9 +4959,9 @@ function openKeywordShowcase(dim){
               const base=percent>=10?percent.toFixed(1):percent.toFixed(2);
               const countVal=Number(params.data?.count||0);
               if(countVal>0){
-                return `${base}%\n(${formatNumber(countVal)})`;
+                return base + '%\n(' + formatNumber(countVal) + ')';
               }
-              return `${base}%`;
+              return base + '%';
             }
           }
         }]
