@@ -1410,6 +1410,30 @@ const HOME_ACTION_CONFIG = [
   { action: 'export-topic-year', btnId: 'btn_export_topic_year', requiresSession: true },
   { action: 'download-export', btnId: 'btn_download_last', requiresSession: true, requiresExport: true }
 ];
+
+function setButtonState(btn, disabled){
+  if(!btn) return;
+  const isDisabled = !!disabled;
+  btn.disabled = isDisabled;
+  if(isDisabled){
+    btn.setAttribute('aria-disabled','true');
+    btn.classList.add('is-disabled');
+  }else{
+    btn.removeAttribute('disabled');
+    btn.setAttribute('aria-disabled','false');
+    btn.classList.remove('is-disabled');
+  }
+}
+
+function bindClick(id, handler){
+  const el = qs(id);
+  if(!el){
+    console.warn(`[bindClick] missing element #${id}`);
+    return null;
+  }
+  el.addEventListener('click', handler);
+  return el;
+}
 let ACTIVE_PAGE = 'page-home';
 const TIMELINE_BIN_SELECT = document.getElementById('timeline_bin_select');
 if(TIMELINE_BIN_SELECT){
@@ -1576,7 +1600,7 @@ function refreshHomeActions(){
     const btn = document.getElementById(cfg.btnId);
     const card = document.querySelector(`.home-action-card[data-action="${cfg.action}"]`);
     const disabled = (cfg.requiresSession && !hasSession) || (cfg.requiresExport && !hasExport);
-    if(btn){ btn.disabled = disabled; }
+    if(btn){ setButtonState(btn, disabled); }
     if(card){ card.dataset.disabled = disabled ? 'true' : 'false'; }
   });
 }
@@ -6258,31 +6282,28 @@ async function downloadLast(){
 /* ===================== 事件绑定 & 初始化 ===================== */
 function bindEvents(){
   // 上传/保存/载入/导出
-  qs('btn_upload').onclick=uploadFile;
-  qs('btn_save_session').onclick=saveSession;
-  qs('btn_load_session').onclick=openLoadDialog;
-  qs('btn_save_excel').onclick=saveExcelServer;
-  const btnAddTopicMapping=qs('btn_add_topic_mapping'); if(btnAddTopicMapping) btnAddTopicMapping.onclick=()=>addLabelMappingRow('topic');
-  const btnAddFieldMapping=qs('btn_add_field_mapping'); if(btnAddFieldMapping) btnAddFieldMapping.onclick=()=>addLabelMappingRow('field');
-  const btnSaveLabelMapping=qs('btn_save_label_mapping'); if(btnSaveLabelMapping) btnSaveLabelMapping.onclick=saveLabelMapping;
-  const btnExportBatch=qs('btn_export_batch'); if(btnExportBatch) btnExportBatch.onclick=openBatchExportDialog;
+  bindClick('btn_upload', uploadFile);
+  bindClick('btn_save_session', saveSession);
+  bindClick('btn_load_session', openLoadDialog);
+  bindClick('btn_save_excel', saveExcelServer);
+  bindClick('btn_add_topic_mapping', ()=>addLabelMappingRow('topic'));
+  bindClick('btn_add_field_mapping', ()=>addLabelMappingRow('field'));
+  bindClick('btn_save_label_mapping', saveLabelMapping);
+  bindClick('btn_export_batch', openBatchExportDialog);
   const dlgExportBatch=qs('dlg_export_batch');
   if(dlgExportBatch){
-    const btnBatchClose=qs('btn_export_batch_close'); if(btnBatchClose) btnBatchClose.onclick=()=>dlgExportBatch.close();
-    const btnBatchCancel=qs('btn_export_batch_cancel'); if(btnBatchCancel) btnBatchCancel.onclick=()=>dlgExportBatch.close();
-    const btnBatchConfirm=qs('btn_export_batch_confirm');
-    if(btnBatchConfirm){
-      btnBatchConfirm.onclick=()=>{
-        const selections=Array.from(dlgExportBatch.querySelectorAll('input[name="batch_export_target"]:checked')).map(el=>el.value);
-        if(!selections.length){
-          const err=qs('batch_export_error'); if(err){ err.classList.remove('hidden'); }
-          return;
-        }
-        const err=qs('batch_export_error'); if(err){ err.classList.add('hidden'); }
-        dlgExportBatch.close();
-        exportBatchExcel(selections);
-      };
-    }
+    bindClick('btn_export_batch_close', ()=>dlgExportBatch.close());
+    bindClick('btn_export_batch_cancel', ()=>dlgExportBatch.close());
+    bindClick('btn_export_batch_confirm', ()=>{
+      const selections=Array.from(dlgExportBatch.querySelectorAll('input[name="batch_export_target"]:checked')).map(el=>el.value);
+      if(!selections.length){
+        const err=qs('batch_export_error'); if(err){ err.classList.remove('hidden'); }
+        return;
+      }
+      const err=qs('batch_export_error'); if(err){ err.classList.add('hidden'); }
+      dlgExportBatch.close();
+      exportBatchExcel(selections);
+    });
     dlgExportBatch.querySelectorAll('input[name="batch_export_target"]').forEach(input=>{
       input.addEventListener('change',()=>{
         const err=qs('batch_export_error'); if(err){ err.classList.add('hidden'); }
@@ -6292,22 +6313,22 @@ function bindEvents(){
       const err=qs('batch_export_error'); if(err){ err.classList.add('hidden'); }
     });
   }
-  const btnTopicYear=qs('btn_export_topic_year'); if(btnTopicYear) btnTopicYear.onclick=exportTopicYearExcel;
-  qs('btn_download_last').onclick=downloadLast;
-  const btnSaveAll=qs('btn_save_all'); if(btnSaveAll) btnSaveAll.onclick=saveAllChanges;
+  bindClick('btn_export_topic_year', exportTopicYearExcel);
+  bindClick('btn_download_last', downloadLast);
+  bindClick('btn_save_all', saveAllChanges);
   const autoToggle=qs('auto_save_enable'); if(autoToggle) autoToggle.addEventListener('change', applyAutoSaveSettings);
   const autoInterval=qs('auto_save_interval'); if(autoInterval) autoInterval.addEventListener('change', applyAutoSaveSettings);
 
   // 筛选
-  const btnOtherTopicAdj=qs('btn_only_other_topic_adj'); if(btnOtherTopicAdj) btnOtherTopicAdj.onclick=()=>quickFilter('topic_adj','其他议题');
-  const btnOtherFieldAdj=qs('btn_only_other_field_adj'); if(btnOtherFieldAdj) btnOtherFieldAdj.onclick=()=>quickFilter('field_adj','其他领域');
-  qs('btn_apply_filter').onclick=()=>{
+  bindClick('btn_only_other_topic_adj', ()=>quickFilter('topic_adj','其他议题'));
+  bindClick('btn_only_other_field_adj', ()=>quickFilter('field_adj','其他领域'));
+  bindClick('btn_apply_filter', ()=>{
     CURRENT_FILTER={ target:qs('filter_target').value, value:qs('filter_value').value };
     PAGER.page=1;
     loadPage();
-  };
-  qs('btn_apply_search').onclick=applySearchKeyword;
-  qs('btn_clear_search').onclick=clearSearchKeyword;
+  });
+  bindClick('btn_apply_search', applySearchKeyword);
+  bindClick('btn_clear_search', clearSearchKeyword);
   document.querySelectorAll('input[name="search_scope"]').forEach(radio=>{
     radio.addEventListener('change', e=>{
       CURRENT_SEARCH.scope = e.target?.value || SEARCH_SCOPE_DEFAULT;
@@ -6329,18 +6350,19 @@ function bindEvents(){
       populateFilterOptions();
     });
   }
-  qs('btn_clear_filter').onclick=()=>{
+  bindClick('btn_clear_filter', ()=>{
     CURRENT_FILTER={target:"",value:""};
     CURRENT_SORT={by:"",order:""};
     syncSortSelect();
     PAGER.page=1;
     loadPage();
-  };
+  });
 
   // 批量
-  qs('btn_bulk_selected').onclick=bulkApplySelected; qs('btn_bulk_filtered').onclick=bulkApplyFiltered;
-  qs('btn_select_all').onclick=()=>document.querySelectorAll(".row_ck").forEach(x=>x.checked=true);
-  qs('btn_unselect_all').onclick=()=>document.querySelectorAll(".row_ck").forEach(x=>x.checked=false);
+  bindClick('btn_bulk_selected', bulkApplySelected);
+  bindClick('btn_bulk_filtered', bulkApplyFiltered);
+  bindClick('btn_select_all', ()=>document.querySelectorAll(".row_ck").forEach(x=>x.checked=true));
+  bindClick('btn_unselect_all', ()=>document.querySelectorAll(".row_ck").forEach(x=>x.checked=false));
 
   const btnCloseWordCloud=qs('btn_close_word_cloud');
   if(btnCloseWordCloud){ btnCloseWordCloud.addEventListener('click', closeWordCloudDialog); }
@@ -6351,11 +6373,11 @@ function bindEvents(){
   }
 
   // 排序
-  qs('btn_do_ranking').onclick=doRanking;
-  const btnRefreshVis=qs('btn_refresh_vis'); if(btnRefreshVis) btnRefreshVis.onclick=()=>fetchScatterAndRender(true);
-  const btnToggleVis=qs('btn_toggle_vis'); if(btnToggleVis) btnToggleVis.onclick=toggleRankVis;
-  const journalTopicBtn=qs('btn_journal_topic'); if(journalTopicBtn) journalTopicBtn.onclick=()=>setJournalTab('topic');
-  const journalFieldBtn=qs('btn_journal_field'); if(journalFieldBtn) journalFieldBtn.onclick=()=>setJournalTab('field');
+  bindClick('btn_do_ranking', doRanking);
+  bindClick('btn_refresh_vis', ()=>fetchScatterAndRender(true));
+  bindClick('btn_toggle_vis', toggleRankVis);
+  bindClick('btn_journal_topic', ()=>setJournalTab('topic'));
+  bindClick('btn_journal_field', ()=>setJournalTab('field'));
   setRankVisExpanded(false);
   setVisualTab();
   setJournalTab('topic');
@@ -6379,23 +6401,25 @@ function bindEvents(){
   handleAlgoChange();
 
   // LLM 配置
-  qs('btn_save_cfg').onclick=saveCfgToLocal; qs('btn_save_env').onclick=saveEnvToServer;
+  bindClick('btn_save_cfg', saveCfgToLocal);
+  bindClick('btn_save_env', saveEnvToServer);
   const topicWrap=qs('topic_blacklist_options');
   if(topicWrap){ topicWrap.addEventListener('change', e=>{ if(e.target?.matches('input[data-kind]')) collectBlacklistSelections(); }); }
   const fieldWrap=qs('field_blacklist_options');
   if(fieldWrap){ fieldWrap.addEventListener('change', e=>{ if(e.target?.matches('input[data-kind]')) collectBlacklistSelections(); }); }
 
   // 只编辑哪一列
-  qs('op_col_select').addEventListener('change', e=> setActiveCol(e.target.value));
+  const opColSelect=qs('op_col_select');
+  if(opColSelect){ opColSelect.addEventListener('change', e=> setActiveCol(e.target.value)); }
 
   // 分页输入与按钮
   qs('page_input').addEventListener('change', ()=>{ let v=parseInt(qs('page_input').value||"1"); if(isNaN(v)||v<1) v=1; PAGER.page=v; loadPage(); });
   qs('ps_input').addEventListener('change', ()=>{ let v=parseInt(qs('ps_input').value||"50"); if(isNaN(v)||v<1) v=1; if(v>5000) v=5000; PAGER.size=v; PAGER.page=1; loadPage(); });
-  qs('btn_reload_page').onclick=loadPage;
-  qs('pg_first').onclick=()=>{ PAGER.page=1; loadPage(); };
-  qs('pg_prev').onclick =()=>{ PAGER.page=Math.max(1, PAGER.page-1); loadPage(); };
-  qs('pg_next').onclick =()=>{ PAGER.page=Math.min(PAGER.pages, PAGER.page+1); loadPage(); };
-  qs('pg_last').onclick =()=>{ PAGER.page=PAGER.pages; loadPage(); };
+  bindClick('btn_reload_page', loadPage);
+  bindClick('pg_first', ()=>{ PAGER.page=1; loadPage(); });
+  bindClick('pg_prev', ()=>{ PAGER.page=Math.max(1, PAGER.page-1); loadPage(); });
+  bindClick('pg_next', ()=>{ PAGER.page=Math.min(PAGER.pages, PAGER.page+1); loadPage(); });
+  bindClick('pg_last', ()=>{ PAGER.page=PAGER.pages; loadPage(); });
   const sortSelect=qs('sort_select');
   if(sortSelect){ sortSelect.addEventListener('change', handleSortChange); }
   setSortAvailability(HAS_RANKING_DATA);
