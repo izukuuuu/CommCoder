@@ -526,6 +526,7 @@
                   <div id="chips_topic_adj" class="flex flex-wrap gap-2 mt-2"></div>
                   <div class="space-y-4">
                     <div id="treemap_topic_adj" class="treemap-box" data-category-chart="topic_adj" data-chart-type="treemap" data-treemap-key="chart_topic_adj"></div>
+                    <div id="category_bar_topic_adj" class="category-bar-box" aria-live="polite"></div>
                   </div>
                 </div>
                 <div class="space-y-4">
@@ -536,6 +537,7 @@
                   <div id="chips_field_adj" class="flex flex-wrap gap-2 mt-2"></div>
                   <div class="space-y-4">
                     <div id="treemap_field_adj" class="treemap-box" data-category-chart="field_adj" data-chart-type="treemap" data-treemap-key="chart_field_adj"></div>
+                    <div id="category_bar_field_adj" class="category-bar-box" aria-live="polite"></div>
                   </div>
                 </div>
               </div>
@@ -1018,6 +1020,11 @@ const CATEGORY_CHART_CONFIG={
   topic_orig:{ treemapId:'treemap_topic_orig', treemapKey:'chart_topic_orig', barId:'barchart_topic_orig', barKey:'bar_topic_orig', kind:'topic' },
   field_orig:{ treemapId:'treemap_field_orig', treemapKey:'chart_field_orig', barId:'barchart_field_orig', barKey:'bar_field_orig', kind:'field' }
 };
+const CATEGORY_BAR_TARGETS={
+  topic_adj:{ containerId:'category_bar_topic_adj', dimension:'topic_adj' },
+  field_adj:{ containerId:'category_bar_field_adj', dimension:'field_adj' }
+};
+const CATEGORY_BAR_CACHE={};
 let RANK_VIS_EXPANDED=false;
 const SCATTER_DEFAULT_HEIGHT=420;
 const SCATTER_STATE={
@@ -1661,6 +1668,9 @@ function renderSessionMeta(meta){
   if(!meta){
     resetSamplingState();
     setJournalOverview(null);
+    clearCategoryBarCache();
+    setCategoryBarPlaceholder('topic_adj','请先载入数据集');
+    setCategoryBarPlaceholder('field_adj','请先载入数据集');
     primary.textContent = '暂无会话';
     secondary.textContent = '请上传或载入数据集';
     LAST_EXPORT_URL = '';
@@ -4305,6 +4315,117 @@ function setCategoryChartView(category, view){
   renderActiveCategoryChart(category);
 }
 
+function getCategoryBarTarget(key){
+  return CATEGORY_BAR_TARGETS[key] || null;
+}
+
+function clearCategoryBarCache(){
+  Object.keys(CATEGORY_BAR_CACHE).forEach(key=>{ delete CATEGORY_BAR_CACHE[key]; });
+}
+
+function setCategoryBarPlaceholder(key, message){
+  const target=getCategoryBarTarget(key);
+  if(!target) return;
+  const container=qs(target.containerId);
+  if(!container) return;
+  const text=message===undefined? '暂无数据' : String(message||'');
+  container.innerHTML=`<div class="category-bar-placeholder">${escapeHtml(text)}</div>`;
+}
+
+function applyCategoryBarImage(key, payload){
+  const target=getCategoryBarTarget(key);
+  if(!target) return;
+  const container=qs(target.containerId);
+  if(!container) return;
+  const pngUrl=payload.png_data_url||payload.png||'';
+  if(!pngUrl){
+    setCategoryBarPlaceholder(key, '暂无图表数据');
+    return;
+  }
+  const title=payload.title || (key==='field_adj'?'Area Distribution':'Topic Distribution');
+  container.innerHTML='';
+  const wrapper=document.createElement('div');
+  wrapper.className='category-bar-image-wrapper';
+  const img=document.createElement('img');
+  img.className='category-bar-image';
+  img.src=pngUrl;
+  img.alt=title;
+  img.loading='lazy';
+  wrapper.appendChild(img);
+  container.appendChild(wrapper);
+
+  const downloads=document.createElement('div');
+  downloads.className='category-bar-downloads';
+  const pngLink=document.createElement('a');
+  pngLink.className='category-bar-download';
+  pngLink.href=pngUrl;
+  pngLink.download=payload.png_filename || `${key}_distribution.png`;
+  pngLink.textContent='Download PNG (300 DPI)';
+  downloads.appendChild(pngLink);
+  if(payload.svg_data_url){
+    const svgLink=document.createElement('a');
+    svgLink.className='category-bar-download';
+    svgLink.href=payload.svg_data_url;
+    svgLink.download=payload.svg_filename || `${key}_distribution.svg`;
+    svgLink.textContent='Download SVG';
+    downloads.appendChild(svgLink);
+  }
+  container.appendChild(downloads);
+}
+
+async function renderCategoryBar(key){
+  const target=getCategoryBarTarget(key);
+  if(!target) return;
+  const container=qs(target.containerId);
+  if(!container) return;
+  if(!SESSION_ID){
+    delete CATEGORY_BAR_CACHE[key];
+    setCategoryBarPlaceholder(key, '请先载入数据集');
+    return;
+  }
+  const cached=CATEGORY_BAR_CACHE[key];
+  if(cached && cached.sessionId===SESSION_ID){
+    applyCategoryBarImage(key, cached);
+    return;
+  }
+  setCategoryBarPlaceholder(key, '图表生成中…');
+  const requestSession=SESSION_ID;
+  try{
+    const url=`/category_bar_chart?session_id=${encodeURIComponent(requestSession)}&dimension=${encodeURIComponent(target.dimension)}&_=${Date.now()}`;
+    const resp=await fetch(url,{cache:'no-store'});
+    if(requestSession!==SESSION_ID) return;
+    if(!resp.ok){
+      const text=await resp.text();
+      setCategoryBarPlaceholder(key, text||'图表生成失败');
+      delete CATEGORY_BAR_CACHE[key];
+      return;
+    }
+    const data=await resp.json();
+    if(requestSession!==SESSION_ID) return;
+    if(!data || data.ok===false || !data.png_data_url){
+      const msg=data && data.message ? data.message : '暂无分类数据';
+      setCategoryBarPlaceholder(key, msg);
+      delete CATEGORY_BAR_CACHE[key];
+      return;
+    }
+    const payload={
+      sessionId: requestSession,
+      png_data_url: data.png_data_url,
+      svg_data_url: data.svg_data_url||'',
+      png_filename: data.png_filename||'',
+      svg_filename: data.svg_filename||'',
+      title: data.title||'',
+    };
+    CATEGORY_BAR_CACHE[key]=payload;
+    applyCategoryBarImage(key, payload);
+  }catch(err){
+    if(requestSession!==SESSION_ID) return;
+    setCategoryBarPlaceholder(key, err?.message ? `图表生成失败：${err.message}` : '图表生成失败');
+    delete CATEGORY_BAR_CACHE[key];
+  }
+}
+
+
 function resetTimelineLineLabels(){
   if(!TIMELINE_LINE_LABEL_LAYER) return;
   TIMELINE_LINE_LABEL_LAYER.innerHTML='';
@@ -5982,7 +6103,13 @@ window.addEventListener('resize',()=>{
 async function refreshStats(){
   if(!SESSION_ID) return;
   const bin=Number.isFinite(TIMELINE_BIN_SIZE)?TIMELINE_BIN_SIZE:5;
-  const r=await fetch(`/stats?session_id=${encodeURIComponent(SESSION_ID)}&bin_years=${encodeURIComponent(bin)}`,{cache:"no-store"}); if(!r.ok) return;
+  const r=await fetch(`/stats?session_id=${encodeURIComponent(SESSION_ID)}&bin_years=${encodeURIComponent(bin)}`,{cache:"no-store"});
+  if(!r.ok){
+    clearCategoryBarCache();
+    setCategoryBarPlaceholder('topic_adj','图表加载失败');
+    setCategoryBarPlaceholder('field_adj','图表加载失败');
+    return;
+  }
   const d=await r.json();
   renderChips("chips_topic_adj", d.topic_adj, "topic_adj", { primaryLabel:'篇数' });
   renderChips("chips_field_adj", d.field_adj, "field_adj", { primaryLabel:'篇数' });
@@ -6011,6 +6138,10 @@ async function refreshStats(){
   populateFilterOptions();
   await fetchTopicVisuals({force:true});
   setVisualTab(VISUAL_TAB);
+  await Promise.all([
+    renderCategoryBar('topic_adj'),
+    renderCategoryBar('field_adj')
+  ]);
 }
 
 function getRankPlotElement(){
