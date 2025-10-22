@@ -573,6 +573,33 @@ FIELD_LABEL_OVERRIDES: Dict[str, str] = {}
 TOPIC_LABEL_MAP: Dict[str, str] = {}
 FIELD_LABEL_MAP: Dict[str, str] = {}
 
+CATEGORY_BAR_CONFIG = {
+    "topic_adj": {
+        "column": ADJUST_TOPIC_COL,
+        "axis": "Topic",
+        "title": "Topic Distribution (Adjusted)",
+        "kind": "topic",
+    },
+    "field_adj": {
+        "column": ADJUST_FIELD_COL,
+        "axis": "Area",
+        "title": "Area Distribution (Adjusted)",
+        "kind": "field",
+    },
+    "topic_orig": {
+        "column": "研究主题（议题）分类",
+        "axis": "Topic",
+        "title": "Topic Distribution (Original)",
+        "kind": "topic",
+    },
+    "field_orig": {
+        "column": "研究领域分类",
+        "axis": "Area",
+        "title": "Area Distribution (Original)",
+        "kind": "field",
+    },
+}
+
 
 def _sanitize_label_mapping_payload(payload: Any) -> Dict[str, str]:
     if not payload:
@@ -1252,6 +1279,125 @@ def _generate_keyword_bar_assets(
         "png_data_url": f"data:image/png;base64,{png_data}",
         "svg_data_url": f"data:image/svg+xml;base64,{svg_data}",
         "words_used": len(labels),
+    }
+
+
+def _generate_category_bar_assets(
+    entries: List[Dict[str, Any]],
+    *,
+    dimension: str,
+    axis_label: str,
+    title: str,
+) -> Dict[str, Any]:
+    filtered: List[Tuple[str, str, int]] = []
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        try:
+            count = int(item.get("count", 0) or 0)
+        except (TypeError, ValueError):
+            count = 0
+        if count <= 0:
+            continue
+        label = str(item.get("label", "")).strip()
+        display = str(item.get("display_label") or label or "").strip()
+        if not display:
+            display = label or "Unlabeled"
+        filtered.append((label or display, display, count))
+
+    if not filtered:
+        raise ValueError("no category counts")
+
+    filtered.sort(key=lambda row: (-row[2], row[1]))
+
+    labels = [display for _, display, _ in filtered]
+    counts = [count for _, _, count in filtered]
+
+    width = 6.2
+    height = max(3.2, 0.45 * len(labels) + 1.6)
+    max_dim = max(width, height)
+    if max_dim > 8.0:
+        scale = 8.0 / max_dim
+        width *= scale
+        height *= scale
+
+    cmap = matplotlib.colormaps.get("viridis")
+    if cmap is None:
+        colors = ["#0f172a" for _ in labels]
+    else:
+        colors = [cmap(0.2 + 0.6 * (idx / max(1, len(labels) - 1))) for idx in range(len(labels))]
+
+    fig, ax = plt.subplots(figsize=(width, height))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+
+    positions = np.arange(len(labels))
+    bars = ax.barh(positions, counts, color=colors, alpha=0.9, edgecolor="white", linewidth=1.0)
+
+    ax.set_yticks(positions)
+    ax.set_yticklabels(labels, fontname="Times New Roman", fontsize=11)
+    ax.set_xlabel("Document Count", fontname="Times New Roman", fontsize=12)
+    ax.set_ylabel(axis_label, fontname="Times New Roman", fontsize=12)
+    ax.set_title(title, fontname="Times New Roman", fontsize=14, color="#111827", pad=14)
+    ax.invert_yaxis()
+
+    ax.set_axisbelow(True)
+    ax.grid(False)
+
+    for spine_name, spine in ax.spines.items():
+        if spine_name in ("left", "bottom"):
+            spine.set_visible(True)
+            spine.set_color("#111827")
+            spine.set_linewidth(1.1)
+        else:
+            spine.set_visible(False)
+
+    ax.tick_params(axis="x", labelsize=11, direction="out", length=4, width=0.8, colors="#111827")
+    ax.tick_params(axis="y", labelsize=11, direction="out", length=4, width=0.8, colors="#111827")
+    for label in ax.get_xticklabels():
+        label.set_fontname("Times New Roman")
+
+    ax.bar_label(
+        bars,
+        labels=[f"{value:,}" for value in counts],
+        padding=6,
+        fontsize=10,
+        color="#111827",
+        fontname="Times New Roman",
+    )
+
+    fig.tight_layout()
+
+    png_buffer = io.BytesIO()
+    svg_buffer = io.BytesIO()
+    fig.savefig(
+        png_buffer,
+        format="png",
+        dpi=300,
+        bbox_inches="tight",
+        facecolor="white",
+    )
+    fig.savefig(
+        svg_buffer,
+        format="svg",
+        bbox_inches="tight",
+        facecolor="white",
+    )
+    plt.close(fig)
+
+    png_data = base64.b64encode(png_buffer.getvalue()).decode("ascii")
+    svg_data = base64.b64encode(svg_buffer.getvalue()).decode("ascii")
+    png_buffer.close()
+    svg_buffer.close()
+
+    slug = _slugify_filename(f"{dimension}_distribution") or "distribution"
+
+    return {
+        "png_data_url": f"data:image/png;base64,{png_data}",
+        "svg_data_url": f"data:image/svg+xml;base64,{svg_data}",
+        "png_filename": f"{slug}.png",
+        "svg_filename": f"{slug}.svg",
+        "title": title,
     }
 
 
@@ -2371,6 +2517,80 @@ def _render_timeline_line_figure(labels: List[str], counts: List[int]):
     ax.tick_params(axis="y", labelsize=11, direction="out", length=4, width=0.8)
 
     return fig
+
+
+@app.get("/category_bar_chart")
+def category_bar_chart(
+    session_id: str = Query(...),
+    dimension: str = Query("topic_adj"),
+    format: Optional[str] = Query(None),
+    download: bool = Query(False),
+):
+    dim_key = (dimension or "").strip().lower()
+    config = CATEGORY_BAR_CONFIG.get(dim_key)
+    if not config:
+        return PlainTextResponse(
+            "dimension must be one of topic_adj, field_adj, topic_orig, field_orig",
+            status_code=400,
+        )
+
+    try:
+        df = _ensure_session_loaded(session_id)
+    except ValueError:
+        return PlainTextResponse("无效 session_id", status_code=400)
+
+    column = config["column"]
+    if column not in df.columns:
+        message = f"数据集中缺少 {column} 列，无法生成图表。"
+        if format:
+            return PlainTextResponse(message, status_code=404)
+        return JSONResponse({"ok": False, "message": message})
+
+    mapping = TOPIC_LABEL_MAP if config["kind"] == "topic" else FIELD_LABEL_MAP
+    counts = _counts(df[column], mapping)
+
+    try:
+        assets = _generate_category_bar_assets(
+            counts,
+            dimension=dim_key,
+            axis_label=config["axis"],
+            title=config["title"],
+        )
+    except ValueError:
+        if format:
+            return PlainTextResponse("暂无分类数据", status_code=404)
+        return JSONResponse({"ok": False, "message": "暂无分类数据"})
+
+    fmt = (format or "").strip().lower()
+    if fmt:
+        if fmt not in {"png", "svg"}:
+            return PlainTextResponse("format must be png or svg", status_code=400)
+        data_url = assets.get(f"{fmt}_data_url")
+        if not data_url:
+            return PlainTextResponse("暂无图表数据", status_code=404)
+        try:
+            _, encoded = data_url.split(",", 1)
+            binary = base64.b64decode(encoded)
+        except Exception:
+            return PlainTextResponse("图表生成失败", status_code=500)
+        mime = "image/png" if fmt == "png" else "image/svg+xml"
+        filename = assets.get(f"{fmt}_filename") or f"{dim_key}_distribution.{fmt}"
+        headers = {}
+        if download:
+            headers["Content-Disposition"] = f"attachment; filename={filename}"
+        return Response(content=binary, media_type=mime, headers=headers)
+
+    total_docs = int(sum(int(item.get("count", 0) or 0) for item in counts))
+    payload = {
+        "ok": True,
+        "dimension": dim_key,
+        "column": column,
+        "title": assets.get("title", config["title"]),
+        "total_documents": total_docs,
+        "entries": counts,
+    }
+    payload.update(assets)
+    return JSONResponse(payload)
 
 
 @app.get("/stats")
