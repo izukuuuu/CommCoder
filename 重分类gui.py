@@ -101,6 +101,13 @@ TEXT_COLUMNS = [SUMMARY_COLUMN] + KEYWORD_TEXT_COLUMNS
 TOKEN_PATTERN = re.compile(r"[A-Za-z]{2,}|[\u4e00-\u9fa5]{2,}|\d{2,}")
 YEAR_PATTERN = re.compile(r"(18|19|20|21)\d{2}")
 
+ADJUST_TOPIC_COL = "研究主题（议题）分类_调整"
+ADJUST_FIELD_COL = "研究领域分类_调整"
+RANK_SCORE_COL = "智能排序分数"
+RANK_GROUP_COL = "智能排序分组"
+RANK_OUTLIER_COL = "智能排序_离群"
+RANK_ALGO_COL = "智能排序算法"
+
 
 def _load_english_stopwords() -> Set[str]:
     if nltk_stopwords is None:
@@ -677,13 +684,6 @@ REQUIRED_COLS = [
     "研究主题（议题）分类","研究领域分类",
     "Publication Year","DOI"
 ]
-ADJUST_TOPIC_COL = "研究主题（议题）分类_调整"
-ADJUST_FIELD_COL = "研究领域分类_调整"
-RANK_SCORE_COL   = "智能排序分数"
-RANK_GROUP_COL   = "智能排序分组"
-RANK_OUTLIER_COL = "智能排序_离群"
-RANK_ALGO_COL    = "智能排序算法"
-
 # ================== FastAPI 应用 ==================
 app = FastAPI(title="分类人工调整 GUI", version=APP_VERSION)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
