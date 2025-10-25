@@ -676,6 +676,9 @@
                 <button id="btn_open_keyword_showcase" class="btn btn-sm btn-ghost text-slate-600 whitespace-nowrap" type="button" data-keyword-dim="topic" disabled aria-disabled="true" title="在新标签页打开便于期刊展示的关键词版面">
                   新标签页展示：研究主题关键词
                 </button>
+                <button id="btn_copy_topicviz" class="btn btn-sm btn-ghost text-slate-600 whitespace-nowrap is-disabled" type="button" disabled aria-disabled="true" title="复制语义可视化 JSON 数据到剪贴板">
+                  复制语义 JSON
+                </button>
               </div>
             </div>
             <div class="topic-viz-panel" data-topicviz-panel="topic">
@@ -1113,6 +1116,7 @@ const KEYWORD_COLOR_PALETTE=[
 ];
 const TOPIC_KEYWORD_CHARTS={ topic:new Map(), field:new Map() };
 const KEYWORD_SHOWCASE_BUTTON=document.getElementById('btn_open_keyword_showcase');
+const TOPIC_VIZ_COPY_BUTTON=document.getElementById('btn_copy_topicviz');
 
 /* ===================== 统计与图表工具 ===================== */
 function safeNumber(value){
@@ -1319,6 +1323,13 @@ const I18N_STRINGS = {
     'topicViz.hover.documents': '文献',
     'topicViz.download.png': '下载 PNG',
     'topicViz.download.svg': '下载 SVG',
+    'topicViz.export.button.topic': '复制议题 JSON 数据',
+    'topicViz.export.button.field': '复制领域 JSON 数据',
+    'topicViz.export.tooltip.topic': '复制当前研究主题语义可视化数据为 JSON',
+    'topicViz.export.tooltip.field': '复制当前研究领域语义可视化数据为 JSON',
+    'topicViz.export.toast.empty': '暂无可导出的语义数据',
+    'topicViz.export.toast.success': '语义可视化 JSON 已复制到剪贴板',
+    'topicViz.export.toast.error': '复制失败，请手动复制',
     'topicViz.chart.echartsMissing': 'ECharts 未加载',
     'topicViz.error.prefix': '加载失败：',
     'topicViz.error.unknown': '加载失败：未知错误',
@@ -1368,6 +1379,13 @@ const I18N_STRINGS = {
     'topicViz.hover.documents': 'Documents',
     'topicViz.download.png': 'Download PNG',
     'topicViz.download.svg': 'Download SVG',
+    'topicViz.export.button.topic': 'Copy topic JSON',
+    'topicViz.export.button.field': 'Copy field JSON',
+    'topicViz.export.tooltip.topic': 'Copy the topic semantic visualization data as JSON',
+    'topicViz.export.tooltip.field': 'Copy the field semantic visualization data as JSON',
+    'topicViz.export.toast.empty': 'No semantic data available to export',
+    'topicViz.export.toast.success': 'Semantic visualization JSON copied to clipboard',
+    'topicViz.export.toast.error': 'Copy failed, please copy manually',
     'topicViz.chart.echartsMissing': 'ECharts not loaded',
     'topicViz.error.prefix': 'Load failed: ',
     'topicViz.error.unknown': 'Load failed: Unknown error',
@@ -1454,6 +1472,8 @@ function applyLanguage(lang){
     LANGUAGE_TOGGLE.setAttribute('aria-label', toggleLabel);
     LANGUAGE_TOGGLE.setAttribute('title', toggleLabel);
   }
+  updateKeywordShowcaseButton(TOPIC_VIZ_STATE.active);
+  updateTopicVizCopyButton(TOPIC_VIZ_STATE.active);
 }
 
 if(LANGUAGE_TOGGLE){
@@ -1846,6 +1866,12 @@ if(KEYWORD_SHOWCASE_BUTTON){
   KEYWORD_SHOWCASE_BUTTON.addEventListener('click',()=>{
     const dim = KEYWORD_SHOWCASE_BUTTON.dataset.keywordDim || TOPIC_VIZ_STATE.active;
     openKeywordShowcase(dim);
+  });
+}
+if(TOPIC_VIZ_COPY_BUTTON){
+  TOPIC_VIZ_COPY_BUTTON.addEventListener('click',()=>{
+    const dim = TOPIC_VIZ_COPY_BUTTON.dataset.topicvizDim || TOPIC_VIZ_STATE.active;
+    copyTopicVizData(dim);
   });
 }
 resetTopicVizState();
@@ -4936,6 +4962,137 @@ function updateKeywordShowcaseButton(dim, options={}){
   KEYWORD_SHOWCASE_BUTTON.classList.toggle('is-disabled', !hasData);
 }
 
+function hasTopicVizData(dim){
+  const target = TOPIC_VIZ_DIMENSIONS.includes(dim) ? dim : TOPIC_VIZ_STATE.active;
+  const source = TOPIC_VIZ_STATE.data[target];
+  if(!source){
+    return false;
+  }
+  const categories = Array.isArray(source.categories) ? source.categories : [];
+  if(categories.length){
+    return true;
+  }
+  const scatter = source.scatter && typeof source.scatter === 'object' ? source.scatter : {};
+  if(Array.isArray(scatter.points) && scatter.points.length){
+    return true;
+  }
+  if(scatter.png_data_url || scatter.svg_data_url){
+    return true;
+  }
+  return getKeywordDashboardData(target).length>0;
+}
+
+function updateTopicVizCopyButton(dim, options={}){
+  if(!TOPIC_VIZ_COPY_BUTTON){
+    return;
+  }
+  const target=TOPIC_VIZ_DIMENSIONS.includes(dim)?dim:TOPIC_VIZ_STATE.active;
+  TOPIC_VIZ_COPY_BUTTON.dataset.topicvizDim=target;
+  const isField=target==='field';
+  const labelKey=isField?'topicViz.export.button.field':'topicViz.export.button.topic';
+  const tooltipKey=isField?'topicViz.export.tooltip.field':'topicViz.export.tooltip.topic';
+  const label=getI18nText(labelKey)||(isField?'复制领域 JSON 数据':'复制议题 JSON 数据');
+  const tooltip=getI18nText(tooltipKey)||(isField?'复制当前研究领域语义可视化数据为 JSON':'复制当前研究主题语义可视化数据为 JSON');
+  TOPIC_VIZ_COPY_BUTTON.textContent=label;
+  TOPIC_VIZ_COPY_BUTTON.title=tooltip;
+  TOPIC_VIZ_COPY_BUTTON.setAttribute('aria-label', tooltip);
+  let hasData;
+  if(options.hasData!==undefined){
+    hasData=!!options.hasData;
+  }else{
+    hasData=hasTopicVizData(target);
+  }
+  TOPIC_VIZ_COPY_BUTTON.disabled=!hasData;
+  TOPIC_VIZ_COPY_BUTTON.setAttribute('aria-disabled', hasData?'false':'true');
+  TOPIC_VIZ_COPY_BUTTON.classList.toggle('is-disabled', !hasData);
+}
+
+function fallbackCopyText(text){
+  const textarea=document.createElement('textarea');
+  textarea.value=text;
+  textarea.setAttribute('readonly','');
+  textarea.style.position='absolute';
+  textarea.style.left='-9999px';
+  document.body.appendChild(textarea);
+  const selection=document.getSelection();
+  const originalRanges=[];
+  if(selection && selection.rangeCount>0){
+    for(let i=0;i<selection.rangeCount;i+=1){
+      originalRanges.push(selection.getRangeAt(i));
+    }
+  }
+  textarea.select();
+  let succeeded=false;
+  try{
+    succeeded=document.execCommand('copy');
+  }catch(err){
+    succeeded=false;
+  }
+  textarea.blur();
+  document.body.removeChild(textarea);
+  if(selection){
+    selection.removeAllRanges();
+    originalRanges.forEach(range=>selection.addRange(range));
+  }
+  return succeeded;
+}
+
+function buildTopicVizExportPayload(dim){
+  const target=TOPIC_VIZ_DIMENSIONS.includes(dim)?dim:TOPIC_VIZ_STATE.active;
+  const source=TOPIC_VIZ_STATE.data[target];
+  if(!source){
+    return null;
+  }
+  const categories=Array.isArray(source.categories)?source.categories:[];
+  const scatter=source.scatter && typeof source.scatter==='object'?{...source.scatter}:{};
+  const keywordDashboard=getKeywordDashboardData(target);
+  const hasScatter=(Array.isArray(scatter.points)&&scatter.points.length>0)||Boolean(scatter.png_data_url||scatter.svg_data_url);
+  if(!categories.length && !keywordDashboard.length && !hasScatter){
+    return null;
+  }
+  const summary={
+    categoryCount: categories.length,
+    documentCount: categories.reduce((sum,cat)=>sum+safeNumber(cat.count||0),0),
+    totalTokens: categories.reduce((sum,cat)=>sum+safeNumber(cat.total_tokens||0),0),
+  };
+  return {
+    sessionId: SESSION_ID || '',
+    dimension: target,
+    generatedAt: new Date().toISOString(),
+    meta: {
+      originFilename: SESSION_META?.origin_filename || '',
+      updatedText: SESSION_META?.updated_text || '',
+    },
+    summary,
+    categories,
+    keywordDashboard,
+    scatter,
+  };
+}
+
+async function copyTopicVizData(dim){
+  const payload=buildTopicVizExportPayload(dim);
+  if(!payload){
+    const emptyMsg=getI18nText('topicViz.export.toast.empty')||'暂无可导出的语义数据';
+    showToast(emptyMsg, 'warning');
+    return;
+  }
+  const text=JSON.stringify(payload,null,2);
+  try{
+    if(navigator.clipboard && typeof navigator.clipboard.writeText==='function'){
+      await navigator.clipboard.writeText(text);
+    }else if(!fallbackCopyText(text)){
+      throw new Error('clipboard unsupported');
+    }
+    const successMsg=getI18nText('topicViz.export.toast.success')||'语义可视化 JSON 已复制到剪贴板';
+    showToast(successMsg, 'success');
+  }catch(err){
+    console.error('复制语义 JSON 失败', err);
+    const errorMsg=getI18nText('topicViz.export.toast.error')||'复制失败，请手动复制';
+    showToast(errorMsg, 'error');
+  }
+}
+
 function openKeywordShowcase(dim){
   const target=TOPIC_VIZ_DIMENSIONS.includes(dim)?dim:TOPIC_VIZ_STATE.active;
   const dashboard=getKeywordDashboardData(target);
@@ -5367,6 +5524,7 @@ function resetTopicVizState(){
   });
   resetWordCloudSection();
   updateKeywordShowcaseButton(TOPIC_VIZ_STATE.active, {hasData:false});
+  updateTopicVizCopyButton(TOPIC_VIZ_STATE.active, {hasData:false});
 }
 
 function updateTopicVizListActive(dim){
@@ -5804,8 +5962,15 @@ function selectTopicVizCategory(dim, label){
 }
 
 function renderTopicVizPanel(dim){
+  const hasData = hasTopicVizData(dim);
+  if(hasData){
+    setTopicVizMessage(dim, '', null);
+  }else if(SESSION_ID && !TOPIC_VIZ_STATE.loading){
+    setTopicVizMessage(dim, '', 'noCategories');
+  }
   renderTopicVizList(dim);
   renderTopicVizScatter(dim);
+  updateTopicVizCopyButton(dim, {hasData});
 }
 
 function getWordCloudEntries(category){
@@ -6007,6 +6172,7 @@ async function fetchTopicVisuals(options={}){
       TOPIC_VIZ_DIMENSIONS.forEach(dim=>{
         setTopicVizMessage(dim, msg, '');
         clearTopicVizCharts(dim);
+        updateTopicVizCopyButton(dim, {hasData:false});
       });
       TOPIC_VIZ_STATE.fetchedSession='';
       return;
@@ -6042,6 +6208,7 @@ async function fetchTopicVisuals(options={}){
       clearTopicVizCharts(dim);
       clearWordCloudList(dim);
       setWordCloudMessage(dim, msg);
+      updateTopicVizCopyButton(dim, {hasData:false});
     });
     TOPIC_VIZ_STATE.fetchedSession='';
   }finally{
@@ -6067,6 +6234,7 @@ function setTopicVizTab(dim, options={}){
   const force = options.force === true;
   TOPIC_VIZ_STATE.active = target;
   updateKeywordShowcaseButton(target);
+  updateTopicVizCopyButton(target);
   document.querySelectorAll('[data-topicviz-tab]').forEach(btn=>{
     const isActive = btn.dataset.topicvizTab === target;
     btn.classList.toggle('topic-viz-tab-active', isActive);
