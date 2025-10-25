@@ -1715,6 +1715,7 @@ function renderSessionMeta(meta){
   }
   refreshHomeActions();
   updateWorkspaceAccess();
+  refreshCategoryBars();
 }
 
 async function refreshSessionMeta(){
@@ -4451,6 +4452,18 @@ async function renderCategoryBar(key){
   }
 }
 
+async function refreshCategoryBars(){
+  const keys=Object.keys(CATEGORY_BAR_TARGETS);
+  if(!keys.length){
+    return;
+  }
+  if(!SESSION_ID){
+    keys.forEach(key=>setCategoryBarPlaceholder(key, '请先载入数据集'));
+    return;
+  }
+  await Promise.all(keys.map(key=>renderCategoryBar(key)));
+}
+
 
 function resetTimelineLineLabels(){
   if(!TIMELINE_LINE_LABEL_LAYER) return;
@@ -6306,10 +6319,7 @@ async function refreshStats(){
   populateFilterOptions();
   await fetchTopicVisuals({force:true});
   setVisualTab(VISUAL_TAB);
-  await Promise.all([
-    renderCategoryBar('topic_adj'),
-    renderCategoryBar('field_adj')
-  ]);
+  await refreshCategoryBars();
 }
 
 function getRankPlotElement(){
