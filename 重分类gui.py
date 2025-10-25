@@ -3466,38 +3466,71 @@ def export_topic_year(payload: Dict[str,Any]):
         df = DATASTORE[sid]
 
         effective_topics = _effective_categories(df, ADJUST_TOPIC_COL, "研究主题（议题）分类")
+        effective_fields = _effective_categories(df, ADJUST_FIELD_COL, "研究领域分类")
         years_source = _normalized_series(df, "Publication Year")
         years = [_extract_year(v) for v in years_source]
 
         topic_buckets: Dict[str, Dict[str, List[int]]] = defaultdict(lambda: defaultdict(list))
-        for idx, (topic, year_val) in enumerate(zip(effective_topics, years)):
+        field_buckets: Dict[str, Dict[str, List[int]]] = defaultdict(lambda: defaultdict(list))
+        for idx, (topic, field, year_val) in enumerate(zip(effective_topics, effective_fields, years)):
             bucket = _year_bucket(year_val, span)
             topic_buckets[topic][bucket].append(idx)
+            field_buckets[field][bucket].append(idx)
 
         timestamp = _now_str()
         base_dir = os.path.join(OUTPUT_DIR, sid, f"topic_year_export_{timestamp}")
         os.makedirs(base_dir, exist_ok=True)
 
         files: List[Dict[str,Any]] = []
-        total_buckets = 0
+        total_topic_buckets = 0
+        total_field_buckets = 0
+
+        topic_root = os.path.join(base_dir, "topic")
+        area_root = os.path.join(base_dir, "area")
+        os.makedirs(topic_root, exist_ok=True)
+        os.makedirs(area_root, exist_ok=True)
 
         for topic, bucket_map in topic_buckets.items():
             topic_label = topic or "未分类"
-            topic_dir = os.path.join(base_dir, safe_filename(topic_label) or "topic")
+            topic_dir = os.path.join(topic_root, safe_filename(topic_label) or "topic")
             os.makedirs(topic_dir, exist_ok=True)
             for bucket, indices in bucket_map.items():
                 if not indices:
                     continue
                 sub_df = df.iloc[indices]
                 count = int(sub_df.shape[0])
-                total_buckets += 1
+                total_topic_buckets += 1
                 fname = safe_filename(f"{bucket}({count}篇)")
                 path = os.path.join(topic_dir, f"{fname}.xlsx")
                 with pd.ExcelWriter(path, engine="openpyxl") as writer:
                     sub_df.to_excel(writer, index=False)
                 rel = os.path.relpath(path, start=os.getcwd()).replace("\\","/")
                 files.append({
+                    "kind": "topic",
                     "topic": topic_label,
+                    "bucket": bucket,
+                    "count": count,
+                    "path": rel
+                })
+
+        for field, bucket_map in field_buckets.items():
+            field_label = field or "未分类"
+            field_dir = os.path.join(area_root, safe_filename(field_label) or "area")
+            os.makedirs(field_dir, exist_ok=True)
+            for bucket, indices in bucket_map.items():
+                if not indices:
+                    continue
+                sub_df = df.iloc[indices]
+                count = int(sub_df.shape[0])
+                total_field_buckets += 1
+                fname = safe_filename(f"{bucket}({count}篇)")
+                path = os.path.join(field_dir, f"{fname}.xlsx")
+                with pd.ExcelWriter(path, engine="openpyxl") as writer:
+                    sub_df.to_excel(writer, index=False)
+                rel = os.path.relpath(path, start=os.getcwd()).replace("\\","/")
+                files.append({
+                    "kind": "area",
+                    "area": field_label,
                     "bucket": bucket,
                     "count": count,
                     "path": rel
@@ -3512,9 +3545,11 @@ def export_topic_year(payload: Dict[str,Any]):
 
         summary = {
             "topics": len(topic_buckets),
+            "areas": len(field_buckets),
             "span": span,
             "rows": int(df.shape[0]),
-            "buckets": total_buckets
+            "topic_buckets": total_topic_buckets,
+            "area_buckets": total_field_buckets
         }
 
         return JSONResponse({

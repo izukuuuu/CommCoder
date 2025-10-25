@@ -7356,11 +7356,17 @@ async function exportTopicYearExcel(){
   lines.push(`议题年份分段导出完成，共生成 ${j.total_files||0} 个文件`);
   if(j.root_dir){ lines.push(`存储目录：${j.root_dir}`); }
   if(j.summary){
-    lines.push(`覆盖议题：${j.summary.topics||0} 个`);
-    lines.push(`时间跨度：每 ${j.summary.span||span} 年一段，共 ${j.summary.buckets||0} 个区间`);
+    lines.push(`覆盖议题：${j.summary.topics||0} 个，覆盖领域：${j.summary.areas||0} 个`);
+    const topicBuckets = j.summary.topic_buckets ?? j.summary.buckets ?? 0;
+    const areaBuckets = j.summary.area_buckets ?? 0;
+    lines.push(`时间跨度：每 ${j.summary.span||span} 年一段，议题区间 ${topicBuckets} 个，领域区间 ${areaBuckets} 个`);
   }
   if(Array.isArray(j.files) && j.files.length){
-    const preview = j.files.slice(0,5).map(f=>`${f.topic||''}-${f.bucket||''}（${f.count||0}）`).join('，');
+    const preview = j.files.slice(0,5).map(f=>{
+      const prefix = f.kind==='area' ? '领域' : '议题';
+      const label = f.kind==='area' ? (f.area||'') : (f.topic||'');
+      return `${prefix}:${label}-${f.bucket||''}（${f.count||0}）`;
+    }).join('，');
     if(preview){ lines.push(`示例：${preview}${j.files.length>5?' 等':''}`); }
   }
   alert(lines.join('\n'));
