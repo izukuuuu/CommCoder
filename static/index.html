@@ -599,6 +599,23 @@
           </div>
 
           <div class="bg-white rounded-2xl shadow p-6 space-y-4">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div class="space-y-1">
+                <h3 class="font-semibold text-slate-900" data-i18n-key="sankey.title">议题-领域桑基图（调整后）</h3>
+                <p class="text-sm text-slate-500" data-i18n-key="sankey.subtitle">以英语标签展示调整后的研究领域与研究主题之间的流向。</p>
+              </div>
+              <div class="sankey-toolbar" role="group" aria-label="Sankey chart exports">
+                <button id="sankey_download_png" class="sankey-download-btn" type="button" data-sankey-download="png" disabled aria-disabled="true" data-i18n-key="sankey.download.png">导出 PNG</button>
+                <button id="sankey_download_svg" class="sankey-download-btn" type="button" data-sankey-download="svg" disabled aria-disabled="true" data-i18n-key="sankey.download.svg">导出 SVG</button>
+                <button id="sankey_download_json" class="sankey-download-btn" type="button" data-sankey-download="json" disabled aria-disabled="true" data-i18n-key="sankey.download.json">导出 JSON</button>
+              </div>
+            </div>
+            <p id="topic_area_sankey_meta" class="sankey-meta hidden"></p>
+            <div id="topic_area_sankey_chart" class="sankey-chart hidden" role="img" aria-label="Topic to area Sankey chart"></div>
+            <div id="topic_area_sankey_message" class="sankey-message" data-sankey-message-key="requireSession">请先上传或载入会话以查看桑基图。</div>
+          </div>
+
+          <div class="bg-white rounded-2xl shadow p-6 space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3 timeline-controls">
               <div>
                 <h3 class="font-semibold">时间趋势分析</h3>
@@ -1100,6 +1117,22 @@ const TOPIC_VIZ_STATE={
   data:{ topic:null, field:null },
   selected:{ topic:null, field:null }
 };
+const SANKEY_CONTAINER_ID='topic_area_sankey_chart';
+const SANKEY_MESSAGE_ID='topic_area_sankey_message';
+const SANKEY_META_ID='topic_area_sankey_meta';
+const SANKEY_DOWNLOAD_BUTTONS={
+  png:document.getElementById('sankey_download_png'),
+  svg:document.getElementById('sankey_download_svg'),
+  json:document.getElementById('sankey_download_json')
+};
+const SANKEY_MESSAGE_KEY_MAP={
+  requireSession:'sankey.message.requireSession',
+  loading:'sankey.message.loading',
+  noData:'sankey.message.noData',
+  missing:'sankey.message.missing',
+  error:'sankey.message.error'
+};
+const SANKEY_STATE={ chart:null, data:null };
 const WORD_CLOUD_DIMENSIONS=['topic','field'];
 const WORD_CLOUD_LABELS={ topic:'研究主题（调整后）', field:'研究领域（调整后）' };
 const WORD_CLOUD_CONFIG={
@@ -1117,6 +1150,7 @@ const KEYWORD_COLOR_PALETTE=[
   '#2563eb','#16a34a','#f97316','#dc2626','#0891b2',
   '#9333ea','#64748b','#ef4444','#22c55e','#eab308'
 ];
+const SANKEY_COLOR_PALETTE=[...KEYWORD_COLOR_PALETTE,'#0ea5e9','#f59e0b','#14b8a6','#f472b6'];
 const TOPIC_KEYWORD_CHARTS={ topic:new Map(), field:new Map() };
 const KEYWORD_SHOWCASE_BUTTON=document.getElementById('btn_open_keyword_showcase');
 const TOPIC_VIZ_COPY_BUTTON=document.getElementById('btn_copy_topicviz');
@@ -1218,6 +1252,20 @@ function downloadJsonFile(payload, filename){
   }catch(error){
     console.error('Failed to export JSON', error);
     window.alert('Failed to export JSON data.');
+  }
+}
+function downloadDataUrl(dataUrl, filename){
+  if(!dataUrl) return;
+  try{
+    const link=document.createElement('a');
+    link.href=dataUrl;
+    link.download=filename||'export';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }catch(error){
+    console.error('Failed to download data URL', error);
+    window.alert('Failed to download chart.');
   }
 }
 function normalizeStatItems(rawList){
@@ -1365,7 +1413,23 @@ const I18N_STRINGS = {
     'topicViz.chart.echartsMissing': 'ECharts 未加载',
     'topicViz.error.prefix': '加载失败：',
     'topicViz.error.unknown': '加载失败：未知错误',
-    'topicViz.tablist': '语义探索维度切换'
+    'topicViz.tablist': '语义探索维度切换',
+    'sankey.title': '议题-领域桑基图（调整后）',
+    'sankey.subtitle': '以英语标签展示调整后的研究领域与研究主题之间的流向。',
+    'sankey.download.png': '导出 PNG',
+    'sankey.download.svg': '导出 SVG',
+    'sankey.download.json': '导出 JSON',
+    'sankey.message.requireSession': '请先上传或载入会话以查看桑基图。',
+    'sankey.message.loading': '桑基图数据加载中…',
+    'sankey.message.noData': '暂无可用的桑基图数据。',
+    'sankey.message.missing': 'ECharts 未加载，无法渲染桑基图。',
+    'sankey.message.error': '桑基图加载失败，请稍后重试。',
+    'sankey.tooltip.documents': '文献数',
+    'sankey.tooltip.share': '占比',
+    'sankey.tooltip.type.area': '领域',
+    'sankey.tooltip.type.topic': '议题',
+    'sankey.toast.noData': '暂无可导出的桑基图数据',
+    'sankey.toast.exportError': '桑基图导出失败，请稍后重试。'
   },
   en: {
     'hero.eyebrow': 'CommCoder Studio',
@@ -1421,7 +1485,23 @@ const I18N_STRINGS = {
     'topicViz.chart.echartsMissing': 'ECharts not loaded',
     'topicViz.error.prefix': 'Load failed: ',
     'topicViz.error.unknown': 'Load failed: Unknown error',
-    'topicViz.tablist': 'Semantic dimension toggle'
+    'topicViz.tablist': 'Semantic dimension toggle',
+    'sankey.title': 'Topic–Area Sankey (Adjusted)',
+    'sankey.subtitle': 'Follow the flow between adjusted research areas and topics with English labels.',
+    'sankey.download.png': 'Export PNG',
+    'sankey.download.svg': 'Export SVG',
+    'sankey.download.json': 'Export JSON',
+    'sankey.message.requireSession': 'Upload or load a session to view the Sankey chart.',
+    'sankey.message.loading': 'Loading Sankey data…',
+    'sankey.message.noData': 'No Sankey data available yet.',
+    'sankey.message.missing': 'ECharts is unavailable, unable to render the Sankey chart.',
+    'sankey.message.error': 'Failed to load the Sankey chart. Please try again later.',
+    'sankey.tooltip.documents': 'Documents',
+    'sankey.tooltip.share': 'Share',
+    'sankey.tooltip.type.area': 'Area',
+    'sankey.tooltip.type.topic': 'Topic',
+    'sankey.toast.noData': 'No Sankey data is available to export.',
+    'sankey.toast.exportError': 'Failed to export the Sankey chart. Please try again later.'
   }
 };
 const I18N_ATTR_MAP = {
@@ -1496,6 +1576,20 @@ function applyLanguage(lang){
       btn.textContent = getI18nText('topicViz.download.svg') || '下载 SVG';
     }
   });
+  document.querySelectorAll('[data-sankey-download]').forEach(btn=>{
+    const type = btn.dataset.sankeyDownload;
+    if(!type) return;
+    const text = getI18nText(`sankey.download.${type}`);
+    if(text){ btn.textContent = text; }
+  });
+  document.querySelectorAll('[data-sankey-message-key]').forEach(el=>{
+    const key = el.dataset.sankeyMessageKey || '';
+    const mapKey = SANKEY_MESSAGE_KEY_MAP[key];
+    if(key && mapKey){
+      const text = getI18nText(mapKey);
+      if(text){ el.textContent = text; }
+    }
+  });
   if(LANGUAGE_TOGGLE_LABEL){
     LANGUAGE_TOGGLE_LABEL.textContent = target === 'zh' ? 'English' : '中文';
   }
@@ -1506,6 +1600,7 @@ function applyLanguage(lang){
   }
   updateKeywordShowcaseButton(TOPIC_VIZ_STATE.active);
   updateTopicVizCopyButton(TOPIC_VIZ_STATE.active);
+  updateSankeyMeta();
 }
 
 if(LANGUAGE_TOGGLE){
@@ -5585,6 +5680,268 @@ function clearTopicVizCharts(dim){
   }
 }
 
+function setSankeyDownloadState(enabled){
+  const allow = !!enabled;
+  Object.values(SANKEY_DOWNLOAD_BUTTONS).forEach(btn=>{
+    if(!btn) return;
+    setButtonState(btn, !allow);
+  });
+}
+
+function hideSankeyMessage(){
+  const el=qs(SANKEY_MESSAGE_ID);
+  if(!el) return;
+  el.textContent='';
+  el.dataset.sankeyMessageKey='';
+  el.classList.add('hidden');
+}
+
+function setSankeyMessage(key, fallback){
+  const el=qs(SANKEY_MESSAGE_ID);
+  if(!el) return;
+  if(fallback){
+    el.textContent=fallback;
+    el.dataset.sankeyMessageKey='';
+    el.classList.remove('hidden');
+    return;
+  }
+  const mapKey=SANKEY_MESSAGE_KEY_MAP[key]||'';
+  const text=mapKey?getI18nText(mapKey):'';
+  el.dataset.sankeyMessageKey=key||'';
+  if(text){
+    el.textContent=text;
+    el.classList.remove('hidden');
+  }else{
+    el.textContent='';
+    el.classList.add('hidden');
+  }
+}
+
+function resetSankeySection(messageKey){
+  SANKEY_STATE.data=null;
+  if(SANKEY_STATE.chart){
+    try{ SANKEY_STATE.chart.clear(); }catch(e){}
+  }
+  const chartEl=qs(SANKEY_CONTAINER_ID);
+  if(chartEl){
+    chartEl.classList.add('hidden');
+  }
+  const metaEl=qs(SANKEY_META_ID);
+  if(metaEl){
+    metaEl.textContent='';
+    metaEl.classList.add('hidden');
+  }
+  if(messageKey){
+    setSankeyMessage(messageKey);
+  }else{
+    hideSankeyMessage();
+  }
+  setSankeyDownloadState(false);
+}
+
+function updateSankeyMeta(){
+  const metaEl=qs(SANKEY_META_ID);
+  if(!metaEl) return;
+  const data=SANKEY_STATE.data;
+  if(!data || !data.meta){
+    metaEl.textContent='';
+    metaEl.classList.add('hidden');
+    return;
+  }
+  const meta=data.meta||{};
+  const docs=safeNumber(meta.document_total||0);
+  if(!Number.isFinite(docs) || docs<=0){
+    metaEl.textContent='';
+    metaEl.classList.add('hidden');
+    return;
+  }
+  const areas=safeNumber(meta.area_count||0);
+  const topics=safeNumber(meta.topic_count||0);
+  const format=value=>Number.isFinite(value)?value.toLocaleString(CURRENT_LANG==='en'?'en-US':'zh-CN'):'0';
+  if(CURRENT_LANG==='en'){
+    metaEl.textContent=`Documents: ${format(docs)} · Areas: ${format(areas)} · Topics: ${format(topics)}`;
+  }else{
+    metaEl.textContent=`覆盖文献 ${format(docs)} 篇 · 领域 ${format(areas)} 类 · 议题 ${format(topics)} 类`;
+  }
+  metaEl.classList.remove('hidden');
+}
+
+function ensureSankeyChart(){
+  const container=qs(SANKEY_CONTAINER_ID);
+  if(!container || !window.echarts){
+    return null;
+  }
+  if(SANKEY_STATE.chart && typeof SANKEY_STATE.chart.getDom==='function' && SANKEY_STATE.chart.getDom()!==container){
+    try{ SANKEY_STATE.chart.dispose(); }catch(e){}
+    SANKEY_STATE.chart=null;
+  }
+  if(!SANKEY_STATE.chart){
+    SANKEY_STATE.chart=echarts.init(container,null,{renderer:'svg'});
+  }
+  return SANKEY_STATE.chart;
+}
+
+function renderTopicAreaSankey(){
+  const chartEl=qs(SANKEY_CONTAINER_ID);
+  if(!chartEl){
+    return;
+  }
+  if(!SESSION_ID){
+    if(SANKEY_STATE.chart){
+      try{ SANKEY_STATE.chart.clear(); }catch(e){}
+    }
+    chartEl.classList.add('hidden');
+    setSankeyMessage('requireSession');
+    updateSankeyMeta();
+    setSankeyDownloadState(false);
+    return;
+  }
+  const data=SANKEY_STATE.data;
+  if(!data || !Array.isArray(data.nodes) || !data.nodes.length || !Array.isArray(data.links) || !data.links.length){
+    if(SANKEY_STATE.chart){
+      try{ SANKEY_STATE.chart.clear(); }catch(e){}
+    }
+    chartEl.classList.add('hidden');
+    setSankeyMessage('noData');
+    updateSankeyMeta();
+    setSankeyDownloadState(false);
+    return;
+  }
+  if(!window.echarts){
+    chartEl.classList.add('hidden');
+    setSankeyMessage('missing');
+    setSankeyDownloadState(false);
+    return;
+  }
+  const chart=ensureSankeyChart();
+  if(!chart){
+    chartEl.classList.add('hidden');
+    setSankeyMessage('missing');
+    setSankeyDownloadState(false);
+    return;
+  }
+  const locale=CURRENT_LANG==='en'?'en-US':'zh-CN';
+  const nodes=(data.nodes||[]).map((node,idx)=>({
+    id:node.id,
+    name:node.name||node.display_name||node.raw_label||node.id,
+    value:safeNumber(node.value||0),
+    dimension:node.dimension||'',
+    raw_label:node.raw_label||'',
+    label:{
+      formatter:node.name||node.display_name||node.raw_label||node.id,
+      color:'#0f172a',
+      fontSize:12,
+      fontWeight:600
+    },
+    itemStyle:{
+      color:SANKEY_COLOR_PALETTE[idx%SANKEY_COLOR_PALETTE.length]
+    }
+  }));
+  const links=(data.links||[]).map(link=>({
+    source:link.source,
+    target:link.target,
+    value:safeNumber(link.value||0),
+    share:typeof link.share==='number'?link.share:Number(link.share)||0,
+    source_name:link.source_name||link.source_label||link.source,
+    target_name:link.target_name||link.target_label||link.target
+  }));
+  chartEl.classList.remove('hidden');
+  hideSankeyMessage();
+  chart.setOption({
+    tooltip:{
+      trigger:'item',
+      triggerOn:'mousemove',
+      confine:true,
+      borderWidth:0.8,
+      backgroundColor:'rgba(15,23,42,0.92)',
+      textStyle:{color:'#f8fafc',fontSize:12},
+      formatter:params=>{
+        const docsLabel=getI18nText('sankey.tooltip.documents')||'Documents';
+        const shareLabel=getI18nText('sankey.tooltip.share')||'Share';
+        if(params.dataType==='edge'){
+          const datum=params.data||{};
+          const value=safeNumber(datum.value||0);
+          const percent=Number.isFinite(datum.share)?datum.share*100:NaN;
+          const percentText=Number.isFinite(percent)?`${percent>=1?percent.toFixed(1):percent.toFixed(2)}%`:'';
+          const base=[`<strong>${escapeHtml(datum.source_name||params.data.source)} → ${escapeHtml(datum.target_name||params.data.target)}</strong>`,`${docsLabel}: ${Number.isFinite(value)?value.toLocaleString(locale):'0'}`];
+          if(percentText){ base.push(`${shareLabel}: ${percentText}`); }
+          return base.join('<br/>');
+        }
+        const node=params.data||{};
+        const typeLabel=node.dimension==='area'?(getI18nText('sankey.tooltip.type.area')||'Area'):(getI18nText('sankey.tooltip.type.topic')||'Topic');
+        const value=safeNumber(node.value||0);
+        return [`<strong>${escapeHtml(node.name||params.name||'')}</strong>`,typeLabel,`${docsLabel}: ${Number.isFinite(value)?value.toLocaleString(locale):'0'}`].join('<br/>');
+      }
+    },
+    animationDuration:600,
+    series:[{
+      type:'sankey',
+      data:nodes,
+      links:links,
+      nodeWidth:24,
+      nodeGap:14,
+      orient:'horizontal',
+      layoutIterations:64,
+      draggable:false,
+      emphasis:{focus:'adjacency'},
+      label:{
+        color:'#0f172a',
+        fontFamily:'"Segoe UI", "Inter", "Helvetica Neue", sans-serif',
+        fontWeight:600
+      },
+      lineStyle:{
+        color:'source',
+        opacity:0.45,
+        curveness:0.5
+      },
+      itemStyle:{borderWidth:0}
+    }]
+  },true);
+  updateSankeyMeta();
+  setSankeyDownloadState(true);
+  setTimeout(()=>resizeSankeyChart(),60);
+}
+
+function resizeSankeyChart(){
+  const chart=SANKEY_STATE.chart;
+  if(!chart || typeof chart.resize!=='function') return;
+  const dom=typeof chart.getDom==='function'?chart.getDom():chart._dom||chart._domRoot||chart.dom;
+  if(dom && isChartHidden(dom)) return;
+  try{ chart.resize(); }catch(e){}
+}
+
+function handleSankeyExport(kind){
+  if(kind==='json'){
+    if(!SANKEY_STATE.data || !Array.isArray(SANKEY_STATE.data.links) || !SANKEY_STATE.data.links.length){
+      const msg=getI18nText('sankey.toast.noData')||'暂无可导出的桑基图数据';
+      showToast(msg,'info');
+      return;
+    }
+    const base=sanitizeFileName(`topic_area_sankey_${SESSION_ID||'export'}`);
+    downloadJsonFile(SANKEY_STATE.data,`${base}.json`);
+    return;
+  }
+  if(!SANKEY_STATE.chart || !SANKEY_STATE.data || !Array.isArray(SANKEY_STATE.data.links) || !SANKEY_STATE.data.links.length){
+    const msg=getI18nText('sankey.toast.noData')||'暂无可导出的桑基图数据';
+    showToast(msg,'info');
+    return;
+  }
+  try{
+    const type=kind==='svg'?'svg':'png';
+    const dataUrl=SANKEY_STATE.chart.getDataURL({
+      type,
+      pixelRatio:type==='png'?2:1,
+      backgroundColor:'#ffffff'
+    });
+    const base=sanitizeFileName(`topic_area_sankey_${SESSION_ID||'export'}`);
+    downloadDataUrl(dataUrl,`${base}.${type}`);
+  }catch(error){
+    console.error('Failed to export sankey chart', error);
+    const msg=getI18nText('sankey.toast.exportError')||'桑基图导出失败，请稍后重试。';
+    showToast(msg,'error');
+  }
+}
+
 function disableWordCloudDownload(el){
   if(!el) return;
   el.href='#';
@@ -5642,6 +5999,7 @@ function resetTopicVizState(){
     setTopicVizMessage(dim, '', messageKey);
   });
   resetWordCloudSection();
+  resetSankeySection(SESSION_ID ? 'loading' : 'requireSession');
   updateKeywordShowcaseButton(TOPIC_VIZ_STATE.active, {hasData:false});
   updateTopicVizCopyButton(TOPIC_VIZ_STATE.active, {hasData:false});
 }
@@ -6273,6 +6631,9 @@ async function fetchTopicVisuals(options={}){
   if(TOPIC_VIZ_STATE.loading) return;
   if(!force && TOPIC_VIZ_STATE.fetchedSession === SESSION_ID){
     renderTopicVizPanel(TOPIC_VIZ_STATE.active);
+    renderTopicAreaSankey();
+    updateSankeyMeta();
+    resizeSankeyChart();
     return;
   }
   const currentSession = SESSION_ID;
@@ -6282,6 +6643,7 @@ async function fetchTopicVisuals(options={}){
     clearWordCloudList(dim);
     setWordCloudMessage(dim,'词云数据加载中…');
   });
+  resetSankeySection('loading');
   try{
     const r=await fetch(`/topic_visuals?session_id=${encodeURIComponent(currentSession)}&t=${Date.now()}`,{cache:'no-store'});
     if(!r.ok){
@@ -6293,6 +6655,9 @@ async function fetchTopicVisuals(options={}){
         clearTopicVizCharts(dim);
         updateTopicVizCopyButton(dim, {hasData:false});
       });
+      resetSankeySection();
+      setSankeyMessage('', msg);
+      SANKEY_STATE.data=null;
       TOPIC_VIZ_STATE.fetchedSession='';
       return;
     }
@@ -6302,6 +6667,7 @@ async function fetchTopicVisuals(options={}){
     }
     TOPIC_VIZ_STATE.data.topic = data?.topic_adj || { categories:[], scatter:{} };
     TOPIC_VIZ_STATE.data.field = data?.field_adj || { categories:[], scatter:{} };
+    SANKEY_STATE.data = data?.topic_area_sankey || null;
     TOPIC_VIZ_STATE.fetchedSession = currentSession;
     TOPIC_VIZ_DIMENSIONS.forEach(dim=>{
       const categories = Array.isArray(TOPIC_VIZ_STATE.data[dim]?.categories) ? TOPIC_VIZ_STATE.data[dim].categories : [];
@@ -6315,9 +6681,11 @@ async function fetchTopicVisuals(options={}){
         setWordCloudMessage(dim, emptyCategories);
       }
     });
+    renderTopicAreaSankey();
     renderTopicVizPanel(TOPIC_VIZ_STATE.active);
     refreshWordCloudLists();
     resizeTopicVizCharts();
+    resizeSankeyChart();
   }catch(err){
     const prefix = getI18nText('topicViz.error.prefix') || '加载失败：';
     const fallbackError = getI18nText('topicViz.error.unknown') || '加载失败：未知错误';
@@ -6329,9 +6697,13 @@ async function fetchTopicVisuals(options={}){
       setWordCloudMessage(dim, msg);
       updateTopicVizCopyButton(dim, {hasData:false});
     });
+    resetSankeySection();
+    setSankeyMessage('', msg);
+    SANKEY_STATE.data=null;
     TOPIC_VIZ_STATE.fetchedSession='';
   }finally{
     TOPIC_VIZ_STATE.loading=false;
+    resizeSankeyChart();
   }
 }
 
@@ -6343,6 +6715,9 @@ async function ensureTopicVizData(dim, options={}){
   const force = options.force === true;
   if(!force && TOPIC_VIZ_STATE.fetchedSession === SESSION_ID){
     renderTopicVizPanel(dim);
+    renderTopicAreaSankey();
+    updateSankeyMeta();
+    resizeSankeyChart();
     return;
   }
   await fetchTopicVisuals({force});
@@ -6365,6 +6740,7 @@ function setTopicVizTab(dim, options={}){
   });
   ensureTopicVizData(target, {force});
   setTimeout(()=>resizeTopicVizCharts(), 120);
+  setTimeout(()=>resizeSankeyChart(), 160);
 }
 
 function resizeTopicVizCharts(){
@@ -6386,6 +6762,7 @@ window.addEventListener('resize',()=>{
   scheduleScatterResize();
   resizeTimelineCharts();
   resizeTopicVizCharts();
+  resizeSankeyChart();
 });
 async function refreshStats(){
   if(!SESSION_ID) return;
@@ -7426,6 +7803,9 @@ function bindEvents(){
   bindClick('btn_export_topic_year', exportTopicYearExcel);
   bindClick('btn_download_last', downloadLast);
   bindClick('btn_save_all', saveAllChanges);
+  bindClick('sankey_download_png', ()=>handleSankeyExport('png'));
+  bindClick('sankey_download_svg', ()=>handleSankeyExport('svg'));
+  bindClick('sankey_download_json', ()=>handleSankeyExport('json'));
   const autoToggle=qs('auto_save_enable'); if(autoToggle) autoToggle.addEventListener('change', applyAutoSaveSettings);
   const autoInterval=qs('auto_save_interval'); if(autoInterval) autoInterval.addEventListener('change', applyAutoSaveSettings);
 

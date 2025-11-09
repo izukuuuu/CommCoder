@@ -185,6 +185,17 @@ button.is-disabled{ cursor:not-allowed; }
 .word-cloud-table td:nth-child(2),.word-cloud-table th:nth-child(2){text-align:right;font-family:"JetBrains Mono","Fira Code",monospace;}
 .word-cloud-table td:nth-child(3),.word-cloud-table th:nth-child(3){text-align:right;font-family:"JetBrains Mono","Fira Code",monospace;}
 .word-cloud-table-empty{display:flex;align-items:center;justify-content:center;min-height:120px;font-size:0.82rem;color:#64748b;}
+.sankey-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:0.5rem;}
+.sankey-download-btn{display:inline-flex;align-items:center;justify-content:center;padding:0.45rem 1rem;border-radius:9999px;font-size:0.8rem;font-weight:600;color:#1e293b;background:rgba(226,232,240,0.7);border:1px solid rgba(148,163,184,0.4);transition:background-color .15s ease,box-shadow .15s ease,color .15s ease;}
+.sankey-download-btn:hover{background:rgba(191,219,254,0.75);color:#1d4ed8;box-shadow:0 10px 22px -18px rgba(37,99,235,0.45);}
+.sankey-download-btn:focus-visible{outline:2px solid rgba(37,99,235,0.45);outline-offset:2px;}
+.sankey-download-btn.is-disabled,.sankey-download-btn[aria-disabled="true"],.sankey-download-btn:disabled{color:rgba(100,116,139,0.65);background:rgba(226,232,240,0.6);border-color:rgba(203,213,225,0.6);box-shadow:none;cursor:not-allowed;}
+.sankey-chart{position:relative;width:100%;min-height:360px;border-radius:1rem;background:rgba(255,255,255,0.85);border:1px solid rgba(148,163,184,0.35);padding:0.5rem;}
+@media (max-width:768px){.sankey-chart{min-height:280px;}}
+.sankey-message{font-size:0.82rem;color:#475569;background:rgba(248,250,252,0.85);border:1px dashed rgba(148,163,184,0.45);border-radius:0.9rem;padding:0.75rem 1rem;}
+.sankey-message.hidden{display:none;}
+.sankey-meta{font-size:0.78rem;color:#64748b;}
+.sankey-meta.hidden{display:none;}
 @media (max-width:768px){.topic-viz-chart,.topic-viz-scatter{min-height:240px;}}
 .topic-viz-empty{display:flex;align-items:center;justify-content:center;min-height:220px;padding:1rem;border-radius:1rem;border:1px dashed rgba(148,163,184,0.45);color:#64748b;background:rgba(248,250,252,0.75);font-size:0.85rem;text-align:center;}
 .topic-keyword-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.75rem;align-content:flex-start;padding:0.25rem 0.1rem;}
