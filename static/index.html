@@ -1185,6 +1185,19 @@ function normalizeKeywordWeight(value){
   const num=Number(value);
   return Number.isFinite(num)?num:0;
 }
+
+function getLocaleCollator(){
+  if(typeof Intl==='object' && typeof Intl.Collator==='function'){
+    try{
+      return new Intl.Collator(CURRENT_LANG==='en'?'en':'zh-Hans',{sensitivity:'base',numeric:true});
+    }catch(e){/* noop */}
+  }
+  return {
+    compare(a,b){
+      return String(a).localeCompare(String(b),CURRENT_LANG==='en'?'en':'zh-CN');
+    }
+  };
+}
 function getDisplayFromSource(source){
   if(source===undefined||source===null) return '';
   if(typeof source==='string') return source.trim();
@@ -5569,6 +5582,18 @@ function disposeKeywordCharts(dim){
   store.clear();
 }
 
+function sortByDocumentCount(items){
+  if(!Array.isArray(items) || !items.length) return [];
+  const collator=getLocaleCollator();
+  return items.slice().sort((a,b)=>{
+    const diff=safeNumber(b?.documentCount)-safeNumber(a?.documentCount);
+    if(diff!==0) return diff;
+    const aLabel=(a?.displayLabel||a?.label||'').toString();
+    const bLabel=(b?.displayLabel||b?.label||'').toString();
+    return collator.compare(aLabel,bLabel);
+  });
+}
+
 function getKeywordDashboardData(dim){
   const dimData=TOPIC_VIZ_STATE.data[dim]||{};
   const kind=dim==='field'?'field':'topic';
@@ -5614,7 +5639,7 @@ function getKeywordDashboardData(dim){
     if(normalized) entries.push(normalized);
   });
   if(entries.length){
-    return entries;
+    return sortByDocumentCount(entries);
   }
 
   const categories=Array.isArray(dimData.categories)?dimData.categories:[];
@@ -5645,7 +5670,7 @@ function getKeywordDashboardData(dim){
     const normalized=normalizeEntry(entry);
     if(normalized) entries.push(normalized);
   });
-  return entries;
+  return sortByDocumentCount(entries);
 }
 
 function resizeKeywordCharts(dim){
@@ -5821,7 +5846,23 @@ function renderTopicAreaSankey(){
     return;
   }
   const locale=CURRENT_LANG==='en'?'en-US':'zh-CN';
-  const nodes=(data.nodes||[]).map((node,idx)=>({
+  const dimensionRank=dim=>{
+    if((dim||'').toLowerCase()==='area') return 0;
+    if((dim||'').toLowerCase()==='topic') return 1;
+    return 2;
+  };
+  const sankeyCollator=getLocaleCollator();
+  const sortedNodes=Array.isArray(data.nodes)?data.nodes.slice():[];
+  sortedNodes.sort((a,b)=>{
+    const dimDiff=dimensionRank(a?.dimension)-dimensionRank(b?.dimension);
+    if(dimDiff!==0) return dimDiff;
+    const valueDiff=safeNumber(b?.value)-safeNumber(a?.value);
+    if(valueDiff!==0) return valueDiff;
+    const nameA=(a?.name||a?.display_name||a?.raw_label||a?.id||'').toString();
+    const nameB=(b?.name||b?.display_name||b?.raw_label||b?.id||'').toString();
+    return sankeyCollator.compare(nameA,nameB);
+  });
+  const nodes=sortedNodes.map((node,idx)=>({
     id:node.id,
     name:node.name||node.display_name||node.raw_label||node.id,
     value:safeNumber(node.value||0),
@@ -6363,13 +6404,21 @@ function renderTopicVizList(dim){
   if(!listEl) return;
   listEl.innerHTML='';
   const data = TOPIC_VIZ_STATE.data[dim];
-  const categories = Array.isArray(data?.categories) ? data.categories : [];
+  const categories = Array.isArray(data?.categories) ? data.categories.slice() : [];
   if(!categories.length){
     listEl.innerHTML=`<div class="topic-viz-empty">${getI18nText('topicViz.message.noCategories')||'暂无分类数据。'}</div>`;
     TOPIC_VIZ_STATE.selected[dim]=null;
     clearTopicVizCharts(dim);
     return;
   }
+  const listCollator=getLocaleCollator();
+  categories.sort((a,b)=>{
+    const diff=safeNumber(b?.count)-safeNumber(a?.count);
+    if(diff!==0) return diff;
+    const labelA=(a?.label||'').toString();
+    const labelB=(b?.label||'').toString();
+    return listCollator.compare(labelA,labelB);
+  });
   categories.forEach(cat=>{
     const btn=document.createElement('button');
     btn.type='button';
@@ -6393,7 +6442,9 @@ function renderWordCloudList(dim){
   const list=document.getElementById(cfg.listId);
   if(!list) return;
   list.innerHTML='';
-  const categories = Array.isArray(TOPIC_VIZ_STATE.data[dim]?.categories) ? TOPIC_VIZ_STATE.data[dim].categories : [];
+  const categories = Array.isArray(TOPIC_VIZ_STATE.data[dim]?.categories)
+    ? TOPIC_VIZ_STATE.data[dim].categories.slice()
+    : [];
   if(!SESSION_ID){
     setWordCloudMessage(dim,'请先上传或载入会话以加载词云数据。');
     return;
@@ -6403,6 +6454,14 @@ function renderWordCloudList(dim){
     return;
   }
   setWordCloudMessage(dim,'点击任意分类查看词云。');
+  const wcCollator=getLocaleCollator();
+  categories.sort((a,b)=>{
+    const diff=safeNumber(b?.count)-safeNumber(a?.count);
+    if(diff!==0) return diff;
+    const labelA=(a?.label||'').toString();
+    const labelB=(b?.label||'').toString();
+    return wcCollator.compare(labelA,labelB);
+  });
   categories.forEach(cat=>{
     const btn=document.createElement('button');
     btn.type='button';
