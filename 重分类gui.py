@@ -1095,6 +1095,122 @@ def _prepare_keyword_dashboard(
     return dashboard
 
 
+def _build_topic_area_sankey(df: pd.DataFrame) -> Dict[str, Any]:
+    if df.empty or ADJUST_FIELD_COL not in df.columns or ADJUST_TOPIC_COL not in df.columns:
+        return {
+            "nodes": [],
+            "links": [],
+            "meta": {
+                "document_total": 0,
+                "area_count": 0,
+                "topic_count": 0,
+                "link_count": 0,
+                "source_column": ADJUST_FIELD_COL,
+                "target_column": ADJUST_TOPIC_COL,
+                "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            },
+        }
+
+    work = df[[ADJUST_FIELD_COL, ADJUST_TOPIC_COL]].copy()
+    work[ADJUST_FIELD_COL] = work[ADJUST_FIELD_COL].fillna("").astype(str).str.strip()
+    work[ADJUST_TOPIC_COL] = work[ADJUST_TOPIC_COL].fillna("").astype(str).str.strip()
+
+    field_fallback = "未分类"
+    topic_fallback = "未分类"
+
+    field_series = work[ADJUST_FIELD_COL].replace("", field_fallback)
+    topic_series = work[ADJUST_TOPIC_COL].replace("", topic_fallback)
+
+    counts: Counter[Tuple[str, str]] = Counter()
+    for field_label, topic_label in zip(field_series.tolist(), topic_series.tolist()):
+        counts[(field_label, topic_label)] += 1
+
+    total_docs = int(sum(counts.values()))
+    if total_docs <= 0:
+        return {
+            "nodes": [],
+            "links": [],
+            "meta": {
+                "document_total": 0,
+                "area_count": 0,
+                "topic_count": 0,
+                "link_count": 0,
+                "source_column": ADJUST_FIELD_COL,
+                "target_column": ADJUST_TOPIC_COL,
+                "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            },
+        }
+
+    area_totals: Counter[str] = Counter()
+    topic_totals: Counter[str] = Counter()
+    for (field_label, topic_label), count in counts.items():
+        area_totals[field_label] += count
+        topic_totals[topic_label] += count
+
+    def _display(label: str, mapping: Dict[str, str]) -> str:
+        display = _label_display(label, mapping)
+        return display or label or "Uncategorized"
+
+    nodes: List[Dict[str, Any]] = []
+    for field_label, count in sorted(area_totals.items(), key=lambda item: (-item[1], item[0])):
+        display = _display(field_label, FIELD_LABEL_MAP)
+        nodes.append(
+            {
+                "id": f"area::{field_label}",
+                "name": display,
+                "raw_label": field_label,
+                "dimension": "area",
+                "value": int(count),
+                "display_name": display,
+            }
+        )
+
+    for topic_label, count in sorted(topic_totals.items(), key=lambda item: (-item[1], item[0])):
+        display = _display(topic_label, TOPIC_LABEL_MAP)
+        nodes.append(
+            {
+                "id": f"topic::{topic_label}",
+                "name": display,
+                "raw_label": topic_label,
+                "dimension": "topic",
+                "value": int(count),
+                "display_name": display,
+            }
+        )
+
+    links: List[Dict[str, Any]] = []
+    for (field_label, topic_label), count in sorted(counts.items(), key=lambda item: (-item[1], item[0][0], item[0][1])):
+        share = float(count) / float(total_docs) if total_docs else 0.0
+        source_display = _display(field_label, FIELD_LABEL_MAP)
+        target_display = _display(topic_label, TOPIC_LABEL_MAP)
+        links.append(
+            {
+                "source": f"area::{field_label}",
+                "target": f"topic::{topic_label}",
+                "value": int(count),
+                "share": round(share, 6),
+                "source_label": field_label,
+                "target_label": topic_label,
+                "source_name": source_display,
+                "target_name": target_display,
+            }
+        )
+
+    return {
+        "nodes": nodes,
+        "links": links,
+        "meta": {
+            "document_total": total_docs,
+            "area_count": len(area_totals),
+            "topic_count": len(topic_totals),
+            "link_count": len(links),
+            "source_column": ADJUST_FIELD_COL,
+            "target_column": ADJUST_TOPIC_COL,
+            "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        },
+    }
+
+
 def _topic_visual_payload(df: pd.DataFrame) -> Dict[str, Any]:
     topic_categories, topic_texts, topic_counts, topic_labels = _category_keywords(
         df, ADJUST_TOPIC_COL, "未分类", label_mapping=TOPIC_LABEL_MAP
@@ -1115,6 +1231,8 @@ def _topic_visual_payload(df: pd.DataFrame) -> Dict[str, Any]:
         field_categories, label_mapping=FIELD_LABEL_MAP
     )
 
+    sankey = _build_topic_area_sankey(df)
+
     return {
         "topic_adj": {
             "categories": topic_categories,
@@ -1126,6 +1244,7 @@ def _topic_visual_payload(df: pd.DataFrame) -> Dict[str, Any]:
             "scatter": field_scatter,
             "keyword_dashboard": field_dashboard,
         },
+        "topic_area_sankey": sankey,
     }
 
 
